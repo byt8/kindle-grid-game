@@ -1,0 +1,10 @@
+# Constituents (checked-out repos and symlinked folders) are listed on
+# the dashboard, not tracked here. Each checkout has its own history.
+/jailbreak-kindle
+
+# Workspace metadata: keep skills and artifacts, drop the rest
+# (task logs carry live tokens).
+.cptr/*
+!.cptr/skills/
+!.cptr/artifacts/
+
