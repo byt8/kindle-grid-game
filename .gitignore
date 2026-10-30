@@ -8,3 +8,9 @@
 !.cptr/skills/
 !.cptr/artifacts/
 
+# Built here. The Kindle binary `xcom` is committed so install does not
+# need the cross compiler. The PC test binary is not.
+/xcom-host
+*:Zone.Identifier
+*.pgm
+

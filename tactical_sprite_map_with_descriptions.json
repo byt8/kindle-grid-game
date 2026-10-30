@@ -1,0 +1,2285 @@
+{
+  "format": "tactical-sprite-coordinate-map",
+  "version": 2,
+  "source_image": "a_wide_clean_sprite_sheet_image_on_a_transparent.png",
+  "source_image_size_px": {
+    "width": 1536,
+    "height": 1024
+  },
+  "coordinate_system": {
+    "origin": "top-left",
+    "units": "source-image pixels",
+    "rect_format": "x,y,width,height",
+    "rect_semantics": "approximate crop rectangle around artwork; section headings and captions excluded"
+  },
+  "intended_game_tile_size_px": [
+    32,
+    32
+  ],
+  "entry_count": 91,
+  "analysis": {
+    "style": "full-colour retro sci-fi pixel-art, Mega Drive / Phantasy Star-inspired tactical strategy look",
+    "important_accuracy_note": "The source is a generated presentation sheet, not a production-ready pixel atlas. Its elements are not natively 32x32 pixels; the coordinate rectangles below are approximate source-image crops that should be trimmed, background-cleaned, and resampled to 32x32.",
+    "transparency_note": "The PNG is RGBA, but the rendered backdrop contains mixed alpha and hazy colour in places. Do not assume every crop has a clean transparent background.",
+    "terrain_note": "Terrain entries are visually identified and mapped, but seamless edge matching has not been tested. Forest/jungle/hills/mountains/river/bridge/road/city/barrier/rubble are better treated as feature or connection tiles than simple endlessly repeating textures.",
+    "coordinate_confidence": "approximate visual bounding boxes; suitable as a starting manifest, not pixel-perfect auto-slicing metadata"
+  },
+  "sections": [
+    {
+      "id": "player_units",
+      "label": "Player units / good guys",
+      "kind": "character",
+      "render_hint": {
+        "fit": "contain",
+        "canvas_px": [
+          32,
+          32
+        ],
+        "preserve_aspect_ratio": true,
+        "padding": "transparent"
+      },
+      "sprites": [
+        {
+          "id": "soldier",
+          "label": "Soldier",
+          "source_rect": {
+            "x": 24,
+            "y": 62,
+            "width": 80,
+            "height": 102
+          },
+          "description": "Balanced frontline rifle unit with 6 HP, 70 aim, 12-tile mobility and no armour, dealing 2–4 damage with a reliable standard rifle."
+        },
+        {
+          "id": "sniper",
+          "label": "Sniper",
+          "source_rect": {
+            "x": 110,
+            "y": 63,
+            "width": 83,
+            "height": 101
+          },
+          "description": "Long-range specialist with 5 HP, 85 aim, 10-tile mobility and no armour, dealing 4–6 damage with a sniper rifle but gaining a bonus when stationary."
+        },
+        {
+          "id": "heavy",
+          "label": "Heavy",
+          "source_rect": {
+            "x": 207,
+            "y": 61,
+            "width": 97,
+            "height": 101
+          },
+          "description": "Armoured fire-support unit with 8 HP, 65 aim, 9-tile mobility and 2 armour, dealing 3–5 damage with a heavy weapon that can suppress clustered enemies."
+        },
+        {
+          "id": "tech",
+          "label": "Tech",
+          "source_rect": {
+            "x": 310,
+            "y": 59,
+            "width": 91,
+            "height": 104
+          },
+          "description": "Electronic-warfare specialist with 6 HP, 70 aim, 11-tile mobility and 1 armour, using a pulse weapon for 2–4 damage and hacking robots, turrets and terminals."
+        },
+        {
+          "id": "medic",
+          "label": "Medic",
+          "source_rect": {
+            "x": 410,
+            "y": 66,
+            "width": 80,
+            "height": 97
+          },
+          "description": "Combat medic with 6 HP, 70 aim, 12-tile mobility and no armour, dealing 2–3 rifle damage and restoring 3 HP to an adjacent ally twice per mission."
+        },
+        {
+          "id": "psi",
+          "label": "Psi",
+          "source_rect": {
+            "x": 489,
+            "y": 65,
+            "width": 93,
+            "height": 100
+          },
+          "description": "Fragile psionic specialist with 5 HP, 75 aim, 11-tile mobility and no armour, dealing 3–5 energy damage and using a short-range control or panic ability."
+        },
+        {
+          "id": "recon",
+          "label": "Recon",
+          "source_rect": {
+            "x": 590,
+            "y": 66,
+            "width": 83,
+            "height": 100
+          },
+          "description": "Fast scout with 5 HP, 75 aim, 15-tile mobility and no armour, dealing 2–3 damage with a light weapon and revealing a wider area while moving."
+        },
+        {
+          "id": "engineer",
+          "label": "Engineer",
+          "source_rect": {
+            "x": 679,
+            "y": 62,
+            "width": 84,
+            "height": 103
+          },
+          "description": "Field engineer with 6 HP, 65 aim, 11-tile mobility and 1 armour, dealing 1–3 sidearm damage while placing mines, repairing devices and opening sealed routes."
+        }
+      ]
+    },
+    {
+      "id": "enemies",
+      "label": "Bad guys / enemies",
+      "kind": "character",
+      "render_hint": {
+        "fit": "contain",
+        "canvas_px": [
+          32,
+          32
+        ],
+        "preserve_aspect_ratio": true,
+        "padding": "transparent"
+      },
+      "sprites": [
+        {
+          "id": "sectoid",
+          "label": "Sectoid",
+          "source_rect": {
+            "x": 791,
+            "y": 64,
+            "width": 82,
+            "height": 98
+          },
+          "description": "Light psionic alien with 5 HP, 65 aim, 12-tile mobility and no armour, firing plasma for 2–4 damage and occasionally disrupting a soldier with mind attacks."
+        },
+        {
+          "id": "mutant",
+          "label": "Mutant",
+          "source_rect": {
+            "x": 880,
+            "y": 64,
+            "width": 83,
+            "height": 100
+          },
+          "description": "Heavy close-range brute with 10 HP, 65 aim, 10-tile mobility and 2 armour, dealing 3–5 melee damage and resisting ordinary small-arms fire."
+        },
+        {
+          "id": "assault",
+          "label": "Assault",
+          "source_rect": {
+            "x": 973,
+            "y": 57,
+            "width": 91,
+            "height": 108
+          },
+          "description": "Aggressive alien infantry with 7 HP, 75 aim, 13-tile mobility and 1 armour, dealing 3–5 damage and favouring flanking advances."
+        },
+        {
+          "id": "sniper",
+          "label": "Sniper",
+          "source_rect": {
+            "x": 1069,
+            "y": 61,
+            "width": 83,
+            "height": 102
+          },
+          "description": "Enemy marksman with 5 HP, 85 aim, 9-tile mobility and no armour, dealing 4–6 long-range damage while vulnerable if caught out of position."
+        },
+        {
+          "id": "drone",
+          "label": "Drone",
+          "source_rect": {
+            "x": 1164,
+            "y": 91,
+            "width": 60,
+            "height": 68
+          },
+          "description": "Small flying scout drone with 4 HP, 70 aim, 16-tile aerial mobility and 1 armour, dealing 2–3 shock damage while ignoring ground obstacles."
+        },
+        {
+          "id": "mech",
+          "label": "Mech",
+          "source_rect": {
+            "x": 1234,
+            "y": 50,
+            "width": 96,
+            "height": 118
+          },
+          "description": "Heavy combat mech with 12 HP, 70 aim, 9-tile mobility and 3 armour, dealing 3–6 cannon damage and taking extra damage from EMP effects."
+        },
+        {
+          "id": "spitter",
+          "label": "Spitter",
+          "source_rect": {
+            "x": 1347,
+            "y": 83,
+            "width": 82,
+            "height": 84
+          },
+          "description": "Acid-spitting alien with 7 HP, 65 aim, 10-tile mobility and no armour, attacking for 2–4 damage and leaving a hazardous acid patch on the ground."
+        },
+        {
+          "id": "psi",
+          "label": "Psi",
+          "source_rect": {
+            "x": 1447,
+            "y": 67,
+            "width": 66,
+            "height": 101
+          },
+          "description": "Elite psionic enemy with 6 HP, 75 aim, 12-tile mobility and 1 armour, using mind control or panic effects and dealing 2–4 energy damage."
+        }
+      ]
+    },
+    {
+      "id": "vehicles_support",
+      "label": "Vehicles / support",
+      "kind": "vehicle_or_support_unit",
+      "render_hint": {
+        "fit": "contain",
+        "canvas_px": [
+          32,
+          32
+        ],
+        "preserve_aspect_ratio": true,
+        "padding": "transparent"
+      },
+      "sprites": [
+        {
+          "id": "dropship",
+          "label": "Dropship",
+          "source_rect": {
+            "x": 20,
+            "y": 263,
+            "width": 110,
+            "height": 89
+          },
+          "description": "Mission transport used to deploy the squad and mark the extraction zone, with no ordinary combat stats and a restricted landing footprint."
+        },
+        {
+          "id": "rover",
+          "label": "Rover",
+          "source_rect": {
+            "x": 131,
+            "y": 280,
+            "width": 92,
+            "height": 69
+          },
+          "description": "Light ground vehicle with 10 HP, 2 armour and 14-tile mobility, carrying a small squad or supplies and providing 2–4 damage support fire."
+        },
+        {
+          "id": "vtol",
+          "label": "VTOL",
+          "source_rect": {
+            "x": 237,
+            "y": 268,
+            "width": 72,
+            "height": 79
+          },
+          "description": "Fast aerial transport with 8 HP, 1 armour and 18-tile flight range, able to cross blocked ground and deliver troops but not occupy normal cover."
+        },
+        {
+          "id": "turret",
+          "label": "Turret",
+          "source_rect": {
+            "x": 332,
+            "y": 260,
+            "width": 76,
+            "height": 91
+          },
+          "description": "Deployable stationary defence with 8 HP, 3 armour, 75 aim and an 8-tile range, firing for 3–5 damage but unable to move once placed."
+        },
+        {
+          "id": "supply",
+          "label": "Supply",
+          "source_rect": {
+            "x": 421,
+            "y": 275,
+            "width": 87,
+            "height": 77
+          },
+          "description": "Supply vehicle or drop point that replenishes ammunition and one-use equipment, has no attack and should be protected as a mission asset."
+        },
+        {
+          "id": "radar",
+          "label": "Radar",
+          "source_rect": {
+            "x": 526,
+            "y": 252,
+            "width": 74,
+            "height": 95
+          },
+          "description": "Reconnaissance scanner that reveals concealed enemies in a 6-tile radius, has no attack and works best from an elevated or exposed position."
+        },
+        {
+          "id": "repair_mech",
+          "label": "Repair mech",
+          "source_rect": {
+            "x": 614,
+            "y": 256,
+            "width": 78,
+            "height": 96
+          },
+          "description": "Friendly repair platform with 8 HP, 2 armour and 10-tile mobility, restoring 2 HP to an adjacent mechanical ally once per turn instead of attacking."
+        },
+        {
+          "id": "support_unit",
+          "label": "Unlabelled support unit",
+          "source_rect": {
+            "x": 705,
+            "y": 253,
+            "width": 61,
+            "height": 95
+          },
+          "source_label": "none_readable",
+          "confidence": "low",
+          "description": "Unidentified compact support machine with a suggested 7 HP, 1 armour and 11-tile mobility, best treated as a configurable escort or utility unit until its role is chosen."
+        },
+        {
+          "id": "hovercraft",
+          "label": "Hover",
+          "source_rect": {
+            "x": 769,
+            "y": 275,
+            "width": 93,
+            "height": 76
+          },
+          "description": "Amphibious hover vehicle with 9 HP, 1 armour and 16-tile mobility, crossing water and rough ground while providing 2–4 light-weapon damage."
+        }
+      ]
+    },
+    {
+      "id": "misc_ui_objects",
+      "label": "Misc / UI objects",
+      "kind": "prop",
+      "render_hint": {
+        "fit": "contain",
+        "canvas_px": [
+          32,
+          32
+        ],
+        "preserve_aspect_ratio": true,
+        "padding": "transparent"
+      },
+      "sprites": [
+        {
+          "id": "medkit",
+          "label": "Medkit",
+          "source_rect": {
+            "x": 880,
+            "y": 267,
+            "width": 66,
+            "height": 77
+          },
+          "description": "Single-use pickup that restores 3 HP to the soldier who collects it, with no cover value and an interaction cost of one action."
+        },
+        {
+          "id": "ammo_crate",
+          "label": "Ammo",
+          "source_rect": {
+            "x": 955,
+            "y": 263,
+            "width": 66,
+            "height": 83
+          },
+          "description": "Resupply container that refills one weapon magazine or a chosen ammunition pool, provides half cover and can be looted once."
+        },
+        {
+          "id": "energy_canister",
+          "label": "Energy",
+          "source_rect": {
+            "x": 1038,
+            "y": 265,
+            "width": 47,
+            "height": 77
+          },
+          "description": "Single-use energy pickup that restores one ability charge or gadget charge, provides no cover and disappears when collected."
+        },
+        {
+          "id": "computer",
+          "label": "Computer",
+          "source_rect": {
+            "x": 1105,
+            "y": 263,
+            "width": 70,
+            "height": 83
+          },
+          "description": "Hackable terminal that can reveal map intel, disable security or complete an objective, and blocks line of sight while intact."
+        },
+        {
+          "id": "door",
+          "label": "Door",
+          "source_rect": {
+            "x": 1190,
+            "y": 260,
+            "width": 57,
+            "height": 85
+          },
+          "description": "Closed doorway that blocks movement and line of sight until opened or destroyed, with a suggested 8 HP if it is destructible."
+        },
+        {
+          "id": "ladder",
+          "label": "Ladder",
+          "source_rect": {
+            "x": 1265,
+            "y": 252,
+            "width": 39,
+            "height": 89
+          },
+          "description": "Traversal link between two elevation levels that costs one movement point to use and does not provide cover."
+        },
+        {
+          "id": "crate",
+          "label": "Crate",
+          "source_rect": {
+            "x": 1340,
+            "y": 264,
+            "width": 84,
+            "height": 82
+          },
+          "description": "Small destructible container with 4 HP that provides half cover and may contain ammunition, supplies or a mission item."
+        },
+        {
+          "id": "console",
+          "label": "Console",
+          "source_rect": {
+            "x": 1443,
+            "y": 253,
+            "width": 65,
+            "height": 94
+          },
+          "description": "Objective console that a soldier can hack or activate with one action to trigger doors, machinery or mission progression."
+        }
+      ]
+    },
+    {
+      "id": "terrain_tiles",
+      "label": "Terrain tiles",
+      "kind": "terrain_tile",
+      "render_hint": {
+        "fit": "fill",
+        "canvas_px": [
+          32,
+          32
+        ],
+        "resampling": "nearest-neighbour recommended",
+        "edge_seamless_verified": false
+      },
+      "important_note": "These are labelled as tileable in the source artwork, but opposite-edge pixel matching has not been verified. River, bridge, road, city, forest, hills and similar feature tiles need dedicated transition/connection variants for robust map generation.",
+      "sprites": [
+        {
+          "id": "grass",
+          "label": "Grass",
+          "source_rect": {
+            "x": 21,
+            "y": 436,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "base_surface",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Walkable base ground with movement cost 1, no inherent cover and no hazard, suitable as the default outdoor map surface."
+        },
+        {
+          "id": "forest",
+          "label": "Forest",
+          "source_rect": {
+            "x": 158,
+            "y": 436,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "feature_or_special_tile",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Dense wooded feature terrain with movement cost 2, heavy cover and reduced enemy visibility, with trunks treated as separate solid blockers."
+        },
+        {
+          "id": "jungle",
+          "label": "Jungle",
+          "source_rect": {
+            "x": 295,
+            "y": 436,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "feature_or_special_tile",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Thick vegetation with movement cost 2, heavy concealment and strong cover, but reduced sight lines and difficult traversal."
+        },
+        {
+          "id": "hills",
+          "label": "Hills",
+          "source_rect": {
+            "x": 433,
+            "y": 436,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "feature_or_special_tile",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Sloped elevated ground with movement cost 2, a height advantage for aim and vision, and optional low cover on marked rocky cells."
+        },
+        {
+          "id": "mountains",
+          "label": "Mountains",
+          "source_rect": {
+            "x": 571,
+            "y": 436,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "feature_or_special_tile",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Steep high ground that blocks movement and long sight lines unless a pass is added, creating a natural boundary and elevation landmark."
+        },
+        {
+          "id": "water",
+          "label": "Water",
+          "source_rect": {
+            "x": 709,
+            "y": 436,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "base_surface",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Deep water that is impassable to ordinary infantry, offers no cover and can be crossed only by bridges, aquatic units or special abilities."
+        },
+        {
+          "id": "river",
+          "label": "River",
+          "source_rect": {
+            "x": 847,
+            "y": 436,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "feature_or_special_tile",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Watercourse feature that is impassable except at fords or bridges, separates firing lanes and follows connected river-edge variants."
+        },
+        {
+          "id": "bridge",
+          "label": "Bridge",
+          "source_rect": {
+            "x": 984,
+            "y": 436,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "feature_or_special_tile",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Walkable crossing over water with movement cost 1, no inherent cover and a narrow approach that can become a tactical choke point."
+        },
+        {
+          "id": "road",
+          "label": "Road",
+          "source_rect": {
+            "x": 1122,
+            "y": 436,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "feature_or_special_tile",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Walkable route with movement cost 1 and no cover, suitable for connecting locations and granting a small movement bonus if road rules are enabled."
+        },
+        {
+          "id": "city",
+          "label": "City",
+          "source_rect": {
+            "x": 1259,
+            "y": 436,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "feature_or_special_tile",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Urban feature zone containing buildings and hard corners, with high cover and blocked sight lines supplied by separate building and wall objects."
+        },
+        {
+          "id": "plain",
+          "label": "Plain",
+          "source_rect": {
+            "x": 1397,
+            "y": 436,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "base_surface",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Open walkable base ground with movement cost 1, no cover and clear line of sight, leaving soldiers exposed to enemy fire."
+        },
+        {
+          "id": "desert",
+          "label": "Desert",
+          "source_rect": {
+            "x": 21,
+            "y": 575,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "base_surface",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Dry open base ground with movement cost 1, no cover and no default hazard, making exposed crossings dangerous."
+        },
+        {
+          "id": "rock",
+          "label": "Rock",
+          "source_rect": {
+            "x": 158,
+            "y": 575,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "base_surface",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Rocky base ground with movement cost 1 and no inherent cover, while individual boulders should be placed as separate blocking objects."
+        },
+        {
+          "id": "lava",
+          "label": "Lava",
+          "source_rect": {
+            "x": 295,
+            "y": 575,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "base_surface",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Hazardous ground that ordinary infantry cannot safely cross and that deals 3 damage at the end of each turn to units with heat protection disabled."
+        },
+        {
+          "id": "snow",
+          "label": "Snow",
+          "source_rect": {
+            "x": 433,
+            "y": 575,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "base_surface",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Snow-covered ground with movement cost 2, no inherent cover and clear visibility, slowing advances across open areas."
+        },
+        {
+          "id": "swamp",
+          "label": "Swamp",
+          "source_rect": {
+            "x": 571,
+            "y": 575,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "base_surface",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Wet ground with movement cost 2, low visibility and no inherent cover, slowing units and making flanking routes harder to use."
+        },
+        {
+          "id": "sand_dunes",
+          "label": "Sand dunes",
+          "source_rect": {
+            "x": 709,
+            "y": 575,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "base_surface",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Loose sand base ground with movement cost 2 and no cover, making long exposed manoeuvres slower than movement across roads or grass."
+        },
+        {
+          "id": "crater",
+          "label": "Crater",
+          "source_rect": {
+            "x": 847,
+            "y": 575,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "feature_or_special_tile",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Depression feature that remains walkable at movement cost 1 and grants half cover to units occupying its marked low cells."
+        },
+        {
+          "id": "tundra",
+          "label": "Tundra",
+          "source_rect": {
+            "x": 984,
+            "y": 575,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "base_surface",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Cold open ground with movement cost 2, no cover and no default damage, creating a slower exposed approach across frozen terrain."
+        },
+        {
+          "id": "ice",
+          "label": "Ice",
+          "source_rect": {
+            "x": 1122,
+            "y": 575,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "base_surface",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Slippery walkable ground with movement cost 1 but reduced stopping control, allowing a unit to slide one extra tile if it moves at full speed."
+        },
+        {
+          "id": "barrier",
+          "label": "Barrier",
+          "source_rect": {
+            "x": 1259,
+            "y": 575,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "feature_or_special_tile",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Blocking defensive feature with heavy cover on adjacent cells, impassable until breached and destructible with a suggested 10 HP."
+        },
+        {
+          "id": "rubble",
+          "label": "Rubble",
+          "source_rect": {
+            "x": 1397,
+            "y": 575,
+            "width": 117,
+            "height": 100
+          },
+          "map_role": "feature_or_special_tile",
+          "edge_seamless_verified": false,
+          "source_sheet_claims_tileable": true,
+          "description": "Broken urban ground with movement cost 2, scattered half-cover positions and obstructed movement, while large debris should be separate objects."
+        }
+      ]
+    },
+    {
+      "id": "objects_decor",
+      "label": "Objects / decor",
+      "kind": "overlay_prop",
+      "render_hint": {
+        "fit": "contain",
+        "canvas_px": [
+          32,
+          32
+        ],
+        "preserve_aspect_ratio": true,
+        "padding": "transparent",
+        "placement": "separate object layer, not ground tile"
+      },
+      "sprites": [
+        {
+          "id": "tree",
+          "label": "Tree",
+          "source_rect": {
+            "x": 28,
+            "y": 749,
+            "width": 81,
+            "height": 109
+          },
+          "description": "Tall destructible obstacle with 6 HP that blocks movement and line of sight while providing heavy cover to units sheltering beside its trunk."
+        },
+        {
+          "id": "bush",
+          "label": "Bush",
+          "source_rect": {
+            "x": 111,
+            "y": 753,
+            "width": 83,
+            "height": 103
+          },
+          "description": "Low vegetation with 3 HP that provides half cover and concealment but does not fully block movement or line of sight."
+        },
+        {
+          "id": "cactus",
+          "label": "Cactus",
+          "source_rect": {
+            "x": 215,
+            "y": 750,
+            "width": 59,
+            "height": 109
+          },
+          "description": "Desert obstacle with 4 HP that provides half cover and inflicts 1 contact damage when a unit moves through its occupied tile."
+        },
+        {
+          "id": "rocks",
+          "label": "Rocks",
+          "source_rect": {
+            "x": 285,
+            "y": 760,
+            "width": 84,
+            "height": 85
+          },
+          "description": "Boulder cluster with 8 HP that blocks movement and line of sight and provides heavy cover from adjacent firing positions."
+        },
+        {
+          "id": "fence",
+          "label": "Fence",
+          "source_rect": {
+            "x": 376,
+            "y": 760,
+            "width": 80,
+            "height": 85
+          },
+          "description": "Low destructible barrier with 4 HP that provides half cover, blocks direct movement and can be vaulted by spending 2 movement points."
+        },
+        {
+          "id": "wall",
+          "label": "Wall",
+          "source_rect": {
+            "x": 473,
+            "y": 760,
+            "width": 73,
+            "height": 85
+          },
+          "description": "Solid destructible wall with 10 HP that blocks movement and line of sight and provides full cover to soldiers positioned behind it."
+        },
+        {
+          "id": "crates",
+          "label": "Crates",
+          "source_rect": {
+            "x": 568,
+            "y": 752,
+            "width": 91,
+            "height": 99
+          },
+          "description": "Stacked supply crates with 6 HP that block movement, provide heavy cover and may be searched for a small resource reward."
+        },
+        {
+          "id": "barrel",
+          "label": "Barrel",
+          "source_rect": {
+            "x": 690,
+            "y": 760,
+            "width": 49,
+            "height": 84
+          },
+          "description": "Explosive barrel with 5 HP that detonates when destroyed, dealing 3–5 damage to units within a 1-tile radius."
+        },
+        {
+          "id": "fuel_tank",
+          "label": "Fuel tank",
+          "source_rect": {
+            "x": 766,
+            "y": 767,
+            "width": 96,
+            "height": 76
+          },
+          "description": "Volatile fuel tank with 7 HP that explodes when destroyed, dealing 4–6 damage within a 2-tile radius and possibly igniting nearby ground."
+        },
+        {
+          "id": "radio_tower",
+          "label": "Radio tower",
+          "source_rect": {
+            "x": 887,
+            "y": 746,
+            "width": 50,
+            "height": 110
+          },
+          "description": "Tall mission landmark that blocks some sight lines and can be captured or hacked to reveal enemy positions across the map."
+        },
+        {
+          "id": "satellite_dish",
+          "label": "Satellite dish",
+          "source_rect": {
+            "x": 965,
+            "y": 755,
+            "width": 85,
+            "height": 95
+          },
+          "description": "Interactable communications objective that can scan a distant sector or disrupt enemy communications after a one-action activation."
+        },
+        {
+          "id": "light_post",
+          "label": "Light post",
+          "source_rect": {
+            "x": 1073,
+            "y": 752,
+            "width": 47,
+            "height": 99
+          },
+          "description": "Small destructible light source with 2 HP that illuminates nearby tiles in night missions and provides only minimal physical obstruction."
+        },
+        {
+          "id": "power_pylon",
+          "label": "Power pylon",
+          "source_rect": {
+            "x": 1147,
+            "y": 745,
+            "width": 60,
+            "height": 108
+          },
+          "description": "Energy structure that can power nearby devices or serve as a sabotage objective, provides half cover and may overload when destroyed."
+        },
+        {
+          "id": "alien_relic",
+          "label": "Alien relic",
+          "source_rect": {
+            "x": 1232,
+            "y": 752,
+            "width": 60,
+            "height": 103
+          },
+          "description": "Alien artefact that acts as a high-value objective or research pickup, grants a mission reward when secured and may trigger an enemy response."
+        },
+        {
+          "id": "ufo_wreck",
+          "label": "UFO wreck",
+          "source_rect": {
+            "x": 1314,
+            "y": 755,
+            "width": 106,
+            "height": 91
+          },
+          "description": "Large crashed craft wreckage that blocks movement and sight lines, provides heavy cover and can be searched for salvage or mission evidence."
+        },
+        {
+          "id": "biohazard",
+          "label": "Biohazard",
+          "source_rect": {
+            "x": 1436,
+            "y": 749,
+            "width": 80,
+            "height": 103
+          },
+          "description": "Toxic growth or spill that marks a hazardous zone, dealing 1 damage per turn to unprotected units and discouraging occupation."
+        }
+      ]
+    },
+    {
+      "id": "ui_markers",
+      "label": "Markers / overlays (UI)",
+      "kind": "ui_icon",
+      "render_hint": {
+        "fit": "contain",
+        "canvas_px": [
+          32,
+          32
+        ],
+        "preserve_aspect_ratio": true,
+        "padding": "transparent"
+      },
+      "sprites": [
+        {
+          "id": "move",
+          "label": "Move",
+          "source_rect": {
+            "x": 22,
+            "y": 906,
+            "width": 55,
+            "height": 57
+          },
+          "description": "Movement indicator showing reachable destination tiles for the selected unit, with legal range determined by remaining movement points."
+        },
+        {
+          "id": "attack",
+          "label": "Attack",
+          "source_rect": {
+            "x": 91,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Attack marker identifying a valid hostile target, with hit chance and damage preview supplied by the combat interface."
+        },
+        {
+          "id": "cover",
+          "label": "Cover",
+          "source_rect": {
+            "x": 160,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Cover indicator showing a protected position, with half-cover or full-cover strength determined by the tile or adjacent obstacle."
+        },
+        {
+          "id": "alert",
+          "label": "Alert",
+          "source_rect": {
+            "x": 228,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Warning marker for detected danger or an active threat, prompting the player to check line of sight and enemy intent."
+        },
+        {
+          "id": "health",
+          "label": "Health",
+          "source_rect": {
+            "x": 296,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Health indicator representing current and maximum hit points, with low health signalling that the unit may be downed by another hit."
+        },
+        {
+          "id": "ammo",
+          "label": "Ammo",
+          "source_rect": {
+            "x": 364,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Ammunition indicator showing remaining shots in the equipped weapon, with reloads consuming an action when the magazine is empty."
+        },
+        {
+          "id": "objective",
+          "label": "Objective",
+          "source_rect": {
+            "x": 432,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Mission objective marker identifying an item, area or target that must be secured, activated, defended or destroyed."
+        },
+        {
+          "id": "turn",
+          "label": "Turn",
+          "source_rect": {
+            "x": 501,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Turn-state marker showing the active player or enemy phase, with actions refreshed when control passes to that side."
+        },
+        {
+          "id": "spawn",
+          "label": "Spawn",
+          "source_rect": {
+            "x": 584,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Deployment marker identifying a valid unit spawn point, with placement restricted by mission rules and occupied tiles."
+        },
+        {
+          "id": "target",
+          "label": "Target",
+          "source_rect": {
+            "x": 651,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Target reticle marking the tile or unit currently selected for an attack, ability or interaction."
+        },
+        {
+          "id": "in_range",
+          "label": "In range",
+          "source_rect": {
+            "x": 720,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Range marker indicating that a target is reachable by the selected weapon or ability from the current position."
+        },
+        {
+          "id": "blocked",
+          "label": "Blocked",
+          "source_rect": {
+            "x": 788,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Blocked-action marker showing that line of sight, range, terrain or another rule prevents the selected action."
+        },
+        {
+          "id": "vision",
+          "label": "Vision",
+          "source_rect": {
+            "x": 854,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Visibility marker showing tiles currently revealed to the squad, with fog of war hiding enemies outside the visible area."
+        },
+        {
+          "id": "damage",
+          "label": "Damage",
+          "source_rect": {
+            "x": 922,
+            "y": 906,
+            "width": 56,
+            "height": 57
+          },
+          "description": "Damage marker used for floating combat feedback, displaying hit values or critical-hit effects after an attack resolves."
+        }
+      ]
+    },
+    {
+      "id": "quirky_extras",
+      "label": "Extras / quirky",
+      "kind": "decorative_sprite",
+      "render_hint": {
+        "fit": "contain",
+        "canvas_px": [
+          32,
+          32
+        ],
+        "preserve_aspect_ratio": true,
+        "padding": "transparent"
+      },
+      "sprites": [
+        {
+          "id": "space_cat",
+          "label": "Space cat",
+          "source_rect": {
+            "x": 1090,
+            "y": 902,
+            "width": 57,
+            "height": 63
+          },
+          "description": "Friendly mascot or neutral mission NPC with no combat stats by default, available for rescue, protection or purely decorative appearances."
+        },
+        {
+          "id": "penguin",
+          "label": "Penguin",
+          "source_rect": {
+            "x": 1160,
+            "y": 904,
+            "width": 53,
+            "height": 63
+          },
+          "description": "Small neutral wildlife character with no combat stats by default, useful as an oddball map inhabitant or optional rescue target."
+        },
+        {
+          "id": "robot_chicken",
+          "label": "Robot chicken",
+          "source_rect": {
+            "x": 1227,
+            "y": 902,
+            "width": 56,
+            "height": 65
+          },
+          "description": "Comic little mechanical companion with no default attack, but it can be assigned a cosmetic follower or a one-off objective role."
+        },
+        {
+          "id": "snail",
+          "label": "Snail",
+          "source_rect": {
+            "x": 1295,
+            "y": 905,
+            "width": 57,
+            "height": 62
+          },
+          "description": "Harmless alien snail with no combat stats by default, suitable as ambient decoration or a slow-moving neutral creature in special missions."
+        },
+        {
+          "id": "ufo",
+          "label": "UFO",
+          "source_rect": {
+            "x": 1363,
+            "y": 907,
+            "width": 88,
+            "height": 60
+          },
+          "description": "Small unidentified craft that can serve as a mission objective, extraction prop or scenery, with flight and combat behaviour disabled unless configured."
+        },
+        {
+          "id": "flag",
+          "label": "Flag",
+          "source_rect": {
+            "x": 1467,
+            "y": 898,
+            "width": 51,
+            "height": 69
+          },
+          "description": "Faction or mission flag that marks a control point, ownership state or extraction location and has no combat stats of its own."
+        }
+      ]
+    }
+  ],
+  "sprite_index": {
+    "player_units/soldier": {
+      "section": "player_units",
+      "label": "Soldier",
+      "source_rect": {
+        "x": 24,
+        "y": 62,
+        "width": 80,
+        "height": 102
+      },
+      "description": "Balanced frontline rifle unit with 6 HP, 70 aim, 12-tile mobility and no armour, dealing 2–4 damage with a reliable standard rifle."
+    },
+    "player_units/sniper": {
+      "section": "player_units",
+      "label": "Sniper",
+      "source_rect": {
+        "x": 110,
+        "y": 63,
+        "width": 83,
+        "height": 101
+      },
+      "description": "Long-range specialist with 5 HP, 85 aim, 10-tile mobility and no armour, dealing 4–6 damage with a sniper rifle but gaining a bonus when stationary."
+    },
+    "player_units/heavy": {
+      "section": "player_units",
+      "label": "Heavy",
+      "source_rect": {
+        "x": 207,
+        "y": 61,
+        "width": 97,
+        "height": 101
+      },
+      "description": "Armoured fire-support unit with 8 HP, 65 aim, 9-tile mobility and 2 armour, dealing 3–5 damage with a heavy weapon that can suppress clustered enemies."
+    },
+    "player_units/tech": {
+      "section": "player_units",
+      "label": "Tech",
+      "source_rect": {
+        "x": 310,
+        "y": 59,
+        "width": 91,
+        "height": 104
+      },
+      "description": "Electronic-warfare specialist with 6 HP, 70 aim, 11-tile mobility and 1 armour, using a pulse weapon for 2–4 damage and hacking robots, turrets and terminals."
+    },
+    "player_units/medic": {
+      "section": "player_units",
+      "label": "Medic",
+      "source_rect": {
+        "x": 410,
+        "y": 66,
+        "width": 80,
+        "height": 97
+      },
+      "description": "Combat medic with 6 HP, 70 aim, 12-tile mobility and no armour, dealing 2–3 rifle damage and restoring 3 HP to an adjacent ally twice per mission."
+    },
+    "player_units/psi": {
+      "section": "player_units",
+      "label": "Psi",
+      "source_rect": {
+        "x": 489,
+        "y": 65,
+        "width": 93,
+        "height": 100
+      },
+      "description": "Fragile psionic specialist with 5 HP, 75 aim, 11-tile mobility and no armour, dealing 3–5 energy damage and using a short-range control or panic ability."
+    },
+    "player_units/recon": {
+      "section": "player_units",
+      "label": "Recon",
+      "source_rect": {
+        "x": 590,
+        "y": 66,
+        "width": 83,
+        "height": 100
+      },
+      "description": "Fast scout with 5 HP, 75 aim, 15-tile mobility and no armour, dealing 2–3 damage with a light weapon and revealing a wider area while moving."
+    },
+    "player_units/engineer": {
+      "section": "player_units",
+      "label": "Engineer",
+      "source_rect": {
+        "x": 679,
+        "y": 62,
+        "width": 84,
+        "height": 103
+      },
+      "description": "Field engineer with 6 HP, 65 aim, 11-tile mobility and 1 armour, dealing 1–3 sidearm damage while placing mines, repairing devices and opening sealed routes."
+    },
+    "enemies/sectoid": {
+      "section": "enemies",
+      "label": "Sectoid",
+      "source_rect": {
+        "x": 791,
+        "y": 64,
+        "width": 82,
+        "height": 98
+      },
+      "description": "Light psionic alien with 5 HP, 65 aim, 12-tile mobility and no armour, firing plasma for 2–4 damage and occasionally disrupting a soldier with mind attacks."
+    },
+    "enemies/mutant": {
+      "section": "enemies",
+      "label": "Mutant",
+      "source_rect": {
+        "x": 880,
+        "y": 64,
+        "width": 83,
+        "height": 100
+      },
+      "description": "Heavy close-range brute with 10 HP, 65 aim, 10-tile mobility and 2 armour, dealing 3–5 melee damage and resisting ordinary small-arms fire."
+    },
+    "enemies/assault": {
+      "section": "enemies",
+      "label": "Assault",
+      "source_rect": {
+        "x": 973,
+        "y": 57,
+        "width": 91,
+        "height": 108
+      },
+      "description": "Aggressive alien infantry with 7 HP, 75 aim, 13-tile mobility and 1 armour, dealing 3–5 damage and favouring flanking advances."
+    },
+    "enemies/sniper": {
+      "section": "enemies",
+      "label": "Sniper",
+      "source_rect": {
+        "x": 1069,
+        "y": 61,
+        "width": 83,
+        "height": 102
+      },
+      "description": "Enemy marksman with 5 HP, 85 aim, 9-tile mobility and no armour, dealing 4–6 long-range damage while vulnerable if caught out of position."
+    },
+    "enemies/drone": {
+      "section": "enemies",
+      "label": "Drone",
+      "source_rect": {
+        "x": 1164,
+        "y": 91,
+        "width": 60,
+        "height": 68
+      },
+      "description": "Small flying scout drone with 4 HP, 70 aim, 16-tile aerial mobility and 1 armour, dealing 2–3 shock damage while ignoring ground obstacles."
+    },
+    "enemies/mech": {
+      "section": "enemies",
+      "label": "Mech",
+      "source_rect": {
+        "x": 1234,
+        "y": 50,
+        "width": 96,
+        "height": 118
+      },
+      "description": "Heavy combat mech with 12 HP, 70 aim, 9-tile mobility and 3 armour, dealing 3–6 cannon damage and taking extra damage from EMP effects."
+    },
+    "enemies/spitter": {
+      "section": "enemies",
+      "label": "Spitter",
+      "source_rect": {
+        "x": 1347,
+        "y": 83,
+        "width": 82,
+        "height": 84
+      },
+      "description": "Acid-spitting alien with 7 HP, 65 aim, 10-tile mobility and no armour, attacking for 2–4 damage and leaving a hazardous acid patch on the ground."
+    },
+    "enemies/psi": {
+      "section": "enemies",
+      "label": "Psi",
+      "source_rect": {
+        "x": 1447,
+        "y": 67,
+        "width": 66,
+        "height": 101
+      },
+      "description": "Elite psionic enemy with 6 HP, 75 aim, 12-tile mobility and 1 armour, using mind control or panic effects and dealing 2–4 energy damage."
+    },
+    "vehicles_support/dropship": {
+      "section": "vehicles_support",
+      "label": "Dropship",
+      "source_rect": {
+        "x": 20,
+        "y": 263,
+        "width": 110,
+        "height": 89
+      },
+      "description": "Mission transport used to deploy the squad and mark the extraction zone, with no ordinary combat stats and a restricted landing footprint."
+    },
+    "vehicles_support/rover": {
+      "section": "vehicles_support",
+      "label": "Rover",
+      "source_rect": {
+        "x": 131,
+        "y": 280,
+        "width": 92,
+        "height": 69
+      },
+      "description": "Light ground vehicle with 10 HP, 2 armour and 14-tile mobility, carrying a small squad or supplies and providing 2–4 damage support fire."
+    },
+    "vehicles_support/vtol": {
+      "section": "vehicles_support",
+      "label": "VTOL",
+      "source_rect": {
+        "x": 237,
+        "y": 268,
+        "width": 72,
+        "height": 79
+      },
+      "description": "Fast aerial transport with 8 HP, 1 armour and 18-tile flight range, able to cross blocked ground and deliver troops but not occupy normal cover."
+    },
+    "vehicles_support/turret": {
+      "section": "vehicles_support",
+      "label": "Turret",
+      "source_rect": {
+        "x": 332,
+        "y": 260,
+        "width": 76,
+        "height": 91
+      },
+      "description": "Deployable stationary defence with 8 HP, 3 armour, 75 aim and an 8-tile range, firing for 3–5 damage but unable to move once placed."
+    },
+    "vehicles_support/supply": {
+      "section": "vehicles_support",
+      "label": "Supply",
+      "source_rect": {
+        "x": 421,
+        "y": 275,
+        "width": 87,
+        "height": 77
+      },
+      "description": "Supply vehicle or drop point that replenishes ammunition and one-use equipment, has no attack and should be protected as a mission asset."
+    },
+    "vehicles_support/radar": {
+      "section": "vehicles_support",
+      "label": "Radar",
+      "source_rect": {
+        "x": 526,
+        "y": 252,
+        "width": 74,
+        "height": 95
+      },
+      "description": "Reconnaissance scanner that reveals concealed enemies in a 6-tile radius, has no attack and works best from an elevated or exposed position."
+    },
+    "vehicles_support/repair_mech": {
+      "section": "vehicles_support",
+      "label": "Repair mech",
+      "source_rect": {
+        "x": 614,
+        "y": 256,
+        "width": 78,
+        "height": 96
+      },
+      "description": "Friendly repair platform with 8 HP, 2 armour and 10-tile mobility, restoring 2 HP to an adjacent mechanical ally once per turn instead of attacking."
+    },
+    "vehicles_support/support_unit": {
+      "section": "vehicles_support",
+      "label": "Unlabelled support unit",
+      "source_rect": {
+        "x": 705,
+        "y": 253,
+        "width": 61,
+        "height": 95
+      },
+      "description": "Unidentified compact support machine with a suggested 7 HP, 1 armour and 11-tile mobility, best treated as a configurable escort or utility unit until its role is chosen."
+    },
+    "vehicles_support/hovercraft": {
+      "section": "vehicles_support",
+      "label": "Hover",
+      "source_rect": {
+        "x": 769,
+        "y": 275,
+        "width": 93,
+        "height": 76
+      },
+      "description": "Amphibious hover vehicle with 9 HP, 1 armour and 16-tile mobility, crossing water and rough ground while providing 2–4 light-weapon damage."
+    },
+    "misc_ui_objects/medkit": {
+      "section": "misc_ui_objects",
+      "label": "Medkit",
+      "source_rect": {
+        "x": 880,
+        "y": 267,
+        "width": 66,
+        "height": 77
+      },
+      "description": "Single-use pickup that restores 3 HP to the soldier who collects it, with no cover value and an interaction cost of one action."
+    },
+    "misc_ui_objects/ammo_crate": {
+      "section": "misc_ui_objects",
+      "label": "Ammo",
+      "source_rect": {
+        "x": 955,
+        "y": 263,
+        "width": 66,
+        "height": 83
+      },
+      "description": "Resupply container that refills one weapon magazine or a chosen ammunition pool, provides half cover and can be looted once."
+    },
+    "misc_ui_objects/energy_canister": {
+      "section": "misc_ui_objects",
+      "label": "Energy",
+      "source_rect": {
+        "x": 1038,
+        "y": 265,
+        "width": 47,
+        "height": 77
+      },
+      "description": "Single-use energy pickup that restores one ability charge or gadget charge, provides no cover and disappears when collected."
+    },
+    "misc_ui_objects/computer": {
+      "section": "misc_ui_objects",
+      "label": "Computer",
+      "source_rect": {
+        "x": 1105,
+        "y": 263,
+        "width": 70,
+        "height": 83
+      },
+      "description": "Hackable terminal that can reveal map intel, disable security or complete an objective, and blocks line of sight while intact."
+    },
+    "misc_ui_objects/door": {
+      "section": "misc_ui_objects",
+      "label": "Door",
+      "source_rect": {
+        "x": 1190,
+        "y": 260,
+        "width": 57,
+        "height": 85
+      },
+      "description": "Closed doorway that blocks movement and line of sight until opened or destroyed, with a suggested 8 HP if it is destructible."
+    },
+    "misc_ui_objects/ladder": {
+      "section": "misc_ui_objects",
+      "label": "Ladder",
+      "source_rect": {
+        "x": 1265,
+        "y": 252,
+        "width": 39,
+        "height": 89
+      },
+      "description": "Traversal link between two elevation levels that costs one movement point to use and does not provide cover."
+    },
+    "misc_ui_objects/crate": {
+      "section": "misc_ui_objects",
+      "label": "Crate",
+      "source_rect": {
+        "x": 1340,
+        "y": 264,
+        "width": 84,
+        "height": 82
+      },
+      "description": "Small destructible container with 4 HP that provides half cover and may contain ammunition, supplies or a mission item."
+    },
+    "misc_ui_objects/console": {
+      "section": "misc_ui_objects",
+      "label": "Console",
+      "source_rect": {
+        "x": 1443,
+        "y": 253,
+        "width": 65,
+        "height": 94
+      },
+      "description": "Objective console that a soldier can hack or activate with one action to trigger doors, machinery or mission progression."
+    },
+    "terrain_tiles/grass": {
+      "section": "terrain_tiles",
+      "label": "Grass",
+      "source_rect": {
+        "x": 21,
+        "y": 436,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "base_surface",
+      "edge_seamless_verified": false,
+      "description": "Walkable base ground with movement cost 1, no inherent cover and no hazard, suitable as the default outdoor map surface."
+    },
+    "terrain_tiles/forest": {
+      "section": "terrain_tiles",
+      "label": "Forest",
+      "source_rect": {
+        "x": 158,
+        "y": 436,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "feature_or_special_tile",
+      "edge_seamless_verified": false,
+      "description": "Dense wooded feature terrain with movement cost 2, heavy cover and reduced enemy visibility, with trunks treated as separate solid blockers."
+    },
+    "terrain_tiles/jungle": {
+      "section": "terrain_tiles",
+      "label": "Jungle",
+      "source_rect": {
+        "x": 295,
+        "y": 436,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "feature_or_special_tile",
+      "edge_seamless_verified": false,
+      "description": "Thick vegetation with movement cost 2, heavy concealment and strong cover, but reduced sight lines and difficult traversal."
+    },
+    "terrain_tiles/hills": {
+      "section": "terrain_tiles",
+      "label": "Hills",
+      "source_rect": {
+        "x": 433,
+        "y": 436,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "feature_or_special_tile",
+      "edge_seamless_verified": false,
+      "description": "Sloped elevated ground with movement cost 2, a height advantage for aim and vision, and optional low cover on marked rocky cells."
+    },
+    "terrain_tiles/mountains": {
+      "section": "terrain_tiles",
+      "label": "Mountains",
+      "source_rect": {
+        "x": 571,
+        "y": 436,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "feature_or_special_tile",
+      "edge_seamless_verified": false,
+      "description": "Steep high ground that blocks movement and long sight lines unless a pass is added, creating a natural boundary and elevation landmark."
+    },
+    "terrain_tiles/water": {
+      "section": "terrain_tiles",
+      "label": "Water",
+      "source_rect": {
+        "x": 709,
+        "y": 436,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "base_surface",
+      "edge_seamless_verified": false,
+      "description": "Deep water that is impassable to ordinary infantry, offers no cover and can be crossed only by bridges, aquatic units or special abilities."
+    },
+    "terrain_tiles/river": {
+      "section": "terrain_tiles",
+      "label": "River",
+      "source_rect": {
+        "x": 847,
+        "y": 436,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "feature_or_special_tile",
+      "edge_seamless_verified": false,
+      "description": "Watercourse feature that is impassable except at fords or bridges, separates firing lanes and follows connected river-edge variants."
+    },
+    "terrain_tiles/bridge": {
+      "section": "terrain_tiles",
+      "label": "Bridge",
+      "source_rect": {
+        "x": 984,
+        "y": 436,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "feature_or_special_tile",
+      "edge_seamless_verified": false,
+      "description": "Walkable crossing over water with movement cost 1, no inherent cover and a narrow approach that can become a tactical choke point."
+    },
+    "terrain_tiles/road": {
+      "section": "terrain_tiles",
+      "label": "Road",
+      "source_rect": {
+        "x": 1122,
+        "y": 436,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "feature_or_special_tile",
+      "edge_seamless_verified": false,
+      "description": "Walkable route with movement cost 1 and no cover, suitable for connecting locations and granting a small movement bonus if road rules are enabled."
+    },
+    "terrain_tiles/city": {
+      "section": "terrain_tiles",
+      "label": "City",
+      "source_rect": {
+        "x": 1259,
+        "y": 436,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "feature_or_special_tile",
+      "edge_seamless_verified": false,
+      "description": "Urban feature zone containing buildings and hard corners, with high cover and blocked sight lines supplied by separate building and wall objects."
+    },
+    "terrain_tiles/plain": {
+      "section": "terrain_tiles",
+      "label": "Plain",
+      "source_rect": {
+        "x": 1397,
+        "y": 436,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "base_surface",
+      "edge_seamless_verified": false,
+      "description": "Open walkable base ground with movement cost 1, no cover and clear line of sight, leaving soldiers exposed to enemy fire."
+    },
+    "terrain_tiles/desert": {
+      "section": "terrain_tiles",
+      "label": "Desert",
+      "source_rect": {
+        "x": 21,
+        "y": 575,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "base_surface",
+      "edge_seamless_verified": false,
+      "description": "Dry open base ground with movement cost 1, no cover and no default hazard, making exposed crossings dangerous."
+    },
+    "terrain_tiles/rock": {
+      "section": "terrain_tiles",
+      "label": "Rock",
+      "source_rect": {
+        "x": 158,
+        "y": 575,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "base_surface",
+      "edge_seamless_verified": false,
+      "description": "Rocky base ground with movement cost 1 and no inherent cover, while individual boulders should be placed as separate blocking objects."
+    },
+    "terrain_tiles/lava": {
+      "section": "terrain_tiles",
+      "label": "Lava",
+      "source_rect": {
+        "x": 295,
+        "y": 575,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "base_surface",
+      "edge_seamless_verified": false,
+      "description": "Hazardous ground that ordinary infantry cannot safely cross and that deals 3 damage at the end of each turn to units with heat protection disabled."
+    },
+    "terrain_tiles/snow": {
+      "section": "terrain_tiles",
+      "label": "Snow",
+      "source_rect": {
+        "x": 433,
+        "y": 575,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "base_surface",
+      "edge_seamless_verified": false,
+      "description": "Snow-covered ground with movement cost 2, no inherent cover and clear visibility, slowing advances across open areas."
+    },
+    "terrain_tiles/swamp": {
+      "section": "terrain_tiles",
+      "label": "Swamp",
+      "source_rect": {
+        "x": 571,
+        "y": 575,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "base_surface",
+      "edge_seamless_verified": false,
+      "description": "Wet ground with movement cost 2, low visibility and no inherent cover, slowing units and making flanking routes harder to use."
+    },
+    "terrain_tiles/sand_dunes": {
+      "section": "terrain_tiles",
+      "label": "Sand dunes",
+      "source_rect": {
+        "x": 709,
+        "y": 575,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "base_surface",
+      "edge_seamless_verified": false,
+      "description": "Loose sand base ground with movement cost 2 and no cover, making long exposed manoeuvres slower than movement across roads or grass."
+    },
+    "terrain_tiles/crater": {
+      "section": "terrain_tiles",
+      "label": "Crater",
+      "source_rect": {
+        "x": 847,
+        "y": 575,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "feature_or_special_tile",
+      "edge_seamless_verified": false,
+      "description": "Depression feature that remains walkable at movement cost 1 and grants half cover to units occupying its marked low cells."
+    },
+    "terrain_tiles/tundra": {
+      "section": "terrain_tiles",
+      "label": "Tundra",
+      "source_rect": {
+        "x": 984,
+        "y": 575,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "base_surface",
+      "edge_seamless_verified": false,
+      "description": "Cold open ground with movement cost 2, no cover and no default damage, creating a slower exposed approach across frozen terrain."
+    },
+    "terrain_tiles/ice": {
+      "section": "terrain_tiles",
+      "label": "Ice",
+      "source_rect": {
+        "x": 1122,
+        "y": 575,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "base_surface",
+      "edge_seamless_verified": false,
+      "description": "Slippery walkable ground with movement cost 1 but reduced stopping control, allowing a unit to slide one extra tile if it moves at full speed."
+    },
+    "terrain_tiles/barrier": {
+      "section": "terrain_tiles",
+      "label": "Barrier",
+      "source_rect": {
+        "x": 1259,
+        "y": 575,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "feature_or_special_tile",
+      "edge_seamless_verified": false,
+      "description": "Blocking defensive feature with heavy cover on adjacent cells, impassable until breached and destructible with a suggested 10 HP."
+    },
+    "terrain_tiles/rubble": {
+      "section": "terrain_tiles",
+      "label": "Rubble",
+      "source_rect": {
+        "x": 1397,
+        "y": 575,
+        "width": 117,
+        "height": 100
+      },
+      "map_role": "feature_or_special_tile",
+      "edge_seamless_verified": false,
+      "description": "Broken urban ground with movement cost 2, scattered half-cover positions and obstructed movement, while large debris should be separate objects."
+    },
+    "objects_decor/tree": {
+      "section": "objects_decor",
+      "label": "Tree",
+      "source_rect": {
+        "x": 28,
+        "y": 749,
+        "width": 81,
+        "height": 109
+      },
+      "description": "Tall destructible obstacle with 6 HP that blocks movement and line of sight while providing heavy cover to units sheltering beside its trunk."
+    },
+    "objects_decor/bush": {
+      "section": "objects_decor",
+      "label": "Bush",
+      "source_rect": {
+        "x": 111,
+        "y": 753,
+        "width": 83,
+        "height": 103
+      },
+      "description": "Low vegetation with 3 HP that provides half cover and concealment but does not fully block movement or line of sight."
+    },
+    "objects_decor/cactus": {
+      "section": "objects_decor",
+      "label": "Cactus",
+      "source_rect": {
+        "x": 215,
+        "y": 750,
+        "width": 59,
+        "height": 109
+      },
+      "description": "Desert obstacle with 4 HP that provides half cover and inflicts 1 contact damage when a unit moves through its occupied tile."
+    },
+    "objects_decor/rocks": {
+      "section": "objects_decor",
+      "label": "Rocks",
+      "source_rect": {
+        "x": 285,
+        "y": 760,
+        "width": 84,
+        "height": 85
+      },
+      "description": "Boulder cluster with 8 HP that blocks movement and line of sight and provides heavy cover from adjacent firing positions."
+    },
+    "objects_decor/fence": {
+      "section": "objects_decor",
+      "label": "Fence",
+      "source_rect": {
+        "x": 376,
+        "y": 760,
+        "width": 80,
+        "height": 85
+      },
+      "description": "Low destructible barrier with 4 HP that provides half cover, blocks direct movement and can be vaulted by spending 2 movement points."
+    },
+    "objects_decor/wall": {
+      "section": "objects_decor",
+      "label": "Wall",
+      "source_rect": {
+        "x": 473,
+        "y": 760,
+        "width": 73,
+        "height": 85
+      },
+      "description": "Solid destructible wall with 10 HP that blocks movement and line of sight and provides full cover to soldiers positioned behind it."
+    },
+    "objects_decor/crates": {
+      "section": "objects_decor",
+      "label": "Crates",
+      "source_rect": {
+        "x": 568,
+        "y": 752,
+        "width": 91,
+        "height": 99
+      },
+      "description": "Stacked supply crates with 6 HP that block movement, provide heavy cover and may be searched for a small resource reward."
+    },
+    "objects_decor/barrel": {
+      "section": "objects_decor",
+      "label": "Barrel",
+      "source_rect": {
+        "x": 690,
+        "y": 760,
+        "width": 49,
+        "height": 84
+      },
+      "description": "Explosive barrel with 5 HP that detonates when destroyed, dealing 3–5 damage to units within a 1-tile radius."
+    },
+    "objects_decor/fuel_tank": {
+      "section": "objects_decor",
+      "label": "Fuel tank",
+      "source_rect": {
+        "x": 766,
+        "y": 767,
+        "width": 96,
+        "height": 76
+      },
+      "description": "Volatile fuel tank with 7 HP that explodes when destroyed, dealing 4–6 damage within a 2-tile radius and possibly igniting nearby ground."
+    },
+    "objects_decor/radio_tower": {
+      "section": "objects_decor",
+      "label": "Radio tower",
+      "source_rect": {
+        "x": 887,
+        "y": 746,
+        "width": 50,
+        "height": 110
+      },
+      "description": "Tall mission landmark that blocks some sight lines and can be captured or hacked to reveal enemy positions across the map."
+    },
+    "objects_decor/satellite_dish": {
+      "section": "objects_decor",
+      "label": "Satellite dish",
+      "source_rect": {
+        "x": 965,
+        "y": 755,
+        "width": 85,
+        "height": 95
+      },
+      "description": "Interactable communications objective that can scan a distant sector or disrupt enemy communications after a one-action activation."
+    },
+    "objects_decor/light_post": {
+      "section": "objects_decor",
+      "label": "Light post",
+      "source_rect": {
+        "x": 1073,
+        "y": 752,
+        "width": 47,
+        "height": 99
+      },
+      "description": "Small destructible light source with 2 HP that illuminates nearby tiles in night missions and provides only minimal physical obstruction."
+    },
+    "objects_decor/power_pylon": {
+      "section": "objects_decor",
+      "label": "Power pylon",
+      "source_rect": {
+        "x": 1147,
+        "y": 745,
+        "width": 60,
+        "height": 108
+      },
+      "description": "Energy structure that can power nearby devices or serve as a sabotage objective, provides half cover and may overload when destroyed."
+    },
+    "objects_decor/alien_relic": {
+      "section": "objects_decor",
+      "label": "Alien relic",
+      "source_rect": {
+        "x": 1232,
+        "y": 752,
+        "width": 60,
+        "height": 103
+      },
+      "description": "Alien artefact that acts as a high-value objective or research pickup, grants a mission reward when secured and may trigger an enemy response."
+    },
+    "objects_decor/ufo_wreck": {
+      "section": "objects_decor",
+      "label": "UFO wreck",
+      "source_rect": {
+        "x": 1314,
+        "y": 755,
+        "width": 106,
+        "height": 91
+      },
+      "description": "Large crashed craft wreckage that blocks movement and sight lines, provides heavy cover and can be searched for salvage or mission evidence."
+    },
+    "objects_decor/biohazard": {
+      "section": "objects_decor",
+      "label": "Biohazard",
+      "source_rect": {
+        "x": 1436,
+        "y": 749,
+        "width": 80,
+        "height": 103
+      },
+      "description": "Toxic growth or spill that marks a hazardous zone, dealing 1 damage per turn to unprotected units and discouraging occupation."
+    },
+    "ui_markers/move": {
+      "section": "ui_markers",
+      "label": "Move",
+      "source_rect": {
+        "x": 22,
+        "y": 906,
+        "width": 55,
+        "height": 57
+      },
+      "description": "Movement indicator showing reachable destination tiles for the selected unit, with legal range determined by remaining movement points."
+    },
+    "ui_markers/attack": {
+      "section": "ui_markers",
+      "label": "Attack",
+      "source_rect": {
+        "x": 91,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Attack marker identifying a valid hostile target, with hit chance and damage preview supplied by the combat interface."
+    },
+    "ui_markers/cover": {
+      "section": "ui_markers",
+      "label": "Cover",
+      "source_rect": {
+        "x": 160,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Cover indicator showing a protected position, with half-cover or full-cover strength determined by the tile or adjacent obstacle."
+    },
+    "ui_markers/alert": {
+      "section": "ui_markers",
+      "label": "Alert",
+      "source_rect": {
+        "x": 228,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Warning marker for detected danger or an active threat, prompting the player to check line of sight and enemy intent."
+    },
+    "ui_markers/health": {
+      "section": "ui_markers",
+      "label": "Health",
+      "source_rect": {
+        "x": 296,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Health indicator representing current and maximum hit points, with low health signalling that the unit may be downed by another hit."
+    },
+    "ui_markers/ammo": {
+      "section": "ui_markers",
+      "label": "Ammo",
+      "source_rect": {
+        "x": 364,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Ammunition indicator showing remaining shots in the equipped weapon, with reloads consuming an action when the magazine is empty."
+    },
+    "ui_markers/objective": {
+      "section": "ui_markers",
+      "label": "Objective",
+      "source_rect": {
+        "x": 432,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Mission objective marker identifying an item, area or target that must be secured, activated, defended or destroyed."
+    },
+    "ui_markers/turn": {
+      "section": "ui_markers",
+      "label": "Turn",
+      "source_rect": {
+        "x": 501,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Turn-state marker showing the active player or enemy phase, with actions refreshed when control passes to that side."
+    },
+    "ui_markers/spawn": {
+      "section": "ui_markers",
+      "label": "Spawn",
+      "source_rect": {
+        "x": 584,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Deployment marker identifying a valid unit spawn point, with placement restricted by mission rules and occupied tiles."
+    },
+    "ui_markers/target": {
+      "section": "ui_markers",
+      "label": "Target",
+      "source_rect": {
+        "x": 651,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Target reticle marking the tile or unit currently selected for an attack, ability or interaction."
+    },
+    "ui_markers/in_range": {
+      "section": "ui_markers",
+      "label": "In range",
+      "source_rect": {
+        "x": 720,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Range marker indicating that a target is reachable by the selected weapon or ability from the current position."
+    },
+    "ui_markers/blocked": {
+      "section": "ui_markers",
+      "label": "Blocked",
+      "source_rect": {
+        "x": 788,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Blocked-action marker showing that line of sight, range, terrain or another rule prevents the selected action."
+    },
+    "ui_markers/vision": {
+      "section": "ui_markers",
+      "label": "Vision",
+      "source_rect": {
+        "x": 854,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Visibility marker showing tiles currently revealed to the squad, with fog of war hiding enemies outside the visible area."
+    },
+    "ui_markers/damage": {
+      "section": "ui_markers",
+      "label": "Damage",
+      "source_rect": {
+        "x": 922,
+        "y": 906,
+        "width": 56,
+        "height": 57
+      },
+      "description": "Damage marker used for floating combat feedback, displaying hit values or critical-hit effects after an attack resolves."
+    },
+    "quirky_extras/space_cat": {
+      "section": "quirky_extras",
+      "label": "Space cat",
+      "source_rect": {
+        "x": 1090,
+        "y": 902,
+        "width": 57,
+        "height": 63
+      },
+      "description": "Friendly mascot or neutral mission NPC with no combat stats by default, available for rescue, protection or purely decorative appearances."
+    },
+    "quirky_extras/penguin": {
+      "section": "quirky_extras",
+      "label": "Penguin",
+      "source_rect": {
+        "x": 1160,
+        "y": 904,
+        "width": 53,
+        "height": 63
+      },
+      "description": "Small neutral wildlife character with no combat stats by default, useful as an oddball map inhabitant or optional rescue target."
+    },
+    "quirky_extras/robot_chicken": {
+      "section": "quirky_extras",
+      "label": "Robot chicken",
+      "source_rect": {
+        "x": 1227,
+        "y": 902,
+        "width": 56,
+        "height": 65
+      },
+      "description": "Comic little mechanical companion with no default attack, but it can be assigned a cosmetic follower or a one-off objective role."
+    },
+    "quirky_extras/snail": {
+      "section": "quirky_extras",
+      "label": "Snail",
+      "source_rect": {
+        "x": 1295,
+        "y": 905,
+        "width": 57,
+        "height": 62
+      },
+      "description": "Harmless alien snail with no combat stats by default, suitable as ambient decoration or a slow-moving neutral creature in special missions."
+    },
+    "quirky_extras/ufo": {
+      "section": "quirky_extras",
+      "label": "UFO",
+      "source_rect": {
+        "x": 1363,
+        "y": 907,
+        "width": 88,
+        "height": 60
+      },
+      "description": "Small unidentified craft that can serve as a mission objective, extraction prop or scenery, with flight and combat behaviour disabled unless configured."
+    },
+    "quirky_extras/flag": {
+      "section": "quirky_extras",
+      "label": "Flag",
+      "source_rect": {
+        "x": 1467,
+        "y": 898,
+        "width": 51,
+        "height": 69
+      },
+      "description": "Faction or mission flag that marks a control point, ownership state or extraction location and has no combat stats of its own."
+    }
+  },
+  "description_field": "description",
+  "description_note": "Each sprite has a single-sentence tactical description. Numerical combat values are suggested starting-balance values, not extracted facts from the artwork; tune them during playtesting. Movement is measured in grid tiles per turn, HP is hit points, aim is a percentage-style base hit rating, and armour reduces incoming damage.",
+  "gameplay_attribute_conventions": {
+    "hp": "Hit points; a unit is incapacitated at 0 HP.",
+    "aim": "Suggested base aim rating on a 0–100 scale before cover, range and status modifiers.",
+    "mobility": "Suggested maximum grid tiles moved per turn before action-point or dash rules.",
+    "armour": "Suggested flat damage reduction per hit.",
+    "damage": "Suggested damage range per successful attack.",
+    "terrain_and_props": "Movement, cover, line-of-sight, hazard and interaction effects are proposed defaults and can be changed in the game rules."
+  }
+}
