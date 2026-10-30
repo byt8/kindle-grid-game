@@ -13,6 +13,8 @@ Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk. Tap an al
 
 It copies the game over, frees the touch screen from the screen mirror, runs the game, and puts the Kindle back to normal when you quit.
 
+Needs no internet — only this PC and the Kindle on the same Wi-Fi/LAN. Nothing is downloaded and the game makes no network calls.
+
 **2. Play:**
 
 1. Tap a soldier along the bottom.
