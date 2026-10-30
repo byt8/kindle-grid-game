@@ -7,7 +7,7 @@ PY     ?= python3
 
 HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 
-.PHONY: all test kindle preview clean
+.PHONY: all test kindle grabtest preview clean
 
 all: xcom-host
 
@@ -31,6 +31,15 @@ kindle: src/xcom.c src/sprites.h
 	    -static -no-pie -Wl,--gc-sections -lm \
 	    && arm-linux-musleabi-strip xcom'
 
+# Diagnostic: can /dev/input/event3 be grabbed right now? Pushed by
+# run-on-kindle.sh as the touch pre-flight.
+grabtest: tools/grabtest.c
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" -w /src kfb-build sh -c \
+	  'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -o grabtest tools/grabtest.c -static -no-pie \
+	    && arm-linux-musleabi-strip grabtest'
+
 test: xcom-host
 	./xcom-host --selftest --no-takeover --seed 1
 	./xcom-host --no-takeover --seed 1 --dump /tmp/xcom-open.pgm
@@ -42,4 +51,4 @@ preview: src/sprites.h
 	$(PY) tools/slice_sprites.py --preview /tmp/xcom-sprites.png
 
 clean:
-	rm -f xcom-host xcom
+	rm -f xcom-host xcom grabtest
