@@ -26,6 +26,16 @@ if /sbin/initctl list 2>/dev/null | grep -q '^kfbterm start'; then
 fi
 
 restore() {
+    # The game stops powerd so the power key belongs to it (chess sleeps and
+    # wakes the Kindle itself). Give the stock button behaviour back.
+    if ! /sbin/initctl status powerd 2>/dev/null | grep -q 'start/running'; then
+        if /sbin/initctl start powerd >/dev/null 2>&1; then
+            say "powerd restarted"
+        else
+            say "WARNING: could not restart powerd; the power button will do"
+            say "         nothing until it is: /sbin/initctl start powerd"
+        fi
+    fi
     rm -f /mnt/us/DONT_START_FRAMEWORK
     if [ -x /mnt/us/fbdaemon/restore-kindle.sh ]; then
         sh /mnt/us/fbdaemon/restore-kindle.sh

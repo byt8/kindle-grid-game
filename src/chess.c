@@ -699,27 +699,55 @@ static int json_content(const char *body, char *out, size_t n) {
  * pwr_latch is set when a press has been seen and not yet acted on; the event
  * loop is the only place that acts on it.
  */
-#define PWR_BUTTON "/proc/whitney_button"
 #define PWR_STATE  "/sys/power/state"
 
 static int pwr_latch;
 
-/* 1 when the status line says the key is held. The two states are "whitney
- * button is locked" and "whitney button is unlocked" -- note that the second
- * contains the first, so match the phrase, not the word. --selftest checks
- * both strings. */
-static int pwr_says_down(const char *s) { return strstr(s, "is locked") != NULL; }
+/* The power key is its own input device -- `whitney-button`, kernel event2 --
+ * not part of the touch panel, so it can be read straight from evdev as
+ * KEY_POWER. powerd reads the same key and answers it with the Kindle's
+ * screensaver, which brings the whole reader UI back over the game; the game
+ * therefore stops powerd while it owns the panel (see main) and the launcher
+ * starts it again on exit.
+ *
+ * /proc/whitney_button was the wrong source: it reports whether the screensaver
+ * has *locked* the device, not whether the key is down, so it stayed "unlocked"
+ * through every press.
+ */
+#define PWR_KEY_DEV "/dev/input/event2"
+/* Raw evdev numbers, not <linux/input.h>: that header's BTN_* names collide
+ * with this file's own (BTN_Y and friends). EV_KEY is 1, KEY_POWER is 116. */
+#define PWR_KEY_CODE 116
+#define EV_KEY_CODE  1
 
-/* 1 while the key is held, 0 while it is not, -1 if the file cannot be read. */
+/* struct input_event on this 32-bit device: two 32-bit time fields, the type
+ * and code, then the value. */
+struct pwr_event {
+    int32_t  sec, usec;
+    uint16_t type, code;
+    int32_t  value;
+};
+
+static int pwr_fd = -1;
+static int pwr_held;
+
+/* Only a key event carrying KEY_POWER is the power button. */
+static int is_pwr_key(uint16_t type, uint16_t code) {
+    return type == EV_KEY_CODE && code == PWR_KEY_CODE;
+}
+
+/* 1 when the key is down, 0 when it is up, -1 when the device cannot be read. */
 static int pwr_down(void) {
-    char b[80];
-    int fd = open(PWR_BUTTON, O_RDONLY);
-    if (fd < 0) return -1;
-    ssize_t n = read(fd, b, sizeof b - 1);
-    close(fd);
-    if (n <= 0) return -1;
-    b[n] = 0;
-    return pwr_says_down(b);
+    if (pwr_fd < 0) {
+        pwr_fd = open(PWR_KEY_DEV, O_RDONLY | O_NONBLOCK);
+        if (pwr_fd < 0) return -1;
+    }
+    struct pwr_event ev;
+    while (read(pwr_fd, &ev, sizeof ev) == (ssize_t)sizeof ev) {
+        if (is_pwr_key(ev.type, ev.code))
+            pwr_held = ev.value != 0;      /* 1 down, 0 up, 2 repeat */
+    }
+    return pwr_held;
 }
 
 /* Run curl with the JSON on its stdin and collect what it prints. */
@@ -2071,9 +2099,10 @@ static int selftest(void) {
     san_of(&p, &m, san);
     want(strcmp(san, "Nf3") == 0, 1, "g1f3 is Nf3");
 
-    /* the power button's status line: "unlocked" contains "locked" */
-    want(pwr_says_down("whitney button is locked\n"), 1, "held key reads as down");
-    want(pwr_says_down("whitney button is unlocked\n"), 0, "released key reads as up");
+    /* the power key: only KEY_POWER from the key device counts */
+    want(is_pwr_key(EV_KEY_CODE, PWR_KEY_CODE), 1, "the power key is recognised");
+    want(is_pwr_key(EV_KEY_CODE, 30), 0, "another key is not the power key");
+    want(is_pwr_key(3, PWR_KEY_CODE), 0, "a touch event is not the power key");
 
     /* SAN of a castle and of a capture */
     {
@@ -2227,6 +2256,15 @@ int main(int argc, char **argv) {
         if (system("/sbin/initctl stop x") != 0)
             fprintf(stderr, "chess: could not stop the x job (Xorg/blanket);"
                             " the boot splash may draw over the game\n");
+        /* powerd reads the power key too and answers it with the Kindle's
+         * screen saver: with the game holding the panel that brought the whole
+         * reader UI back over the board on the first press. The game answers
+         * the key itself now; tools/kindle-run.sh starts powerd again on exit. */
+        if (system("/sbin/initctl stop powerd") != 0)
+            fprintf(stderr, "chess: could not stop powerd; it may put the"
+                            " screen saver over the game on a press\n");
+        else
+            fprintf(stderr, "chess: powerd stopped; the power key is the game's\n");
     }
 
     /* One forced full-panel white pass before anything is drawn. E-ink keeps
