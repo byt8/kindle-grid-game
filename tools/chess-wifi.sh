@@ -107,7 +107,7 @@ cmd_join() {
 
     # Reuse the profile with this ssid if one is already saved, so repeated
     # joins do not pile up networks in the supplicant.
-    id=$(wpa list_networks | awk -F'\t' -v s="$ssid" '$2 == s { print $1; exit }')
+    id=$(wpa list_networks | awk -F"$(printf '\t')" -v s="$ssid" '$2 == s { print $1; exit }')
     if [ -z "$id" ]; then
         id=$(wpa add_network | sed -n 's/^\([0-9][0-9]*\)$/\1/p' | tail -1)
         [ -n "$id" ] || die "could not add a network"

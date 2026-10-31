@@ -113,18 +113,60 @@ screen with TRY AGAIN / OTHER NETWORKS). Joining is shelled out to
 
 `tools/chess-boot.conf` is pushed to `/mnt/us/chess-boot.conf` and copied to
 `/etc/upstart/chess.conf` on the device (`mntroot rw` first, `mntroot ro` after).
-`start on started lab126_gui`, waits up to 20 s for wi-fi, tries
-`chess-wifi.sh auto`, then `GAME=chess exec sh /mnt/us/chess-run.sh`. The
-existing runner restores the reader on exit, so GIVE UP on the board is the way
-out and a crash still leaves a usable Kindle. Remove the file to undo.
+`start on started lab126_gui`, waits up to 180 s for wi-fi, retries
+`chess-wifi.sh auto` every 30 s, then `GAME=chess exec sh /mnt/us/chess-run.sh`.
+The existing runner restores the reader on exit, so GIVE UP on the board is the
+way out and a crash still leaves a usable Kindle. Remove the file to undo.
+
+**Verified on a real reboot** (2026-10-31): `/mnt/us/chess-boot.log` reads
+`wifi up after 10s … starting the game`, `pidof chess` returns a pid, `kfbterm`
+and `framework` are `stop/waiting`, and `kill -USR1` gives a live board.
+
+- **Upstart runs `script` blocks with `sh -e`, and that killed the job.** A bare
+  `[ cond ] && sh chess-wifi.sh auto` in the loop returned 1 when there was no
+  remembered network, and `-e` ended the whole job: the log stopped after one
+  line and no game started, with nothing else to see. Fixed with `set +e` at the
+  top of the script *and* an `if` around the retry. Any call that is allowed to
+  fail needs one of those.
+- **Never block the game on wi-fi.** Killing `framework` before wifid finishes
+  associating leaves the unit with no link and no shell (had to be recovered by
+  hand on the panel). Hence: wait, then launch anyway. No link is not a dead end
+  — the game's own wi-fi screen calls `chess-wifi.sh`, which brings the link up
+  with `wpa_cli` + `udhcpc` and needs no framework.
+- **The Kindle clock is 2012 until wi-fi sets it**, so the boot log also writes
+  `$(cat /proc/uptime)`; `date` alone cannot tell you how far into boot anything
+  happened.
+- **`/mnt/us/wifi.conf` can disappear** (and did here), so `auto` legitimately
+  answers `error: no remembered network` while wifid has already reconnected on
+  the Kindle's own saved profile. `status` is the source of truth, not the conf.
+- **The Kindle is on both wlan0 and ppp0 (3G).** wlan0 holds the default route;
+  ppp0 only carries host routes to Amazon. `route -n` shows which is which.
+
+## The boot picture
+
+Shown at start from `/var/local/blanket/low_level_screens/images/splash.png`, a
+symlink into the read-only root. `/var/local` (mmcblk0p3, ext3) is writable, so
+the swap is `mv splash.png splash.png.orig-symlink` then a real file in its
+place — no `mntroot` involved. `tools/make_splash.py` builds it.
+
+- **The format is not negotiable**: 600x800, PNG, bit depth 8, colour type **0**
+  (greyscale), no alpha. The stock file is exactly that; anything else (RGBA,
+  palette, another size) is drawn as nothing.
+- **No PIL, no ImageMagick, no ffmpeg on this PC.** `tools/make_splash.py` does
+  the PNG decode (all five filter types), alpha-over-white, box-downscale and
+  encode itself with `zlib`/`struct`; `--preview` prints it as ASCII. Same
+  reason `tools/pgm2png.py` exists.
+- A landscape logo can only get so big on a portrait panel: auto-crop to the ink,
+  then fit inside `600 - 2*margin` gives 552x368 for the aijly logo.
 
 Unverified as of this note: the job has not yet been through a real reboot — the
 Kindle went offline mid-install.
 
 ## Next
 
-- Install `/etc/upstart/chess.conf` on the device and reboot; confirm the game
-  comes up by itself (`pidof chess`, `kill -USR1` screenshot, then GIVE UP and
-  check the reader returns).
+- Confirm on the panel that the new boot picture is what appears — it cannot be
+  captured remotely, it is drawn before anything scriptable runs.
+- GIVE UP has not been exercised since the boot job started launching the game
+  by itself; check the reader really returns on a boot-launched game.
 - The promotion picker exists (`draw_promo`/`do_promo`, taps at 1311) but has no
   automated test; the tap test in `make chess-test` only covers select+move.

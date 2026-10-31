@@ -37,11 +37,40 @@ cp /mnt/us/chess-boot.conf /etc/upstart/chess.conf
 mntroot ro
 ```
 (that is on the Kindle; `tools/chess-boot.conf` is pushed to `/mnt/us` by
-`run-chess-on-kindle.sh`.) The Kindle then starts, waits up to 20s for wi-fi,
-and runs the game. Tapping GIVE UP ends it and the reader comes back — that
-exit is deliberate, it is the only way out.
+`run-chess-on-kindle.sh`.) The Kindle then waits up to **3 minutes** for Wi-Fi
+and starts the game. It starts anyway if Wi-Fi never comes up, because on a
+fresh unit the only place to join a network is the game's own Wi-Fi screen.
+Tapping GIVE UP ends it and the reader comes back — that exit is deliberate, it
+is the only way out.
+
+What it did is written to `/mnt/us/chess-boot.log` (`wifi up after 10s` …
+`starting the game`). Read it when a boot does not do what you expect:
+
+```
+cat /mnt/us/chess-boot.log
+```
 
 Undo: `mntroot rw; rm /etc/upstart/chess.conf; mntroot ro`.
+
+### Change the boot picture
+
+The Kindle shows `/var/local/blanket/low_level_screens/images/splash.png` while
+it starts. That file is a symlink into the read-only root, and `/var/local` is a
+writable partition, so the replacement is just a real file in its place — the
+root filesystem is never opened for writing.
+
+```
+python3 tools/make_splash.py --logo ~/aijly.com/static/logo.png --out kindle-splash.png
+cat kindle-splash.png | ssh root@192.168.0.66 '
+  d=/var/local/blanket/low_level_screens/images
+  [ -L $d/splash.png ] && mv $d/splash.png $d/splash.png.orig-symlink
+  cat > $d/splash.png; chmod 644 $d/splash.png'
+```
+
+The image must be a 600x800 **8-bit greyscale** PNG (colour type 0, no alpha) or
+the framework draws nothing. `tools/make_splash.py` crops the logo, centres it on
+white and writes exactly that; `--preview` prints it as text first. Undo:
+`mv splash.png.orig-symlink splash.png`.
 
 ### Wi-fi without the Kindle UI
 
@@ -69,6 +98,7 @@ own trust store is older than DeepSeek's certificate.
 | `src/chess.c` | the whole game: rules, drawing, touch, wi-fi screen |
 | `tools/chess-wifi.sh` | scan / join / remember, over `wpa_cli` |
 | `tools/chess-boot.conf` | upstart job that boots into the game |
+| `tools/make_splash.py` | turns a PNG into the Kindle's 600x800 greyscale boot picture |
 | `tools/kindle-run.sh` | on-device launcher: frees the screen, runs, restores |
 | `chess.conf.example` | key, model, url, ca |
 
