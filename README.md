@@ -11,11 +11,19 @@ jailbroken, with SSH, on the same network (`192.168.0.66` by default).
 ```
 cp chess.conf.example chess.conf      # paste your DeepSeek key: key = sk-...
 make chess-kindle                     # the ARM binary (needs the kfb-build docker image)
-./run-chess-on-kindle.sh              # copy it over, take the screen, play
+./run-chess-on-kindle.sh 192.168.0.66 # copy it over, take the screen, play
 ```
+
+Pass the Kindle's address: with more than one Kindle on the network the default
+comes from `jailbreak-kindle/.kfb-secrets` and may be the other one.
 
 **Play:** tap a piece, tap a square. Black's move and its comment appear under
 the board. Tap QUIT, then SURE, to give the screen back to the reader.
+
+**Power button:** puts the Kindle to sleep (screen says ASLEEP) and wakes it
+again with the position kept. Pressing power during the model's turn cancels
+that question and it is asked again after the wake. This is the game's own
+sleep — the stock `powerd` never gets that far once the game holds the panel.
 
 **No Kindle, no key, on this PC:**
 ```

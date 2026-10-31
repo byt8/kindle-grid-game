@@ -21,11 +21,14 @@
 #include "eink.h"
 
 #include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -682,6 +685,37 @@ static int json_content(const char *body, char *out, size_t n) {
     return -1;
 }
 
+/* ---- the power button --------------------------------------------------
+ * The power button is not a touch event and it is not on event2 or event3: it
+ * is a one-line status file, /proc/whitney_button, that reads "whitney button
+ * is locked" while the key is held and "... is unlocked" the rest of the time.
+ * Turning that into a sleep is powerd's job. powerd is running here and does
+ * react to the press -- probed on the device, its state goes Active -> Screen
+ * Saver for a few seconds on every press -- but it never suspends: after
+ * Screen Saver it waits for pillowd to paint the screen saver, and pillowd is
+ * part of the reader UI the game deliberately stops. So the game does the rest
+ * itself (see sleep_now() below).
+ *
+ * pwr_latch is set when a press has been seen and not yet acted on; the event
+ * loop is the only place that acts on it.
+ */
+#define PWR_BUTTON "/proc/whitney_button"
+#define PWR_STATE  "/sys/power/state"
+
+static int pwr_latch;
+
+/* 1 while the key is held, 0 while it is not, -1 if the file cannot be read. */
+static int pwr_down(void) {
+    char b[80];
+    int fd = open(PWR_BUTTON, O_RDONLY);
+    if (fd < 0) return -1;
+    ssize_t n = read(fd, b, sizeof b - 1);
+    close(fd);
+    if (n <= 0) return -1;
+    b[n] = 0;
+    return strstr(b, "locked") != NULL;
+}
+
 /* Run curl with the JSON on its stdin and collect what it prints. */
 static int run_curl(const char *json, char *out, size_t n, char *err, size_t en) {
     int in[2], op[2];
@@ -723,9 +757,36 @@ static int run_curl(const char *json, char *out, size_t n, char *err, size_t en)
     }
     close(in[1]);
 
+    /* Wait for the reply, but keep an eye on the power button: a press during
+     * a three-minute wait must not be swallowed, and a reply is worthless if
+     * the machine is going to sleep. Watching the file rather than sitting in
+     * read() is what makes that possible. */
     size_t got = 0;
-    ssize_t r;
-    while ((r = read(op[0], out + got, n - 1 - got)) > 0) {
+    int cancelled = 0;
+    for (;;) {
+        fd_set rd;
+        FD_ZERO(&rd);
+        FD_SET(op[0], &rd);
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 200 * 1000;
+        int sel = select(op[0] + 1, &rd, NULL, NULL, &tv);
+        if (sel < 0) {
+            if (errno == EINTR) continue;
+            snprintf(err, en, "the wait for curl failed: %s", strerror(errno));
+            break;
+        }
+        if (sel == 0) {
+            if (pwr_down() == 1) { cancelled = 1; break; }
+            continue;
+        }
+        ssize_t r = read(op[0], out + got, n - 1 - got);
+        if (r < 0) {
+            if (errno == EINTR) continue;
+            snprintf(err, en, "could not read curl's output: %s", strerror(errno));
+            break;
+        }
+        if (r == 0) break;
         got += (size_t)r;
         if (got >= n - 1) break;
     }
@@ -733,6 +794,13 @@ static int run_curl(const char *json, char *out, size_t n, char *err, size_t en)
     close(op[0]);
 
     int st = 0;
+    if (cancelled) {
+        kill(pid, SIGTERM);
+        waitpid(pid, &st, 0);
+        pwr_latch = 1;
+        snprintf(err, en, "cancelled by the power button");
+        return -1;
+    }
     waitpid(pid, &st, 0);
     if (!WIFEXITED(st) || WEXITSTATUS(st) != 0) {
         snprintf(err, en, "curl failed (status %d)", WIFEXITED(st) ? WEXITSTATUS(st) : -1);
@@ -1104,6 +1172,7 @@ static int play_ai(void) {
     /* one retry: a model that wrote an illegal move is usually right the
      * second time once it is told what went wrong */
     int rc = api_move(&P, hist_uci, &m, say, sizeof say, err, sizeof err);
+    if (pwr_latch) { api_busy = 0; return -2; }    /* the loop sleeps, then asks again */
     if (rc != 0) {
         char first[200];
         snprintf(first, sizeof first, "%s", err);
@@ -1111,6 +1180,7 @@ static int play_ai(void) {
         snprintf(hist2, sizeof hist2, "%.2000s (your last answer was refused: %.180s. "
                  "Answer only with a legal move from the list.)", hist_uci, first);
         rc = api_move(&P, hist2, &m, say, sizeof say, err, sizeof err);
+        if (pwr_latch) { api_busy = 0; return -2; }
         if (rc != 0) {
             api_busy = 0;
             set_status("computer: %.120s", err);
@@ -1633,6 +1703,103 @@ static int wifi_setup(void) {
     }
 }
 
+/* ---- sleeping ---------------------------------------------------------
+ * What powerd would have done, done here: paint a sleep screen, ask the kernel
+ * to suspend, and put the board back when the machine wakes. Writing "mem" to
+ * /sys/power/state is the whole suspend; the write returns when a wake source
+ * -- the power button, among others -- has fired.
+ */
+
+#ifndef EK_HOST
+/* Seconds since boot, from /proc/uptime; -1 if it cannot be read. */
+static double up_secs(void) {
+    FILE *f = fopen("/proc/uptime", "r");
+    if (!f) return -1;
+    double v = -1;
+    if (fscanf(f, "%lf", &v) != 1) v = -1;
+    fclose(f);
+    return v;
+}
+
+static int pwr_suspend(char *err, size_t n) {
+    int fd = open(PWR_STATE, O_WRONLY);
+    if (fd < 0) {
+        snprintf(err, n, "could not open %s: %s", PWR_STATE, strerror(errno));
+        return -1;
+    }
+    errno = 0;
+    ssize_t w = write(fd, "mem", 3);
+    int e = errno;
+    close(fd);
+    if (w != 3) {
+        snprintf(err, n, "could not suspend: %s",
+                 e ? strerror(e) : "the write was short");
+        return -1;
+    }
+    return 0;
+}
+
+static void draw_sleep(void) {
+    ek_clear(EK_PAPER);
+    ek_text_scale(196, 300, "ASLEEP", EK_INK, 4);
+    ek_text(132, 420, "press the power button to wake it up", EK_INK);
+    ek_text(156, 452, "the game carries on where it was", EK_INK);
+}
+
+/* Sleep until woken, then redraw. The caller redraws the board afterwards. */
+static void sleep_now(void) {
+    char err[200] = "";
+
+    while (pwr_down() == 1) ek_sleep_ms(20);   /* let go of the key first */
+
+    draw_sleep();
+    ek_force_full();
+    ek_flush();
+
+    double t0 = up_secs();
+    if (pwr_suspend(err, sizeof err) != 0) {
+        fprintf(stderr, "chess: %s\n", err);
+        set_status("could not sleep - %s", err);
+        ek_force_full();
+        present();
+        return;
+    }
+    double t1 = up_secs();
+    if (t0 >= 0 && t1 >= 0 && t1 > t0)
+        fprintf(stderr, "chess: asleep for %.1f s\n", t1 - t0);
+
+    /* The press that woke the machine is still down for a moment; read it as
+     * a wake-up, not as a new press, or the game goes straight back to sleep. */
+    while (pwr_down() == 1) ek_sleep_ms(20);
+
+    /* The panel still holds the sleep screen: one full pass wipes it. */
+    ek_force_full();
+    present();
+
+    /* The radio is down while the machine is asleep and the association does
+     * not always come back by itself. Rejoin before the next question goes to
+     * the model, rather than losing a move to a dead network. */
+    if (wifi_status() != 0) {
+        char buf[256] = "";
+        set_status("back - rejoining wi-fi");
+        present();
+        if (run_sh("sh " WIFI_SCRIPT " auto", buf, sizeof buf) != 0)
+            fprintf(stderr, "chess: wi-fi did not come back: %.200s\n", buf);
+        else
+            fprintf(stderr, "chess: wi-fi rejoined\n");
+    }
+}
+
+/* Called from the event loop. 1 when a press has just been handled. */
+static int pwr_poll(void) {
+    if (!pwr_latch && pwr_down() == 1) pwr_latch = 1;
+    if (!pwr_latch) return 0;
+    pwr_latch = 0;
+    sleep_now();
+    return 1;
+}
+#endif  /* !EK_HOST */
+
 /* ---- taps ------------------------------------------------------------- */
 
 static int square_at(int x, int y, int *out) {
@@ -1945,7 +2112,11 @@ static void usage(void) {
             "  --wifi        open the wi-fi screen even when already online\n"
             "  --no-wifi     do not check wi-fi on start\n"
             "  --wifi-shot F write a wi-fi screen (PGM) and exit: F then\n"
-            "                list|name|pass|fail, default list\n",
+            "                list|name|pass|fail, default list\n"
+            "\n"
+            "The power button puts the Kindle to sleep and wakes it again; the\n"
+            "position is kept. A press during the model's turn cancels that\n"
+            "question and asks it again after the wake.\n",
             conf_default());
 }
 
@@ -2152,6 +2323,12 @@ int main(int argc, char **argv) {
         }
         if (shot_req) { shot_req = 0; ek_dump_pgm(SHOT_PATH, 1); }
         if (stop_req) break;
+        if (pwr_poll()) {
+            /* Back from sleep with Black still to move: ask again, because the
+             * press cancelled the question that was in flight. */
+            if (!over && P.stm == BLACK) play_ai();
+            got = 1;
+        }
         if (got) present();
         else ek_sleep_ms(20);
     }

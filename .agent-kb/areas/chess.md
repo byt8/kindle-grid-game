@@ -190,9 +190,44 @@ repainted over the game and the bar froze half-drawn — the "black blob".
   `kill -USR1 <pid of chess>` for the game's own canvas and your eyes for the
   panel.
 
-## The power button does not sleep the game (open, 2026-10-31)
+## The power button, and sleep (fixed, 2026-10-31)
 
 Reported: pressing power while chess runs does nothing.
+
+**Probed with `tools/pw-watch.sh` and two real presses on the device:**
+`/proc/whitney_button` reads `whitney button is locked` for ~4 s per press (372
+unlocked vs 4 locked samples), and `powerd` does react — `Powerd state: Active`
+-> `Screen Saver` for those seconds -> back to `Active`. It never goes further:
+`dmesg | grep -c suspend` was **0** after the presses, i.e. no `PM: suspend
+entry`. So powerd sees the press and stalls in Screen Saver waiting for pillowd
+to paint the screen saver, which the game has stopped. Nothing else on the
+device will suspend, so the game does it.
+
+**The fix (in `src/chess.c`, all `#ifndef EK_HOST`):**
+- `pwr_down()` reads `/proc/whitney_button` and returns 1 while it says
+  `locked`. Reading it does not consume the press: powerd still sees it.
+- `pwr_poll()` in the device event loop turns a press into `sleep_now()`.
+- `sleep_now()`: waits for the key release, paints an ASLEEP screen
+  (`ek_force_full`), writes `mem` to `/sys/power/state` (the write returns on
+  wake), waits for the release of the waking press (otherwise the game goes
+  straight back to sleep), `ek_force_full` + `present()`, then rejoins wi-fi
+  with `chess-wifi.sh auto` if `wifi_status()` says it is gone.
+- A write failure to `/sys/power/state` is reported on the status line and in
+  stderr, never swallowed. The seconds asleep come from `/proc/uptime`
+  deltas in stderr (`chess: asleep for N s`), visible in `service_logs`.
+- `run_curl()` now waits in `select(2)` with a 200 ms timeout instead of a
+  blocking `read`, so a press during the model's turn is not swallowed: curl is
+  killed, `pwr_latch` is set, `play_ai()` returns -2 without retrying, the loop
+  sleeps, and after the wake asks the model again.
+
+**Devices:** two Kindles answer on the LAN — `.66` (serial B010260121322E2D,
+the Kindle Touch the game is built for) and `.63` (serial B011140822260CM1).
+`jailbreak-kindle/.kfb-secrets` sets `KINDLE_IP=192.168.0.63`, so a bare
+`./run-chess-on-kindle.sh` pushes to the **wrong** device. Always pass the
+address: `./run-chess-on-kindle.sh 192.168.0.66`. The workspace service
+`chess-on-kindle` does exactly that.
+
+### Earlier findings that led here
 
 - **The button is not on evdev.** `/proc/bus/input/devices` has 4 nodes and none
   of them is power: event0 WM8962 beep, event1 headset, event2 `whitney-button`
@@ -204,16 +239,12 @@ Reported: pressing power while chess runs does nothing.
   `KERNEL: I pmic: PWRON1 event:` on each press, and a boot line
   `yoshibutton: can't send uevent, returned with error:-3` — the pmic driver
   delivers the press as a **uevent**, not as an input key.
-- **Nothing suspends.** No `PM: suspend` line in dmesg after the presses, and
-  `powerd` stays `Powerd state: Active`.
+- **Nothing suspends.** No `PM: suspend` line in dmesg after the presses.
 - `powerd` (pid 1127, job `powerd start on started lab126`, **survives** the
   takeover) *does* run. Its sleep path is `SCREEN SAVER -> READY TO SUSPEND ->
   suspended`, i.e. it expects pillowd to paint a screen saver first. The game
   stops the `x` job, so `lab126_gui`, `framework`, `pillow` and `blanket` are
   all `stop/waiting` — there is nobody to draw the screen saver.
-- So the game has to own this: detect the press and suspend itself
-  (`echo mem > /sys/power/state`), paint a sleep screen first so the press has
-  visible feedback, and force a full refresh on wake.
 - `tools/pw-watch.sh` is the probe: it logs uptime / whitney button / powerd
   state / `/sys/power/state` once a second to `/tmp/pw.log` on the device.
 
@@ -221,7 +252,7 @@ Reported: pressing power while chess runs does nothing.
 
 - Confirm on the panel that the new boot picture is what appears (it cannot be
   captured remotely).
-- Restore is verified; sleep/screensaver behaviour with blanket killed mid-run
-  is not.
+- Power button: code is in, the sleep screen and the wake are **not yet
+  confirmed on the panel** — still needs one press on the device.
 - The promotion picker exists (`draw_promo`/`do_promo`, taps at 1311) but has no
   automated test; the tap test in `make chess-test` only covers select+move.
