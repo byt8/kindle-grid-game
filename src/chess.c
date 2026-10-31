@@ -1483,6 +1483,14 @@ static int wait_tap(int *x, int *y) {
     while (!stop_req) {
         if (shot_req) { shot_req = 0; ek_dump_pgm(SHOT_PATH, 1); }
         ek_event ev;
+        {
+            static uint32_t hb;
+            if (ek_ms() - hb > 5000) {
+                hb = ek_ms();
+                fprintf(stderr, "chess: heartbeat: waiting for a tap elsewhere");
+                fprintf(stderr, " (button %d)\n", pwr_down());
+            }
+        }
         while (ek_poll(&ev)) {
             if (ev.type == EK_UP) { seen = 0; continue; }
             if (ev.type != EK_DOWN) continue;
@@ -1811,7 +1819,16 @@ static void sleep_now(void) {
 
 /* Called from the event loop. 1 when a press has just been handled. */
 static int pwr_poll(void) {
-    if (!pwr_latch && pwr_down() == 1) pwr_latch = 1;
+    /* One line per change of state, so the log shows whether this is being
+     * polled at all and what the button file says. */
+    static int last = -2;
+    int now = pwr_down();
+    if (now != last) {
+        fprintf(stderr, "chess: power button %s\n",
+                now == 1 ? "down" : now == 0 ? "up" : "unreadable");
+        last = now;
+    }
+    if (!pwr_latch && now == 1) pwr_latch = 1;
     if (!pwr_latch) return 0;
     pwr_latch = 0;
     sleep_now();
@@ -2326,6 +2343,14 @@ int main(int argc, char **argv) {
     while (!stop_req) {
         ek_event ev;
         int got = 0;
+        {
+            static uint32_t hb;
+            if (ek_ms() - hb > 5000) {
+                hb = ek_ms();
+                fprintf(stderr, "chess: heartbeat: board loop, button %d\n",
+                        pwr_down());
+            }
+        }
         while (ek_poll(&ev)) {
             if (ev.type == EK_UP) {
                 down_seen = 0;

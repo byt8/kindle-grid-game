@@ -126,7 +126,15 @@ if [ "$GAME" = xcom ]; then
     fi
 fi
 say "starting the game"
-/mnt/us/$GAME $args "$@"
-rc=$?
+# Keep a copy of what the game says on the device itself. The ssh session that
+# carries the live copy dies with the launcher, and then a fault that happened
+# while it ran leaves no evidence at all.
+# The status is written to a file from the left-hand side because a pipeline
+# only reports tee's exit code.
+rm -f /tmp/$GAME.rc
+: >/mnt/us/$GAME.log
+( /mnt/us/$GAME $args "$@" 2>&1; echo $? >/tmp/$GAME.rc ) | tee -a /mnt/us/$GAME.log
+rc=$(cat /tmp/$GAME.rc 2>/dev/null || echo 1)
 say "game exited rc=$rc"
+say "       the game's own output is in /mnt/us/$GAME.log"
 exit $rc
