@@ -168,19 +168,27 @@ replacing it changed nothing on the glass, which is how this was found.
 `/dev/fb0`. Stopping `framework` does not stop it, so its splash surface got
 repainted over the game and the bar froze half-drawn — the "black blob".
 
-- `tools/chess-boot.conf` kills it ~3 s into the job (`killall -9 blanket`),
-  before the Wi-Fi wait, so the bar never advances; the splash picture already
-  painted stays on the glass (e-ink keeps it) until the game draws.
-- `tools/kindle-run.sh` kills it too, as a backstop for hand runs.
-- `src/chess.c` does `ek_clear(EK_PAPER); ek_force_full(); ek_flush();` right
-  after `ek_open`, one full-panel GC16 white pass, so nothing from before the
-  game can ghost through.
+- **Do not `killall blanket`.** blanket is not its own upstart job; it is a
+  child of `lxinit` under the `x` job. Killing it makes `x` stop with
+  `RESULT!=ok`, and `/etc/upstart/x_monitor.conf` restarts the whole GUI —
+  up to `RESTART_LIMIT=5` in one boot, and then `REBOOT_LIMIT=1` fires a
+  "repair" shutdown. It also comes back painting, so the bar returns anyway.
+- **The fix: the game stops the `x` job**, `system("/sbin/initctl stop x")` in
+  `src/chess.c` right after `ek_open` (only when it took the panel over). A
+  deliberate stop is `RESULT=ok`, so `x_monitor` leaves it down, and
+  `restore-kindle.sh` starts x again on exit because `x_ready` is false.
+  Verified twice: after `kill <chess>` the device came back with
+  `x start/running`, `framework start/running`, cvm and blanket up.
+- Then `ek_clear(EK_PAPER); ek_force_full(); ek_flush();` — one full-panel
+  GC16 white pass, so the splash/progress-bar pixels (which the game's partial
+  updates would never touch) are wiped before the board is drawn.
+- `tools/chess-boot.conf` deliberately does nothing about the splash: killing
+  it there triggers the x_monitor reboot path described above.
 - **Reading `/dev/fb0` does not tell you what is on the glass** — the engine
   pushes its own canvas through mxcfb ioctls and never writes fb0, so fb0 still
-  holds the framework's last picture. Don't diagnose from it.
-- Killing blanket takes `lxinit` (and usually Xorg/awesome) with it; that is
-  fine, and `restore-kindle.sh` brings the whole GUI back — verified: after a
-  boot-launched game was killed, cvm, Xorg and blanket were all running again.
+  holds whatever the framework last drew. Don't diagnose from it; use
+  `kill -USR1 <pid of chess>` for the game's own canvas and your eyes for the
+  panel.
 
 ## Next
 

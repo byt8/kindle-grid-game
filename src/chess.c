@@ -2003,11 +2003,25 @@ int main(int argc, char **argv) {
     ek_ghost(4, 30);
     ek_policy(180, 6, 35);
 
+    /* The `x` job (Xorg, awesome and blanket) still owns the panel on this
+     * firmware. blanket paints the start-up picture AND the boot progress bar,
+     * and it does not stop when `framework` is stopped: it keeps repainting its
+     * splash window over whoever holds the screen, so a bar frozen halfway was
+     * left on the glass on top of the board (the "black blob"). Killing blanket
+     * on its own is worse -- lxinit exits abnormally, x_monitor restarts the
+     * whole GUI (five times, then it reboots the device into repair mode). So
+     * stop the job properly: the stop is clean, so x_monitor leaves it down,
+     * and restore-kindle.sh starts it again when the game exits. */
+    if (flags & EK_TAKEOVER) {
+        if (system("/sbin/initctl stop x") != 0)
+            fprintf(stderr, "chess: could not stop the x job (Xorg/blanket);"
+                            " the boot splash may draw over the game\n");
+    }
+
     /* One forced full-panel white pass before anything is drawn. E-ink keeps
      * the last image, and the framework's boot screen (splash + progress bar)
      * is still on the glass when the game takes over; the game's partial
-     * updates would never touch those pixels, so the half-drawn bar stayed as
-     * a black blob over the board. A full-mode GC16 wipes the glass properly. */
+     * updates would never touch those pixels. A full-mode GC16 wipes it. */
     ek_clear(EK_PAPER);
     ek_force_full();
     ek_flush();

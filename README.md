@@ -53,17 +53,20 @@ cat /mnt/us/chess-boot.log
 
 Undo: `mntroot rw; rm /etc/upstart/chess.conf; mntroot ro`.
 
-### Change the boot picture (and drop the progress bar)
+### Change the boot picture (and why the progress bar no longer sticks)
 
-The process that paints the start-up picture is `blanket` (started by the `x` job
-as `lxinit blanket -t "splash screensaver langpicker"`). It reads
+The process that paints the start-up picture is `blanket` (the `x` job runs
+`lxinit blanket -t "splash screensaver langpicker"`), and it reads
 **`/opt/amazon/low_level_screens/600x800/splash.png`** — the copy in
-`/var/local/blanket/...` is not what you see at boot. It also paints the boot
-progress bar, and nothing stops it when the framework is stopped, so a bar
-frozen halfway used to sit on top of the game. Both problems are now handled:
-`tools/chess-boot.conf` kills `blanket` a few seconds into boot (leaving the
-splash picture it already painted on the glass) and `chess.c` does one forced
-full-panel white flush before its first paint.
+`/var/local/blanket/...` is *not* what you see at boot.
+
+`blanket` also paints the boot progress bar, and it does not stop when
+`framework` is stopped: it kept repainting its splash over the game, leaving a
+half-finished bar as a black blob on the board. The game now stops the whole `x`
+job once it owns the panel, and does one forced full-panel white flush before
+its first paint. (Do not just `killall blanket`: lxinit then exits abnormally,
+`x_monitor` restarts the GUI five times and reboots the device into repair
+mode.)
 
 ```
 python3 tools/make_splash.py --logo ~/aijly.com/static/logo.png --out kindle-splash.png
