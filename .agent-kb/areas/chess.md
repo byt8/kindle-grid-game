@@ -265,3 +265,31 @@ address: `./run-chess-on-kindle.sh 192.168.0.66`. The workspace service
   confirmed on the panel** — still needs one press on the device.
 - The promotion picker exists (`draw_promo`/`do_promo`, taps at 1311) but has no
   automated test; the tap test in `make chess-test` only covers select+move.
+
+## The screen mirror grabs the touch device (2025-10-31)
+
+`kfbterm` (the kfb screen mirror) starts on `started lab126_gui` and EVIOCGRABs
+`/dev/input/event3`. While it is up the stock Kindle UI **draws but ignores
+every tap** -- it looks like a bricked device. It also makes the game's grab
+fail, so `kindle-run.sh` stops it at launch.
+
+The trap: the launcher's `restore` restarts the mirror if it was running when
+the game started (`mirror_was=1`), so each launch/exit cycle keeps it alive and
+the reader UI stays dead to touch. Recovery is always:
+
+    ssh root@KINDLE /sbin/initctl stop kfbterm     # then /mnt/us/grabtest -> "grab OK"
+
+A **reboot does not help**: kfbterm respawns with the UI and grabs touch again.
+
+## The power key
+
+`/proc/whitney_button` is the wrong source -- it reports whether the *screen
+saver has locked* the device, not whether the key is down, so it reads
+"unlocked" through every press. The key is its own input device:
+`N: Name="whitney-button"` -> `Handlers=kbd event2`, `EV=3` (EV_KEY), so read
+`KEY_POWER` (116, type 1) from `/dev/input/event2` in non-blocking mode.
+
+`powerd` reads the same key and answers a press with the Kindle's screen saver,
+and with the game holding the panel it brought framework+x+blanket+pillowd back
+over the board. The game stops powerd while it owns the screen;
+`kindle-run.sh`'s restore starts it again.
