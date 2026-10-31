@@ -52,6 +52,18 @@ if [ -n "$leftover" ]; then
         sleep 1
     done
     if [ -n "$(pidof "$GAME" 2>/dev/null || true)" ]; then
+        # A game stuck inside a blocking call never reaches its SIGTERM
+        # handler; without this it holds the touch grab and every launch
+        # after it fails here.
+        say "the leftover game (pid $(pidof "$GAME")) ignored the term; sending KILL"
+        kill -9 $(pidof "$GAME") 2>/dev/null
+        i=0
+        while [ -n "$(pidof "$GAME" 2>/dev/null || true)" ] && [ $i -lt 5 ]; do
+            i=$((i + 1))
+            sleep 1
+        done
+    fi
+    if [ -n "$(pidof "$GAME" 2>/dev/null || true)" ]; then
         say "ERROR: the leftover game (pid $(pidof "$GAME")) will not exit"
         exit 1
     fi

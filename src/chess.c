@@ -704,6 +704,12 @@ static int json_content(const char *body, char *out, size_t n) {
 
 static int pwr_latch;
 
+/* 1 when the status line says the key is held. The two states are "whitney
+ * button is locked" and "whitney button is unlocked" -- note that the second
+ * contains the first, so match the phrase, not the word. --selftest checks
+ * both strings. */
+static int pwr_says_down(const char *s) { return strstr(s, "is locked") != NULL; }
+
 /* 1 while the key is held, 0 while it is not, -1 if the file cannot be read. */
 static int pwr_down(void) {
     char b[80];
@@ -713,7 +719,7 @@ static int pwr_down(void) {
     close(fd);
     if (n <= 0) return -1;
     b[n] = 0;
-    return strstr(b, "locked") != NULL;
+    return pwr_says_down(b);
 }
 
 /* Run curl with the JSON on its stdin and collect what it prints. */
@@ -1711,6 +1717,17 @@ static int wifi_setup(void) {
  */
 
 #ifndef EK_HOST
+/* Wait for the key to come up, for at most max_ms. 1 if it came up. */
+static int pwr_wait_up(int max_ms) {
+    int waited = 0;
+    while (pwr_down() == 1) {
+        if (waited >= max_ms) return 0;
+        ek_sleep_ms(20);
+        waited += 20;
+    }
+    return 1;
+}
+
 /* Seconds since boot, from /proc/uptime; -1 if it cannot be read. */
 static double up_secs(void) {
     FILE *f = fopen("/proc/uptime", "r");
@@ -1750,7 +1767,8 @@ static void draw_sleep(void) {
 static void sleep_now(void) {
     char err[200] = "";
 
-    while (pwr_down() == 1) ek_sleep_ms(20);   /* let go of the key first */
+    if (!pwr_wait_up(3000))
+        fprintf(stderr, "chess: power still held after 3 s; sleeping anyway\n");
 
     draw_sleep();
     ek_force_full();
@@ -1770,7 +1788,8 @@ static void sleep_now(void) {
 
     /* The press that woke the machine is still down for a moment; read it as
      * a wake-up, not as a new press, or the game goes straight back to sleep. */
-    while (pwr_down() == 1) ek_sleep_ms(20);
+    if (!pwr_wait_up(2000))
+        fprintf(stderr, "chess: power still held after waking\n");
 
     /* The panel still holds the sleep screen: one full pass wipes it. */
     ek_force_full();
@@ -2034,6 +2053,10 @@ static int selftest(void) {
     find_uci(&p, "g1f3", &m);
     san_of(&p, &m, san);
     want(strcmp(san, "Nf3") == 0, 1, "g1f3 is Nf3");
+
+    /* the power button's status line: "unlocked" contains "locked" */
+    want(pwr_says_down("whitney button is locked\n"), 1, "held key reads as down");
+    want(pwr_says_down("whitney button is unlocked\n"), 0, "released key reads as up");
 
     /* SAN of a castle and of a capture */
     {
