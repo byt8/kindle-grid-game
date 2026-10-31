@@ -1,9 +1,9 @@
 #!/bin/sh
-# kindle-run.sh -- device-side wrapper: run xcom without stealing or stranding.
+# kindle-run.sh -- device-side wrapper: run a game without stealing or stranding.
 #
-# Pushed to /mnt/us/xcom-run.sh by ../../run-on-kindle.sh and run there with a
+# Pushed to /mnt/us/xcom-run.sh (or /mnt/us/chess-run.sh) and run there with a
 # pty, so a ^C on the PC hangs up this shell too and the restore below still
-# happens.
+# happens. GAME names the binary: /mnt/us/$GAME, killed and restarted by name.
 #
 # Why any of this is needed:
 #   * /dev/input/event3 allows exactly one EVIOCGRAB. The screen mirror
@@ -16,7 +16,8 @@
 #   * Whatever happens, the framework and the mirror go back the way they were.
 set -u
 
-say() { echo "xcom-run: $*"; }
+GAME=${GAME:-xcom}
+say() { echo "$GAME-run: $*"; }
 
 # Was the mirror running when we arrived? Decides whether to start it again.
 mirror_was=0
@@ -41,17 +42,17 @@ trap restore EXIT
 trap 'exit 1' HUP INT TERM
 
 # 1. A game left behind by a killed ssh session still holds the touch grab.
-leftover=$(pidof xcom 2>/dev/null || true)
+leftover=$(pidof "$GAME" 2>/dev/null || true)
 if [ -n "$leftover" ]; then
     say "killing leftover game pid $leftover"
-    killall xcom 2>/dev/null
+    killall "$GAME" 2>/dev/null
     i=0
-    while [ -n "$(pidof xcom 2>/dev/null || true)" ] && [ $i -lt 10 ]; do
+    while [ -n "$(pidof "$GAME" 2>/dev/null || true)" ] && [ $i -lt 10 ]; do
         i=$((i + 1))
         sleep 1
     done
-    if [ -n "$(pidof xcom 2>/dev/null || true)" ]; then
-        say "ERROR: the leftover game (pid $(pidof xcom)) will not exit"
+    if [ -n "$(pidof "$GAME" 2>/dev/null || true)" ]; then
+        say "ERROR: the leftover game (pid $(pidof "$GAME")) will not exit"
         exit 1
     fi
 fi
@@ -96,21 +97,24 @@ if ! /mnt/us/grabtest; then
     exit 1
 fi
 
-# 4. Play. Sound is on unless the pieces are not there, and when they are not
-#    it says so instead of going quietly mute. Any argument passed to this
-#    script goes to the game (--auto 3, --soundcheck and friends).
-sound_dir=/mnt/us/xcom-sound
-mute=""
-if [ ! -x /usr/bin/aplay ]; then
-    say "no /usr/bin/aplay on this device, so the game will be silent"
-    mute="--mute"
-elif [ ! -d "$sound_dir/words" ]; then
-    say "no word clips in $sound_dir, so the game will be silent"
-    say "       (run-on-kindle.sh pushes them; 'make sound' bakes them)"
-    mute="--mute"
+# 4. Play. xcom talks, so it gets its clips or an explicit --mute; anything
+#    else (chess) has no sound to arrange. Any argument passed to this script
+#    goes to the game (--auto 3, --apicheck and friends).
+args=""
+if [ "$GAME" = xcom ]; then
+    sound_dir=/mnt/us/xcom-sound
+    args="--sound $sound_dir"
+    if [ ! -x /usr/bin/aplay ]; then
+        say "no /usr/bin/aplay on this device, so the game will be silent"
+        args="$args --mute"
+    elif [ ! -d "$sound_dir/words" ]; then
+        say "no word clips in $sound_dir, so the game will be silent"
+        say "       (run-on-kindle.sh pushes them; 'make sound' bakes them)"
+        args="$args --mute"
+    fi
 fi
 say "starting the game"
-/mnt/us/xcom --sound "$sound_dir" $mute "$@"
+/mnt/us/$GAME $args "$@"
 rc=$?
 say "game exited rc=$rc"
 exit $rc

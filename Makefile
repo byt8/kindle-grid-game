@@ -7,9 +7,36 @@ PY     ?= python3
 
 HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 
-.PHONY: all test kindle sound manual grabtest preview clean
+.PHONY: all test kindle sound manual grabtest preview chess chess-test chess-kindle clean
 
 all: xcom-host
+
+# ---- chess: you are white, DeepSeek plays black over its API --------------
+
+chess-host: src/chess.c $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/chess.c $(ENGINE)/eink.c -lm
+
+# The device build: static musl, no libcurl, the game runs the device's own
+# curl for the API call.
+chess-kindle: src/chess.c $(ENGINE)/eink.c $(ENGINE)/eink.h
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" \
+	  -v /home/brendan/jailbreak-kindle:/jb \
+	  -w /src kfb-build \
+	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -ffunction-sections -fdata-sections \
+	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
+	    -o chess src/chess.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -static -no-pie -Wl,--gc-sections -lm \
+	    && arm-linux-musleabi-strip chess'
+
+# Rules, notation and the screen. No API needed: --fake-ai plays both sides.
+chess-test: chess-host
+	./chess-host --selftest --no-takeover
+	./chess-host --fake-ai --auto 8 --no-takeover --dump /tmp/chess-mid.pgm
+	printf 'tap 62 96\ntap 62 232\n' | ./chess-host --no-takeover --dump /tmp/chess-sel.pgm
+	$(PY) tools/check_pgm.py /tmp/chess-mid.pgm /tmp/chess-sel.pgm
+
 
 src/sprites.h: tools/slice_sprites.py spritesheet.png tactical_sprite_map_with_descriptions.json
 	$(PY) tools/slice_sprites.py
@@ -63,4 +90,4 @@ preview: src/sprites.h
 	$(PY) tools/slice_sprites.py --preview /tmp/xcom-sprites.png
 
 clean:
-	rm -f xcom-host xcom grabtest
+	rm -f xcom-host xcom grabtest chess-host chess

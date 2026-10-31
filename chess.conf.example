@@ -1,0 +1,6 @@
+# Fill this in, save it as chess.conf, next to the game.
+# The key is a DeepSeek key; nothing else here needs to change.
+url   = https://api.deepseek.com/chat/completions
+model = deepseek-chat
+key   = sk-your-key-here
+# ca  = /tmp/ca.pem    # only if the device's own certificates are too old

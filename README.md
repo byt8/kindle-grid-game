@@ -1,10 +1,31 @@
-# XCOM on a Kindle
+# Two games on a Kindle
 
 Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk. Tap an alien to shoot. Wipe them out.
 
-## Quick Start
+## Chess (you are White, DeepSeek is Black and talks trash)
 
-## Quick Start
+**1. Put a key in it:**
+```
+cp chess.conf.example chess.conf     # then edit: key = <your DeepSeek API key>
+```
+
+**2. Build and push:**
+```
+make chess-kindle                    # the ARM binary (needs the kfb-build image)
+./run-chess-on-kindle.sh             # copies it over, takes the screen, runs it
+```
+
+**3. Play:** tap a piece, tap a square. The camera file names the AI's move and its comment under the board. Tap QUIT, then SURE, to give the screen back.
+
+**On this PC, no Kindle and no key needed:**
+```
+make chess-host
+./chess-host --selftest --no-takeover            # rules, notation, perft
+./chess-host --fake-ai --auto 8 --dump /tmp/c.pgm # both sides play themselves, draw the board
+./chess-host --apicheck --conf chess.conf        # ask the API one question and print it
+```
+
+## Quick Start (XCOM)
 
 **Listen to the manual:**
 ```

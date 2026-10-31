@@ -11,8 +11,12 @@
 # Built here. The Kindle binary `xcom` is committed so install does not
 # need the cross compiler. The PC test binary is not.
 /xcom-host
+/chess-host
 *:Zone.Identifier
 *.pgm
+
+# The file with the real API key in it. The example is tracked instead.
+/chess.conf
 
 
 # Python bytecode from the tools
