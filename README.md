@@ -37,6 +37,13 @@ make chess-host
 **Check the screen of a game you cannot see** (it usually runs with the reader UI
 switched off): `kill -USR1 <pid of chess>` writes `/tmp/chess-shot.pgm`.
 
+**Kindle screen draws but ignores taps?** The screen mirror (`kfbterm`) has
+grabbed the touch device. A reboot does not fix it — the mirror starts with the
+reader UI. Stop the job instead:
+```
+ssh root@KINDLE_IP /sbin/initctl stop kfbterm   # then /mnt/us/grabtest says "grab OK"
+```
+
 ### Boot straight into the game (gift unit)
 
 ```
