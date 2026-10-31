@@ -279,6 +279,28 @@ Stopping the workspace service kills the ssh side; the game can survive, with
     /sbin/initctl stop kfbterm              # the mirror grabs touch
     /mnt/us/grabtest                        # must say "grab OK"
 
+### Trap: the game used to be a child of the ssh session (fixed 2026-10-31)
+
+The 2026-10-31 freeze was the other half of this: launched with `ssh -tt`, the
+game sat in the pty's foreground, so when the Kindle slept and the link dropped,
+sshd hung the session up and the game died of **SIGHUP with no log line and no
+dmesg entry** — leaving its last board painted, `chess` gone, `powerd` running
+and `x`/`framework`/`cvm` all down. "Says it's my turn but I cannot move" is
+that state, not a hung game. `tools/kindle-run.sh --detach` now re-runs itself
+under `setsid` (no controlling terminal, output to `/mnt/us/chess-run.log`) and
+`run-chess-on-kindle.sh` only polls the log, so the PC going away changes
+nothing. Diagnose with `pidof chess` — a running game holding event3 is a hang,
+an absent one is this.
+
+### One game per boot
+
+The chess job is `start on started lab126_gui`, and restoring the reader fires
+that event, so every restore used to relaunch the game and hijack the screen
+(a recovery attempt started a fresh board instead of returning the reader).
+`chess-run.sh` now drops `/tmp/chess.started` (ram, cleared at reboot) and the
+job exits early if it exists. Consequence: after QUIT the game does not
+reappear until a reboot or a hand launch.
+
 ## The screen mirror grabs the touch device
 
 `kfbterm` (the kfb screen mirror) starts on `started lab126_gui` and EVIOCGRABs

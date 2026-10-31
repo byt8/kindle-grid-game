@@ -17,6 +17,10 @@ make chess-kindle                     # the ARM binary (needs the kfb-build dock
 Pass the Kindle's address: with more than one Kindle on the network the default
 comes from `jailbreak-kindle/.kfb-secrets` and may be the other one.
 
+The game runs **on the device, not in this window**. Shut the laptop, lose Wi-Fi,
+let the Kindle sleep — it keeps playing. The script only follows
+`/mnt/us/chess.log` and can be closed at any time.
+
 **Play:** tap a piece, tap a square. Black's move and its comment appear under
 the board. Tap QUIT, then SURE, to give the screen back to the reader.
 
@@ -50,6 +54,20 @@ reader UI. Stop the job instead:
 ssh root@KINDLE_IP /sbin/initctl stop kfbterm   # then /mnt/us/grabtest says "grab OK"
 ```
 
+**Board on screen, taps do nothing, nothing wakes it?** Then the game is dead and
+the reader is down too, so the panel is holding the last board for ever. Say what
+is true rather than guessing:
+```
+ssh root@KINDLE_IP 'pidof chess; /sbin/initctl status framework; pidof cvm'
+```
+No pid and no `cvm` means the game is gone; bring the reader back with
+```
+ssh root@KINDLE_IP 'sh /mnt/us/fbdaemon/restore-kindle.sh'
+```
+Run it a second time if `cvm` still does not appear — right after a wake the
+first run has been seen to start X and then leave the reader down. The board is
+not recoverable: the game holds the position in memory only.
+
 ### Boot straight into the game (gift unit)
 
 ```
@@ -63,6 +81,11 @@ and starts the game. It starts anyway if Wi-Fi never comes up, because on a
 fresh unit the only place to join a network is the game's own Wi-Fi screen.
 Tapping GIVE UP ends it and the reader comes back — that exit is deliberate, it
 is the only way out.
+
+**One game per boot.** `chess-run.sh` drops `/tmp/chess.started` (ram, so it
+clears at reboot) and the job refuses to start a second game. Without that, every
+restore of the reader — QUIT, or a repair — started a fresh board and hijacked
+the screen. After QUIT, start the game again over ssh, or reboot.
 
 What it did is written to `/mnt/us/chess-boot.log` (`killing the boot splash …`,
 `wifi up after 10s` … `starting the game`). Read it when a boot does not do what

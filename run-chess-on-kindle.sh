@@ -76,7 +76,32 @@ else
 fi
 
 echo "run-chess-on-kindle: taking the $ip screen. Tap QUIT, then SURE, to give it back."
-exec ssh -tt -i "$key" -o BatchMode=yes -o IdentitiesOnly=yes \
-    -o StrictHostKeyChecking=no -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
-    -o LogLevel=ERROR -o ConnectTimeout=10 "root@$ip" \
-    "GAME=chess sh /mnt/us/chess-run.sh --conf /mnt/us/chess.conf $*"
+# --detach: from here the game belongs to the device. It used to be a child of
+# a `ssh -tt`, so when the Kindle slept and the link dropped, sshd hung the
+# session up, the game died of SIGHUP and the reader was left frozen on its
+# last board with its own UI shut down -- "my turn but I cannot move". Now this
+# script only follows the game's log, and closing it changes nothing.
+ssh_run "GAME=chess sh /mnt/us/chess-run.sh --detach --conf /mnt/us/chess.conf $*"
+echo "run-chess-on-kindle: the game is running on $ip; this window only watches."
+seen=0
+while :; do
+    sleep 10
+    snap=$(ssh_run 'echo "PID $(pidof chess 2>/dev/null)"; echo "LOG"; cat /mnt/us/chess.log 2>/dev/null' 2>/dev/null || true)
+    if [ -z "$snap" ]; then
+        echo "run-chess-on-kindle: cannot reach $ip; the game keeps running without us"
+        continue
+    fi
+    pid=$(printf '%s\n' "$snap" | sed -n 's/^PID //p' | head -1)
+    log=$(printf '%s\n' "$snap" | sed -n '/^LOG$/,$p' | sed '1d')
+    if [ -n "$log" ]; then
+        n=$(printf '%s\n' "$log" | wc -l)
+        if [ "$n" -gt "$seen" ]; then
+            printf '%s\n' "$log" | sed -n "$((seen + 1)),\$p"
+            seen=$n
+        fi
+    fi
+    if [ -z "$pid" ]; then
+        echo "run-chess-on-kindle: the game has exited; the Kindle reader is back"
+        exit 0
+    fi
+done

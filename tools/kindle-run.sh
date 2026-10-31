@@ -19,6 +19,23 @@ set -u
 GAME=${GAME:-xcom}
 say() { echo "$GAME-run: $*"; }
 
+# A game must not die with the PC's ssh session. The Kindle sleeps when the
+# power button is tapped, and while it is asleep the connection drops; sshd then
+# hangs this session up, the game is killed by SIGHUP, and the reader is left
+# frozen on the last frame with its own UI shut down. With --detach the wrapper
+# re-runs itself in a session of its own -- setsid, so it has no controlling
+# terminal and nothing can hang it up -- with its output in a log file, and
+# answers at once. The game, the QUIT path and the restore trap below then
+# belong to the device instead of to the PC.
+if [ "${1:-}" = --detach ]; then
+    shift
+    log=/mnt/us/$GAME-run.log
+    : >"$log"
+    setsid sh "$0" "$@" >"$log" 2>&1 </dev/null &
+    echo "detached from the PC: log $log"
+    exit 0
+fi
+
 # Was the mirror running when we arrived? Decides whether to start it again.
 mirror_was=0
 if /sbin/initctl list 2>/dev/null | grep -q '^kfbterm start'; then
@@ -38,7 +55,14 @@ restore() {
     fi
     rm -f /mnt/us/DONT_START_FRAMEWORK
     if [ -x /mnt/us/fbdaemon/restore-kindle.sh ]; then
+        # Two goes at it. The first has been seen to bring X back and then leave
+        # the reader down, right after a wake, so ask again rather than hand the
+        # device back with a dead panel.
         sh /mnt/us/fbdaemon/restore-kindle.sh
+        if [ -z "$(pidof cvm 2>/dev/null || true)" ]; then
+            say "the reader did not come back; running the restore once more"
+            sh /mnt/us/fbdaemon/restore-kindle.sh
+        fi
     else
         say "no /mnt/us/fbdaemon/restore-kindle.sh; starting the framework alone"
         /sbin/initctl start framework
@@ -142,6 +166,9 @@ say "starting the game"
 # The status is written to a file from the left-hand side because a pipeline
 # only reports tee's exit code.
 rm -f /tmp/$GAME.rc
+# Marks this boot as having run a game, so the boot job does not start a second
+# one when a QUIT restores the reader. /tmp is ram, so it clears at reboot.
+: >/tmp/$GAME.started
 : >/mnt/us/$GAME.log
 ( /mnt/us/$GAME $args "$@" 2>&1; echo $? >/tmp/$GAME.rc ) | tee -a /mnt/us/$GAME.log
 rc=$(cat /tmp/$GAME.rc 2>/dev/null || echo 1)
