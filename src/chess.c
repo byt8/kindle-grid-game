@@ -1014,10 +1014,15 @@ static char remark[512];          /* what the model said */
 static char status[160];
 static char hist_uci[2048];       /* space separated, for the prompt */
 static char hist_san[1024];       /* the last few moves, for the screen */
+static char g_wifi_ssid[64];      /* "" when wlan0 is not joined */
+static char g_wifi_ip[32];
+static char g_wifi_err[240];      /* the last wi-fi failure, shown on screen */
 static int  over;                 /* 0 playing, otherwise game_state() */
 static int  promo_from = -1, promo_to = -1;
 static int  api_busy;
 static int  stop_req;
+static volatile int shot_req;      /* SIGUSR1: save a picture of the screen */
+#define SHOT_PATH "/tmp/chess-shot.pgm"
 #ifndef EK_HOST
 static int  down_seen, down_ms;   /* touch debounce: DOWN repeats until UP */
 #endif
@@ -1025,6 +1030,14 @@ static int  down_seen, down_ms;   /* touch debounce: DOWN repeats until UP */
 static void on_signal(int sig) {
     (void)sig;
     stop_req = 1;
+}
+
+/* kill -USR1 <pid> writes the current screen to /tmp/chess-shot.pgm, which is
+ * the only way to see what a game running on a Kindle nobody is holding looks
+ * like. The write happens in the main loop, not here. */
+static void on_shot_signal(int sig) {
+    (void)sig;
+    shot_req = 1;
 }
 
 static void set_status(const char *fmt, ...) {
@@ -1213,6 +1226,9 @@ static void present(void) {
     ek_text(64, 8, "- against", EK_INK);
     ek_text(136, 8, CFG.model, EK_INK);
     ek_text(12, 28, status, EK_INK);
+    /* Wi-fi lives in the corner: tapping it brings up the picker again. */
+    ek_rect(496, 2, 96, 22, EK_INK);
+    ek_text(508, 5, g_wifi_ssid[0] ? "WI-FI *" : "NO WI-FI", EK_INK);
     if (over) {
         ek_text(12, 46, "tap NEW for another game", EK_INK);
     } else if (api_busy) {
@@ -1232,6 +1248,389 @@ static void present(void) {
     ek_text(12, BTN_Y - 24, "tap the squares to move", EK_INK);
     for (int i = 0; i < 3; i++) button(i);
     ek_flush();
+}
+
+/* ---- wi-fi setup ------------------------------------------------------
+ * A gifted unit has no way into the stock Wi-Fi dialog: the game owns the
+ * panel and the reader UI is deliberately not running. So the game brings its
+ * own: scan, tap a network, type the password on a drawn keyboard. The joining
+ * itself is done by /mnt/us/chess-wifi.sh through wpa_cli (see
+ * tools/chess-wifi.sh), which also remembers the network -- so the next boot
+ * joins by itself and this screen never appears again.
+ */
+
+#ifndef WIFI_SCRIPT
+#define WIFI_SCRIPT "/mnt/us/chess-wifi.sh"
+#endif
+
+#define W_MAX    12          /* networks listed on one screen */
+#define W_KB_X   22          /* first key column */
+#define W_KEY    56          /* key pitch, and the key's own size */
+#define W_KB_Y   150         /* first key row */
+#define W_ROW_H  50          /* height of a network row in the list */
+
+typedef struct { char ssid[64]; int sig; int secure; } wnet;
+static wnet g_nets[W_MAX];
+static int  g_nnets;
+
+/* Run a shell command, capture stdout+stderr, return its exit status. */
+static int run_sh(const char *cmd, char *out, size_t n) {
+    int op[2];
+    if (pipe(op) != 0) { snprintf(out, n, "could not make a pipe"); return -1; }
+    pid_t pid = fork();
+    if (pid < 0) {
+        snprintf(out, n, "could not start a shell");
+        close(op[0]); close(op[1]);
+        return -1;
+    }
+    if (pid == 0) {
+        close(op[0]);
+        dup2(op[1], 1);
+        dup2(op[1], 2);
+        close(op[1]);
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        _exit(127);
+    }
+    close(op[1]);
+    size_t got = 0;
+    ssize_t r;
+    while ((r = read(op[0], out + got, n - 1 - got)) > 0) {
+        got += (size_t)r;
+        if (got >= n - 1) break;
+    }
+    out[got] = 0;
+    close(op[0]);
+    int st = 0;
+    waitpid(pid, &st, 0);
+    if (!WIFEXITED(st)) return -1;
+    return WEXITSTATUS(st);
+}
+
+/* Wrap a string for /bin/sh: single quotes, with ' as '\''. */
+static void shq(char *out, size_t n, const char *in) {
+    size_t o = 0;
+    if (o + 1 < n) out[o++] = '\'';
+    for (const char *p = in; *p && o + 5 < n; p++) {
+        if (*p == '\'') {
+            out[o++] = '\''; out[o++] = '\\'; out[o++] = '\''; out[o++] = '\'';
+        } else {
+            out[o++] = *p;
+        }
+    }
+    if (o + 1 < n) out[o++] = '\'';
+    out[o] = 0;
+}
+
+/* 0 when wlan0 is joined and has an address. Fills g_wifi_ssid / g_wifi_ip. */
+static int wifi_status(void) {
+    char buf[512];
+    g_wifi_ssid[0] = 0;
+    g_wifi_ip[0] = 0;
+    int rc = run_sh("sh " WIFI_SCRIPT " status", buf, sizeof buf);
+    for (char *line = buf; line && *line; ) {
+        char *nl = strchr(line, '\n');
+        if (nl) *nl = 0;
+        if (!strncmp(line, "ssid=", 5)) snprintf(g_wifi_ssid, sizeof g_wifi_ssid, "%s", line + 5);
+        if (!strncmp(line, "ip=", 3))   snprintf(g_wifi_ip, sizeof g_wifi_ip, "%s", line + 3);
+        line = nl ? nl + 1 : NULL;
+    }
+    int ok = (rc == 0);
+    if (!ok) g_wifi_ssid[0] = 0;
+    return ok ? 0 : -1;
+}
+
+/* Fill g_nets, strongest first. -1 when the scan failed (g_wifi_err says why). */
+static int wifi_scan(void) {
+    char buf[4096];
+    g_nnets = 0;
+    int rc = run_sh("sh " WIFI_SCRIPT " scan", buf, sizeof buf);
+    if (rc != 0) {
+        snprintf(g_wifi_err, sizeof g_wifi_err, "%.200s",
+                 buf[0] ? buf : "the scan failed (is wpa_supplicant running?)");
+        return -1;
+    }
+    char *save = NULL;
+    for (char *line = strtok_r(buf, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+        char *tab = strchr(line, '\t');
+        if (!tab) continue;
+        *tab = 0;
+        char *sig = tab + 1;
+        char *tab2 = strchr(sig, '\t');
+        if (tab2) *tab2 = 0;
+        if (g_nnets >= W_MAX) break;
+        snprintf(g_nets[g_nnets].ssid, sizeof g_nets[0].ssid, "%s", line);
+        g_nets[g_nnets].sig = atoi(sig);
+        g_nets[g_nnets].secure = tab2 ? strcmp(tab2 + 1, "open") != 0 : 1;
+        g_nnets++;
+    }
+    if (!g_nnets) {
+        snprintf(g_wifi_err, sizeof g_wifi_err, "no networks found - tap RESCAN");
+        return -1;
+    }
+    return 0;
+}
+
+/* 0 when the link is up and has an address. On failure g_wifi_err says why. */
+static int wifi_join(const char *ssid, const char *psk) {
+    char qs[160], qp[160], cmd[420], buf[1024];
+    shq(qs, sizeof qs, ssid);
+    shq(qp, sizeof qp, psk);
+    snprintf(cmd, sizeof cmd, "sh " WIFI_SCRIPT " join %s %s", qs, qp);
+    fprintf(stderr, "chess: joining %s\n", ssid);
+    g_wifi_err[0] = 0;
+    int rc = run_sh(cmd, buf, sizeof buf);
+    if (rc != 0) {
+        /* the script's last "error: ..." line is the useful one */
+        char *last = strstr(buf, "error: ");
+        snprintf(g_wifi_err, sizeof g_wifi_err, "%.200s",
+                 last ? last + 7 : (buf[0] ? buf : "the join failed"));
+        char *nl = strchr(g_wifi_err, '\n');
+        if (nl) *nl = 0;
+        fprintf(stderr, "chess: wi-fi: %s\n", g_wifi_err);
+        return -1;
+    }
+    return wifi_status();
+}
+
+/* One tap, ignoring the DOWN repeats the panel sends while a finger rests. */
+static int wait_tap(int *x, int *y) {
+    static int seen, when;
+#ifdef EK_HOST
+    /* The host build has no touch panel: it is driven by 'tap X Y' lines on
+     * stdin instead, the same script the board tests use. */
+    if (!isatty(0)) {
+        char buf[64];
+        if (fgets(buf, sizeof buf, stdin) && sscanf(buf, "tap %d %d", x, y) == 2) return 1;
+        return 0;
+    }
+#endif
+    while (!stop_req) {
+        if (shot_req) { shot_req = 0; ek_dump_pgm(SHOT_PATH, 1); }
+        ek_event ev;
+        while (ek_poll(&ev)) {
+            if (ev.type == EK_UP) { seen = 0; continue; }
+            if (ev.type != EK_DOWN) continue;
+            uint32_t now = ek_ms();
+            if (seen && now - (uint32_t)when < 400) continue;
+            seen = 1;
+            when = (int)now;
+            *x = ev.x;
+            *y = ev.y;
+            return 1;
+        }
+        ek_sleep_ms(20);
+    }
+    return 0;
+}
+
+static void wbox(int x, int y, int w, int h, const char *label, int scale) {
+    int tw = (int)strlen(label) * 8 * scale;
+    ek_fill_rect(x, y, w, h, EK_PAPER);
+    ek_rect(x, y, w, h, EK_INK);
+    ek_rect(x + 1, y + 1, w - 2, h - 2, EK_INK);
+    if (scale > 1) ek_text_scale(x + (w - tw) / 2, y + (h - 16 * scale) / 2, label, EK_INK, scale);
+    else           ek_text(x + (w - tw) / 2, y + (h - 16) / 2, label, EK_INK);
+}
+
+static const char *KB[4] = { "1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm" };
+
+/* The typed-so-far line, with the cursor, in a framed box. */
+static void w_entry(const char *value, int y) {
+    ek_rect(20, y, 560, 40, EK_INK);
+    ek_rect(21, y + 1, 558, 38, EK_INK);
+    ek_text(30, y + 12, value, EK_INK);
+    int n = (int)strlen(value);
+    ek_text(30 + n * 8, y + 12, "_", EK_INK);
+}
+
+static void w_keyboard(const char *bottom_right) {
+    for (int r = 0; r < 4; r++) {
+        int len = (int)strlen(KB[r]);
+        for (int i = 0; i < len; i++) {
+            int x = W_KB_X + i * W_KEY;
+            int y = W_KB_Y + r * 60;
+            char label[2] = { KB[r][i], 0 };
+            ek_fill_rect(x, y, W_KEY - 4, 54, EK_PAPER);
+            ek_rect(x, y, W_KEY - 4, 54, EK_INK);
+            ek_text(x + (W_KEY - 4 - 8) / 2, y + 19, label, EK_INK);
+        }
+    }
+    wbox(20,  W_KB_Y + 4 * 60, 130, 54, "SHIFT", 1);
+    wbox(160, W_KB_Y + 4 * 60, 120, 54, "DEL", 1);
+    wbox(290, W_KB_Y + 4 * 60, 140, 54, "CLEAR", 1);
+    wbox(20,  W_KB_Y + 4 * 60 + 64, 280, 54, "BACK", 1);
+    wbox(310, W_KB_Y + 4 * 60 + 64, 270, 54, bottom_right, 1);
+}
+
+/* Which keyboard cell, if any, was tapped. Returns 0 for none. */
+static int w_key_at(int x, int y, char *out) {
+    for (int r = 0; r < 4; r++) {
+        int len = (int)strlen(KB[r]);
+        for (int i = 0; i < len; i++) {
+            int kx = W_KB_X + i * W_KEY, ky = W_KB_Y + r * 60;
+            if (x >= kx && x < kx + W_KEY - 4 && y >= ky && y < ky + 54) {
+                *out = KB[r][i];
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+#define W_BOT (W_KB_Y + 4 * 60)
+#define W_BOT2 (W_KB_Y + 4 * 60 + 64)
+
+/* Draw the list of networks. Returns nothing; the tap loop decides. */
+static void w_draw_list(void) {
+    ek_clear(EK_PAPER);
+    ek_text_scale(12, 6, "WI-FI", EK_INK, 2);
+    if (g_wifi_ssid[0]) {
+        char line[128];
+        snprintf(line, sizeof line, "on %s   %s", g_wifi_ssid, g_wifi_ip);
+        ek_text(140, 16, line, EK_INK);
+    } else {
+        ek_text(140, 16, "not connected - tap a network", EK_INK);
+    }
+    if (g_wifi_err[0]) ek_text(12, 52, g_wifi_err, EK_INK);
+    else if (!g_nnets) ek_text(12, 52, "looking for networks...", EK_INK);
+
+    for (int i = 0; i < g_nnets; i++) {
+        int y = 84 + i * W_ROW_H;
+        if (y + W_ROW_H > 600) break;
+        ek_rect(20, y, 560, W_ROW_H - 6, EK_INK);
+        char name[40];
+        snprintf(name, sizeof name, "%.30s", g_nets[i].ssid);
+        ek_text(30, y + (W_ROW_H - 6 - 16) / 2, name, EK_INK);
+        ek_text(470, y + (W_ROW_H - 6 - 16) / 2, g_nets[i].secure ? "WPA2" : "open", EK_INK);
+    }
+    wbox(20,  660, 170, 50, "RESCAN", 1);
+    wbox(210, 660, 190, 50, "TYPE NAME", 1);
+    wbox(420, 660, 160, 50, "SKIP", 1);
+    ek_flush();
+}
+
+static void w_draw_text(const char *title, const char *value, const char *bottom_right) {
+    ek_clear(EK_PAPER);
+    char head[120];
+    snprintf(head, sizeof head, "%.60s", title);
+    ek_text(12, 12, head, EK_INK);
+    ek_text(12, 34, "tap the letters, then the button at the bottom", EK_INK);
+    w_entry(value, 70);
+    w_keyboard(bottom_right);
+    ek_flush();
+}
+
+static void w_draw_msg(const char *title, const char *body) {
+    ek_clear(EK_PAPER);
+    ek_text(12, 12, title, EK_INK);
+    wrap(body, 12, 44, 72, 8);
+    ek_flush();
+}
+
+static void w_draw_fail(void) {
+    w_draw_msg("that did not work", g_wifi_err);
+    wbox(20, 660, 250, 50, "TRY AGAIN", 1);
+    wbox(300, 660, 280, 50, "OTHER NETWORKS", 1);
+    ek_flush();
+}
+
+/* The whole setup, modal. 0 when the unit ends up online. */
+static int wifi_setup(void) {
+    enum { M_LIST, M_SSID, M_PASS, M_DONE };
+    int mode = M_LIST;
+    char ssid[64] = "", pw[64] = "";
+    int shift = 0;
+    int secure = 1;
+
+    g_wifi_err[0] = 0;
+    wifi_scan();
+
+    for (;;) {
+        if (stop_req) return -1;
+
+        if (mode == M_LIST) {
+            w_draw_list();
+            int x, y;
+            if (!wait_tap(&x, &y)) return -1;
+            if (y >= 660 && y < 710) {
+                if (x >= 20 && x < 190) { g_wifi_err[0] = 0; wifi_scan(); continue; }
+                if (x >= 210 && x < 400) { mode = M_SSID; ssid[0] = 0; pw[0] = 0; secure = 1; continue; }
+                if (x >= 420 && x < 580) return -1;        /* SKIP: play anyway */
+            }
+            for (int i = 0; i < g_nnets; i++) {
+                int ry = 84 + i * W_ROW_H;
+                if (y >= ry && y < ry + W_ROW_H - 6 && x >= 20 && x < 580) {
+                    snprintf(ssid, sizeof ssid, "%s", g_nets[i].ssid);
+                    secure = g_nets[i].secure;
+                    pw[0] = 0;
+                    if (secure) {
+                        mode = M_PASS;
+                    } else {
+                        /* nothing to type on an open network: join now */
+                        w_draw_msg("joining", ssid);
+                        if (wifi_join(ssid, "") == 0) return 0;
+                        mode = M_DONE;
+                    }
+                    break;
+                }
+            }
+            continue;
+        }
+
+        if (mode == M_SSID || mode == M_PASS) {
+            char *buf = (mode == M_SSID) ? ssid : pw;
+            size_t cap = (mode == M_SSID) ? sizeof ssid : sizeof pw;
+            char title[120];
+            if (mode == M_SSID) snprintf(title, sizeof title, "NETWORK NAME");
+            else                snprintf(title, sizeof title, "PASSWORD FOR %.50s", ssid);
+            w_draw_text(title, buf, mode == M_SSID ? "NEXT" : "JOIN");
+
+            int x, y;
+            if (!wait_tap(&x, &y)) return -1;
+            size_t len = strlen(buf);
+
+            if (x >= 20 && x < 150 && y >= W_BOT && y < W_BOT + 54) { shift = !shift; continue; }
+            if (x >= 160 && x < 280 && y >= W_BOT && y < W_BOT + 54) {
+                if (len) buf[len - 1] = 0;
+                continue;
+            }
+            if (x >= 290 && x < 430 && y >= W_BOT && y < W_BOT + 54) { buf[0] = 0; continue; }
+            if (y >= W_BOT2 && y < W_BOT2 + 54) {
+                if (x >= 20 && x < 300) { mode = M_LIST; continue; }
+                if (x >= 310 && x < 580) {
+                    if (mode == M_SSID) {
+                        if (!ssid[0]) { snprintf(g_wifi_err, sizeof g_wifi_err, "type the network name first"); continue; }
+                        pw[0] = 0;
+                        mode = M_PASS;
+                        continue;
+                    }
+                    w_draw_msg("joining", ssid);
+                    if (wifi_join(ssid, pw) == 0) return 0;
+                    mode = M_DONE;
+                    continue;
+                }
+            }
+            char ch;
+            if (w_key_at(x, y, &ch)) {
+                if (len + 1 < cap) {
+                    buf[len] = shift ? (char)toupper((unsigned char)ch) : ch;
+                    buf[len + 1] = 0;
+                }
+            }
+            continue;
+        }
+
+        if (mode == M_DONE) {
+            w_draw_fail();
+            int x, y;
+            if (!wait_tap(&x, &y)) return -1;
+            if (y >= 660 && y < 710) {
+                if (x >= 20 && x < 270) { mode = M_PASS; continue; }
+                if (x >= 300 && x < 580) { mode = M_LIST; g_wifi_err[0] = 0; wifi_scan(); continue; }
+            }
+            continue;
+        }
+    }
 }
 
 /* ---- taps ------------------------------------------------------------- */
@@ -1294,6 +1693,10 @@ static void do_promo(int type) {
 
 /* Returns 1 when the screen should be drawn again. */
 static int handle_tap(int x, int y) {
+    if (in_box(x, y, 496, 2, 96, 22)) {
+        wifi_setup();
+        return 1;
+    }
     if (over) {
         if (in_box(x, y, BTNS[0].x, BTN_Y, BTNS[0].w, BTN_H)) { new_game(); return 1; }
         if (in_box(x, y, BTNS[2].x, BTN_Y, BTNS[2].w, BTN_H)) { stop_req = 1; return 1; }
@@ -1538,14 +1941,20 @@ static void usage(void) {
             "  --auto N      play N half moves (white takes the first legal move)\n"
             "  --fake-ai     black answers without the api, for testing the screen\n"
             "  --dump FILE   write the picture (PGM) and exit\n"
-            "  --no-takeover do not hold the Kindle's screen (for testing)\n",
+            "  --no-takeover do not hold the Kindle's screen (for testing)\n"
+            "  --wifi        open the wi-fi screen even when already online\n"
+            "  --no-wifi     do not check wi-fi on start\n"
+            "  --wifi-shot F write a wi-fi screen (PGM) and exit: F then\n"
+            "                list|name|pass|fail, default list\n",
             conf_default());
 }
 
 int main(int argc, char **argv) {
     unsigned flags = EK_TAKEOVER;
     int do_test = 0, api_check = 0, fake = 0, autoplay = -1;
-    const char *dump_path = NULL;
+    int no_wifi = 0, force_wifi = 0;
+    const char *dump_path = NULL, *wifi_shot = NULL;
+    const char *wifi_shot_what = "list";
     const char *conf_path = conf_default();
 
     conf_defaults();
@@ -1560,6 +1969,12 @@ int main(int argc, char **argv) {
             if (!end || *end || v < 0 || v > 200) { usage(); return 2; }
             autoplay = (int)v;
         } else if (!strcmp(argv[i], "--dump") && i + 1 < argc) dump_path = argv[++i];
+        else if (!strcmp(argv[i], "--wifi")) force_wifi = 1;
+        else if (!strcmp(argv[i], "--no-wifi")) no_wifi = 1;
+        else if (!strcmp(argv[i], "--wifi-shot") && i + 1 < argc) {
+            wifi_shot = argv[++i];
+            if (i + 1 < argc && argv[i + 1][0] != '-') wifi_shot_what = argv[++i];
+        }
         else if (!strcmp(argv[i], "--no-takeover")) flags &= ~EK_TAKEOVER;
         else if (!strcmp(argv[i], "--help")) { usage(); return 0; }
         else { usage(); return 2; }
@@ -1574,6 +1989,8 @@ int main(int argc, char **argv) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGHUP, &sa, NULL);
+    sa.sa_handler = on_shot_signal;
+    sigaction(SIGUSR1, &sa, NULL);
 
     if (ek_open(flags) != 0) {
         fprintf(stderr, "chess: the screen would not open\n");
@@ -1588,6 +2005,46 @@ int main(int argc, char **argv) {
 
     int rc = 0;
     new_game();
+
+    /* A picture of a wi-fi screen, for checking the layout. */
+    if (wifi_shot) {
+        if (!strcmp(wifi_shot_what, "list")) {
+            wifi_scan();
+            w_draw_list();
+        } else if (!strcmp(wifi_shot_what, "name")) {
+            w_draw_text("NETWORK NAME", "garden", "NEXT");
+        } else if (!strcmp(wifi_shot_what, "pass")) {
+            w_draw_text("PASSWORD FOR PRNet84", "Alotbsol1", "JOIN");
+        } else if (!strcmp(wifi_shot_what, "fail")) {
+            snprintf(g_wifi_err, sizeof g_wifi_err,
+                     "could not join PRNet84 (out of range, or the password was refused)");
+            w_draw_fail();
+        } else {
+            fprintf(stderr, "chess: --wifi-shot wants list, name, pass or fail\n");
+            ek_close();
+            return 2;
+        }
+        if (ek_dump_pgm(wifi_shot, 1) != 0) {
+            fprintf(stderr, "chess: could not write %s\n", wifi_shot);
+            ek_close();
+            return 1;
+        }
+        ek_close();
+        return 0;
+    }
+
+    /* No network means no opponent: get one before the first picture.
+     * The host build has no wpa_supplicant, so there it only opens the screen
+     * when asked for with --wifi. */
+    if (!no_wifi) {
+        int need = force_wifi;
+#ifndef EK_HOST
+        if (!need) need = wifi_status() != 0;
+#endif
+        if (need && wifi_setup() != 0)
+            fprintf(stderr, "chess: still offline (%s)\n",
+                    g_wifi_err[0] ? g_wifi_err : "nothing chosen");
+    }
 
     if (do_test) {
         rc = selftest() ? 1 : 0;
@@ -1670,6 +2127,7 @@ int main(int argc, char **argv) {
                 got = 1;
             }
         }
+        if (shot_req) { shot_req = 0; ek_dump_pgm(SHOT_PATH, 1); }
         if (stop_req) break;
         if (got) present();
         else ek_sleep_ms(20);

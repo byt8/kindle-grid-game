@@ -70,8 +70,61 @@ make chess-kindle          # static ARM musl, docker kfb-build, 83 KB
 QUIT/button row at 744. Shapes are drawn in a 0..100 box and scaled; squares are
 dithered, not grey.
 
+## Wi-fi setup screen (for a gifted unit)
+
+The stock Wi-Fi dialog is unreachable once the game owns the panel, so the game
+draws its own: `wifi_setup()` in `src/chess.c` (list of networks → drawn
+keyboard for the name if needed → drawn keyboard for the password → failure
+screen with TRY AGAIN / OTHER NETWORKS). Joining is shelled out to
+`/mnt/us/chess-wifi.sh` (`tools/chess-wifi.sh`), which uses `wpa_cli` on
+`wlan0` and remembers the result in `/mnt/us/wifi.conf`.
+
+- **busybox awk does not expand `\t` in `-F'\t'`.** `scan_results | awk -F'\t'`
+  silently yields empty fields, so the network list came back blank while the
+  raw output was fine. Fix: `T=$(printf '\t')` then `-F"$T"`. This one cost a
+  whole debugging round.
+- **`wpa_state=COMPLETED` alone is not proof of a join.** For a second after
+  `select_network` the supplicant still reports the network it is leaving, so a
+  join to a network that does not exist "succeeded" instantly. The wait loop now
+  requires `wpa_ssid` to equal the requested ssid too.
+- **`wpa_passphrase` refuses keys under 8 characters** with `Passphrase must be
+  8..63 characters`, which is useless on the panel. The script checks the length
+  first and says "the password must be at least 8 characters".
+- **`wpa_cli get_network N psk` returns the plaintext key**, not a hash, so
+  `wifi.conf` is written from `wpa_passphrase SSID PSK` instead (which exists at
+  `/usr/bin/wpa_passphrase`). File is mode 600.
+- **Host-build taps drive the whole flow**: `EK_HOST` reads `tap X Y` lines on
+  stdin, and `wait_tap()` now does too, so `printf 'tap ...' | ./chess-host
+  --wifi --dump f.pgm` walks every screen without a device. Keyboard geometry:
+  rows are `1234567890` (y150), `qwertyuiop` (210), `asdfghjkl` (270),
+  `zxcvbnm` (330); column x = 22 + i*56, key height 54, so a tap at
+  (22+i*56+10, row_y+10) always lands on a key. BACK/NEXT at y 454, list buttons
+  at y 660.
+- **`--wifi-shot FILE [list|name|pass|fail]`** draws one wi-fi screen and exits,
+  which is how the layout gets checked without touching the device.
+- **`kill -USR1 <pid>`** writes `/tmp/chess-shot.pgm`. The only way to see the
+  screen of a game running on a Kindle you are not holding (SSH drops when the
+  Kindle sleeps, so a boot test cannot be watched live).
+- **The Kindle sleeps and drops off the network.** After a few idle minutes SSH
+  stops working (ping: Destination Host Unreachable) and nothing remote can wake
+  it — someone has to touch the screen. Budget for it when scripting a long run.
+
+## Boot straight into the game
+
+`tools/chess-boot.conf` is pushed to `/mnt/us/chess-boot.conf` and copied to
+`/etc/upstart/chess.conf` on the device (`mntroot rw` first, `mntroot ro` after).
+`start on started lab126_gui`, waits up to 20 s for wi-fi, tries
+`chess-wifi.sh auto`, then `GAME=chess exec sh /mnt/us/chess-run.sh`. The
+existing runner restores the reader on exit, so GIVE UP on the board is the way
+out and a crash still leaves a usable Kindle. Remove the file to undo.
+
+Unverified as of this note: the job has not yet been through a real reboot — the
+Kindle went offline mid-install.
+
 ## Next
 
-- Get a DeepSeek key into `chess.conf`, then `./run-chess-on-kindle.sh` and play.
+- Install `/etc/upstart/chess.conf` on the device and reboot; confirm the game
+  comes up by itself (`pidof chess`, `kill -USR1` screenshot, then GIVE UP and
+  check the reader returns).
 - The promotion picker exists (`draw_promo`/`do_promo`, taps at 1311) but has no
   automated test; the tap test in `make chess-test` only covers select+move.

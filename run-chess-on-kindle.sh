@@ -59,6 +59,10 @@ cat ./chess                     | ssh_run 'cat > /mnt/us/chess.new && chmod +x /
 cat ./grabtest                  | ssh_run 'cat > /mnt/us/grabtest && chmod +x /mnt/us/grabtest'
 cat tools/kindle-run.sh         | ssh_run 'cat > /mnt/us/chess-run.sh && chmod +x /mnt/us/chess-run.sh'
 cat ./chess.conf                | ssh_run 'cat > /mnt/us/chess.conf && chmod 600 /mnt/us/chess.conf'
+# The wi-fi helper the game shells out to, and the boot job the unit can be
+# started from (see the README: /etc/upstart/chess.conf).
+cat tools/chess-wifi.sh          | ssh_run 'cat > /mnt/us/chess-wifi.sh && chmod +x /mnt/us/chess-wifi.sh'
+cat tools/chess-boot.conf        | ssh_run 'cat > /mnt/us/chess-boot.conf'
 
 # The Kindle's own trust store predates DeepSeek's certificate, so hand it this
 # PC's current roots. Override with CHESS_CA=/path/to/bundle.crt if you like.

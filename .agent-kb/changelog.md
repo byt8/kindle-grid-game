@@ -2,6 +2,8 @@
 
 Newest first. One line per task. Current truth is in `areas/`, not here.
 
+- 2026-10-31 — chess — Gift-unit standalone: in-game wi-fi setup (scan, drawn keyboard, remembered network in `/mnt/us/wifi.conf` via `tools/chess-wifi.sh`), fixed the busybox `awk -F'\t'` scan bug and a join that "succeeded" without switching networks, `--wifi-shot` per-screen renders, `kill -USR1` screenshot of a running game, and `tools/chess-boot.conf` to boot straight into the game; README rewritten around Quick Start. Boot job still to be installed and reboot-tested.
+
 - 2026-10-31 — chess — Chess against DeepSeek on the Kindle: full rule set with perft/kiwipete self-tests, tap-to-move board, one API question per move with a retry and a visible failure, `make chess-kindle` and `run-chess-on-kindle.sh`; `tools/kindle-run.sh` became game-generic. Waiting on a real API key.
 
 2026-10-31 — xcom — Added MANUAL.md and make_manual_audio.py for TTS listening
