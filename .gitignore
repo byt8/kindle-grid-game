@@ -14,3 +14,6 @@
 *:Zone.Identifier
 *.pgm
 
+
+# Python bytecode from the tools
+__pycache__/

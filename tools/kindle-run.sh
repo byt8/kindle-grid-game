@@ -96,9 +96,21 @@ if ! /mnt/us/grabtest; then
     exit 1
 fi
 
-# 4. Play.
+# 4. Play. Sound is on unless the pieces are not there, and when they are not
+#    it says so instead of going quietly mute. Any argument passed to this
+#    script goes to the game (--auto 3, --soundcheck and friends).
+sound_dir=/mnt/us/xcom-sound
+mute=""
+if [ ! -x /usr/bin/aplay ]; then
+    say "no /usr/bin/aplay on this device, so the game will be silent"
+    mute="--mute"
+elif [ ! -d "$sound_dir/words" ]; then
+    say "no word clips in $sound_dir, so the game will be silent"
+    say "       (run-on-kindle.sh pushes them; 'make sound' bakes them)"
+    mute="--mute"
+fi
 say "starting the game"
-/mnt/us/xcom
+/mnt/us/xcom --sound "$sound_dir" $mute "$@"
 rc=$?
 say "game exited rc=$rc"
 exit $rc

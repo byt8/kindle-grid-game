@@ -11,6 +11,7 @@
  */
 #include "eink.h"
 #include "sprites.h"
+#include "audio.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -81,6 +82,10 @@ static int fire_at = -1;
 static int battle = 0; /* 0 playing, 1 you win, 2 you lose */
 static uint32_t rng_state = 1;
 static volatile sig_atomic_t stop_req;
+static int wfm_clean;    /* the GC16 number, for a frame that must look clean */
+static int stats_on;     /* --stats: say what each flush cost */
+static int force_clean;  /* --clean: every frame a full GC16 refresh */
+static int clean_next;   /* this frame is a big change, so clean it */
 
 static char logs[8][80];
 static int nlog;
@@ -140,6 +145,7 @@ static void say(const char *fmt, ...) {
         memcpy(logs[7], buf, sizeof buf);
     }
     fprintf(stderr, "xcom: %s\n", buf);
+    audio_line(buf);   /* the same words, out of the speaker */
 }
 
 static int in_map(int x, int y) {
@@ -363,13 +369,19 @@ static void check_end(void) {
     int ys = 0, ts = 0;
     for (int i = 0; i < n_you; i++) if (you[i].alive) ys++;
     for (int i = 0; i < n_them; i++) if (them[i].alive) ts++;
+    int was = battle;
     if (ys == 0) battle = 2;
     else if (ts == 0) battle = 1;
+    if (battle && battle != was) {
+        audio_effect(battle == 1 ? "win" : "lose");
+        clean_next = 1;
+    }
 }
 
 static void on_downed(unit *t) {
     t->alive = 0;
     t->hp = 0;
+    audio_effect("down");
     say("%s is down", t->name);
     check_end();
 }
@@ -380,8 +392,10 @@ static void resolve_shot(unit *a, unit *t) {
         fprintf(stderr, "xcom: %s shot %s with no chance\n", a->name, t->name);
         exit(1);
     }
+    audio_effect("shot");
     int roll = rnd_int(1, 100);
     if (roll > chance) {
+        audio_effect("miss");
         say("%s missed %s %d%% (%d)", a->name, t->name, chance, roll);
         return;
     }
@@ -389,10 +403,12 @@ static void resolve_shot(unit *a, unit *t) {
     int dmg = rnd_int(a->dlo, a->dhi) + (crit ? 2 : 0) - t->armor;
     if (dmg < 0) dmg = 0;
     if (dmg == 0) {
+        audio_effect("hit");
         say("%s soaked %s %d%% (%d)", t->name, a->name, chance, roll);
     } else {
         t->hp -= dmg;
         if (t->hp < 0) t->hp = 0;
+        audio_effect("hit");
         say("%s %s %s %d%% (%d) for %d", a->name, crit ? "crit" : "hit",
             t->name, chance, roll, dmg);
         if (t->hp == 0) on_downed(t);
@@ -544,6 +560,7 @@ static void act_ai(unit *u) {
 
 static void end_turn(void) {
     if (battle) return;
+    audio_effect("turn");
     sel = -1;
     mode = ST_PLAY;
     fire_at = -1;
@@ -556,6 +573,7 @@ static void end_turn(void) {
         for (int i = 0; i < n_you; i++) ready_unit(&you[i]);
     }
     recompute_vision();
+    clean_next = 1;   /* most of the map moved; give it a full refresh */
 }
 
 static void tune(unit *u) {
@@ -719,6 +737,7 @@ static void init_game(uint32_t seed) {
         }
     }
     recompute_vision();
+    clean_next = 1;
     say("FIRST CONTACT. wipe them out.");
     fprintf(stderr, "xcom: seed %u\n", seed);
 }
@@ -1211,7 +1230,17 @@ static void present(void) {
     recompute_vision();
     rebuild_reach();
     draw();
-    ek_flush();
+    /* A tap changes a tenth of the screen, so the default is whatever the
+     * engine's ghosting policy picks (GL16_FAST for partials). A whole-turn
+     * redraw, the opening and the result screen go out as clean GC16. */
+    int wfm = (force_clean || clean_next) ? wfm_clean : 0;
+    clean_next = 0;
+    ek_waveform(wfm);
+    ek_stats st = ek_flush();
+    ek_waveform(0);
+    if (stats_on)
+        fprintf(stderr, "xcom: flush wfm=%d rects=%d tiles=%d px=%ld full=%d us=%u\n",
+                st.wfm, st.rects, st.tiles, st.px, st.full, st.us);
 }
 
 static int failures;
@@ -1324,16 +1353,43 @@ static int selftest(void) {
     return 0;
 }
 
+/* The PC has neither aplay nor a speaker, so sound is opt-in there with
+ * --soundcheck (which only reports). The Kindle speaks by default and --mute
+ * turns it off. */
+static const char *sound_default(void) {
+#ifdef EK_HOST
+    return "sound";
+#else
+    return "/mnt/us/xcom-sound";
+#endif
+}
+
+static int sound_default_mode(void) {
+#ifdef EK_HOST
+    return AUDIO_OFF;
+#else
+    return AUDIO_SPEAK;
+#endif
+}
+
 static void usage(void) {
     fprintf(stderr,
             "usage: xcom [--seed N] [--dump file.pgm] [--auto N] [--selftest]\n"
-            "            [--no-takeover] [--no-wait]\n"
+            "            [--no-takeover] [--no-wait] [--stats] [--clean]\n"
+            "            [--mute] [--sound DIR] [--soundcheck]\n"
             "\n"
             "  On the Kindle the screen is taken until you tap QUIT, then SURE.\n"
             "  --selftest   check the rules on this computer and exit\n"
             "  --auto N     play N turns by itself, then exit\n"
             "  --dump FILE  write the picture (PGM) and exit\n"
-            "  --seed N     same seed, same dice\n");
+            "  --seed N     same seed, same dice\n"
+            "  --stats      print what each screen update cost\n"
+            "  --clean      refresh the whole picture on every update (slow)\n"
+            "  --mute       no sound\n"
+            "  --sound DIR  clips live in DIR (default %s)\n"
+            "  --soundcheck print the words that would be spoken, and any\n"
+            "               clip DIR is missing, then exit\n",
+            sound_default());
 }
 
 int main(int argc, char **argv) {
@@ -1342,6 +1398,8 @@ int main(int argc, char **argv) {
     int do_test = 0;
     int auto_turns = -1;
     const char *dump_path = NULL;
+    const char *sound_dir = sound_default();
+    int sound = sound_default_mode();
     uint32_t seed = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -1368,7 +1426,17 @@ int main(int argc, char **argv) {
                 return 2;
             }
         } else if (!strcmp(argv[i], "--selftest")) do_test = 1;
-        else if (!strcmp(argv[i], "--no-takeover")) flags &= ~EK_TAKEOVER;
+        else if (!strcmp(argv[i], "--stats")) stats_on = 1;
+        else if (!strcmp(argv[i], "--clean")) force_clean = 1;
+        else if (!strcmp(argv[i], "--mute")) sound = AUDIO_OFF;
+        else if (!strcmp(argv[i], "--soundcheck")) sound = AUDIO_CHECK;
+        else if (!strcmp(argv[i], "--sound") && i + 1 < argc) {
+            sound_dir = argv[++i];
+            if (!sound_dir[0]) {
+                usage();
+                return 2;
+            }
+        } else if (!strcmp(argv[i], "--no-takeover")) flags &= ~EK_TAKEOVER;
         else if (!strcmp(argv[i], "--no-wait")) wait = 0;
         else if (!strcmp(argv[i], "--help")) {
             usage();
@@ -1398,19 +1466,34 @@ int main(int argc, char **argv) {
     if (ek_open(flags) != 0) {
         fprintf(stderr, "xcom: the screen would not open\n");
         ek_restore_ui();
+        audio_stop();
         return 1;
     }
-    int wfm = ek_waveform_by_name("GC16");
-    if (!wfm) {
+    if (sound == AUDIO_SPEAK || sound == AUDIO_CHECK) {
+        if (audio_start(sound, sound_dir) != 0)
+            fprintf(stderr, "xcom: carrying on without sound\n");
+    }
+    wfm_clean = ek_waveform_by_name("GC16");
+    if (!wfm_clean) {
         fprintf(stderr, "xcom: GC16 waveform is missing\n");
         ek_close();
+        audio_stop();
         return 1;
     }
-    ek_waveform(wfm);
     ek_mono(1);
     ek_wait_updates(wait);
-    ek_ghost(0, 0);
-    ek_policy(180, 4, 30);
+    if (force_clean) {
+        /* The old behaviour: every update a clean GC16 refresh. */
+        ek_waveform(wfm_clean);
+        ek_ghost(0, 0);
+        ek_policy(180, 4, 30);
+    } else {
+        /* A tap touches a few hundred tiles, not a page: let the engine pick
+         * GL16_FAST for those and clean up the area it keeps re-inking. */
+        ek_waveform(0);
+        ek_ghost(4, 30);
+        ek_policy(180, 6, 35);
+    }
 
     int rc = 0;
     if (do_test) {
@@ -1439,6 +1522,7 @@ int main(int argc, char **argv) {
             if (buf[0] == 'q') break;
             if (sscanf(buf, "tap %d %d", &x, &y) != 2) {
                 fprintf(stderr, "xcom: want 'tap X Y' or q\n");
+                audio_stop();
                 ek_close();
                 return 2;
             }
@@ -1452,13 +1536,18 @@ int main(int argc, char **argv) {
     if (dump_path) {
         if (ek_dump_pgm(dump_path, 1) != 0) {
             fprintf(stderr, "xcom: could not write %s\n", dump_path);
+            audio_stop();
             ek_close();
             return 1;
         }
     }
 
+    if (sound == AUDIO_CHECK)
+        fprintf(stderr, "xcom: soundcheck done, %d clips missing\n", audio_misses());
+
 #ifdef EK_HOST
     if (do_test || auto_turns >= 0 || dump_path != NULL || !isatty(0)) {
+        audio_stop();
         ek_close();
         return rc;
     }
@@ -1469,6 +1558,7 @@ int main(int argc, char **argv) {
             if (buf[0] == 'q') break;
             if (sscanf(buf, "tap %d %d", &x, &y) != 2) {
                 fprintf(stderr, "xcom: want 'tap X Y' or q\n");
+                audio_stop();
                 ek_close();
                 return 2;
             }
@@ -1478,7 +1568,9 @@ int main(int argc, char **argv) {
         }
     }
 #else
-    while (!stop_req) {
+    /* --auto is the way to try the game on the device without touching it:
+     * it plays those turns by itself, shows the result and quits. */
+    while (!stop_req && auto_turns < 0) {
         ek_event ev;
         int got = 0;
         while (ek_poll(&ev)) {
@@ -1490,6 +1582,7 @@ int main(int argc, char **argv) {
         else ek_sleep_ms(20);
     }
 #endif
+    audio_stop();
     ek_close();
     return rc;
 }

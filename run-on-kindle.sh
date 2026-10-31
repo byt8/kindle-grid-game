@@ -31,6 +31,10 @@ if [ ! -f tools/kindle-run.sh ]; then
     echo "run-on-kindle: tools/kindle-run.sh is missing" >&2
     exit 1
 fi
+if [ ! -d sound/words ] || [ ! -d sound/fx ]; then
+    echo "run-on-kindle: no sound clips. Run: make sound" >&2
+    exit 1
+fi
 
 # KINDLE_IP / KINDLE_KEY come from the shared secrets file when it exists.
 # KFB_ENV_FILE is set explicitly because this script runs under /bin/sh, where
@@ -61,6 +65,14 @@ echo "run-on-kindle: pushing the game to $ip"
 cat ./xcom         | ssh_run 'cat > /mnt/us/xcom && chmod +x /mnt/us/xcom'
 cat ./grabtest     | ssh_run 'cat > /mnt/us/grabtest && chmod +x /mnt/us/grabtest'
 cat tools/kindle-run.sh | ssh_run 'cat > /mnt/us/xcom-run.sh && chmod +x /mnt/us/xcom-run.sh'
+
+# The speaker reads one file per word, so the whole folder goes over in one
+# stream. It is replaced rather than merged: a renamed clip must not linger.
+echo "run-on-kindle: pushing $(ls sound/words | wc -l) word clips and the effects"
+tar -cf - -C sound words fx | ssh_run '
+    rm -rf /mnt/us/xcom-sound
+    mkdir -p /mnt/us/xcom-sound
+    tar -xf - -C /mnt/us/xcom-sound'
 
 echo "run-on-kindle: taking the $ip screen. Tap QUIT, then SURE, to give it back."
 exec ssh -tt -i "$key" -o BatchMode=yes -o IdentitiesOnly=yes \
