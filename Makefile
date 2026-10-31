@@ -7,7 +7,15 @@ PY     ?= python3
 
 HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 
-.PHONY: all test kindle sound manual grabtest preview preview-old bold chess chess-test chess-kindle clean
+.PHONY: all test kindle sound manual grabtest preview preview-old bold chess chess-test chess-kindle \
+        tetris tetris-host tetris-test tetris-kindle clean
+
+# ---- tetris: 10x20 well, on-screen buttons, no keyboard ------------------
+
+tetris-host: src/tetris.c $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/tetris.c $(ENGINE)/eink.c -lm
+
+tetris: tetris-kindle
 
 all: xcom-host
 
@@ -18,6 +26,28 @@ chess-host: src/chess.c $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
 
 # The device build: static musl, no libcurl, the game runs the device's own
 # curl for the API call.
+tetris-kindle: src/tetris.c $(ENGINE)/eink.c $(ENGINE)/eink.h
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" \
+	  -v /home/brendan/jailbreak-kindle:/jb \
+	  -w /src kfb-build \
+	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -ffunction-sections -fdata-sections \
+	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
+	    -o tetris src/tetris.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -static -no-pie -Wl,--gc-sections -lm \
+	    && arm-linux-musleabi-strip tetris'
+
+# Rules first, then the picture: the opening, one TURN tap, and 24 pieces
+# played by --auto. The three dumps must differ from each other.
+tetris-test: tetris-host
+	./tetris-host --selftest --no-takeover --seed 1
+	./tetris-host --no-takeover --seed 1 --dump /tmp/tetris-open.pgm
+	printf 'tap 299 757\n' | ./tetris-host --no-takeover --seed 1 --dump /tmp/tetris-drop.pgm
+	./tetris-host --auto 24 --no-takeover --seed 1 --dump /tmp/tetris-play.pgm
+	$(PY) tools/check_pgm.py /tmp/tetris-open.pgm /tmp/tetris-drop.pgm /tmp/tetris-play.pgm
+	$(PY) tools/check_tetris.py /tmp/tetris-open.pgm /tmp/tetris-play.pgm
+
 chess-kindle: src/chess.c $(ENGINE)/eink.c $(ENGINE)/eink.h
 	docker run --rm -u "$$(id -u):$$(id -g)" \
 	  -v "$$(pwd):/src" \
@@ -107,4 +137,4 @@ preview-old:
 	$(PY) tools/slice_sprites.py --preview /tmp/xcom-sprites-old.png
 
 clean:
-	rm -f xcom-host xcom grabtest chess-host chess
+	rm -f xcom-host xcom grabtest chess-host chess tetris-host tetris

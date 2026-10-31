@@ -1,7 +1,7 @@
-# Two games on a Kindle
+# Three games on a Kindle
 
 Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk, tap an alien to shoot, wipe them out.
-And chess against DeepSeek, which talks trash after every move.
+Chess against DeepSeek, which talks trash after every move. And Tetris: tap to stack blocks and clear lines.
 
 ---
 
@@ -13,6 +13,7 @@ Docker image `kfb-build` (ARM cross-compiler), and `python3`.
 ```bash
 make kindle                      # XCOM  -> ./xcom      (ARM binary)
 make chess-kindle                # Chess -> ./chess     (needs chess.conf first)
+make tetris-kindle               # Tetris -> ./tetris   (no key needed)
 ```
 
 ```bash
@@ -38,6 +39,14 @@ to walk, tap an alien then **FIRE**. **QUIT** then **SURE** exits.
 
 Tap a piece, tap a square. **QUIT** then **SURE** gives the screen back.
 
+**Play Tetris on the Kindle:**
+
+```bash
+./run-tetris-on-kindle.sh 192.168.0.66   # pass the IP
+```
+
+Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down, **QUIT** then **SURE** to exit.
+
 **No Kindle, no key — try it on this PC:**
 
 ```bash
@@ -45,6 +54,7 @@ make                                    # builds ./xcom-host
 ./xcom-host --seed 1 --dump /tmp/x.pgm  # draw the opening screen
 make preview                            # every 40x40 sprite, side by side -> bold-preview.png
 make test                               # plays a pretend game, checks pictures + clips
+make tetris-host && make tetris-test    # self-test + three screens the checker reads
 ```
 
 Both host programs take `tap X Y` lines on stdin and `--dump FILE` writes the
@@ -108,6 +118,15 @@ something else. No internet needed at runtime.
 Painting uses the e-ink engine in
 `jailbreak-kindle/kindle-tools/fbdaemon/engine`; that folder is shared and never
 modified from here.
+
+---
+
+## Tetris: how it fits together
+
+One file, `src/tetris.c`: rules, drawing, the auto-player and a PC self-test. A falling
+piece shows a ghost where it will land. `make tetris-test` runs the self-test plus three
+screens (open, one tap, 24 auto pieces) and checks the well frame is drawn and the blocks
+really stack.
 
 ---
 

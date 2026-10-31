@@ -12,8 +12,11 @@
 # need the cross compiler. The PC test binary is not.
 /xcom-host
 /chess-host
+/tetris-host
 *:Zone.Identifier
 *.pgm
+/tetris-open.png
+/tetris-play.png
 # Board dumps pulled from the device for a look; regenerate any time.
 /chess-live.*
 
