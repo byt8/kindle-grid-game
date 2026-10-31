@@ -13,8 +13,11 @@ updated: 2026-10-31
 - `sound/words/*.pcm`, `sound/fx/*.pcm` — 91 word clips plus 7 effects, raw S16_LE mono 22050. Committed (2.2 MB); pushed to `/mnt/us/xcom-sound`.
 - `tools/make_sound.py` — bakes the clips: words from the local TTS service, effects synthesised.
 - `tools/check_sound.py` — derives the spoken vocabulary from `src/xcom.c` and fails if a word has no clip, or a clip has no word.
-- `src/sprites.h` — generated 40x40 tiles. Do not edit.
-- `tools/slice_sprites.py` — cuts `spritesheet.png` using the JSON rects.
+- `src/sprites.h` — generated 40x40 tiles, now **20** of them. Do not edit.
+- `tools/bake_bold_sprites.py` — bakes the tiles from the generated art in `bold/` plus the terrain patterns.
+- `bold_sprite_sources.json` — sheet -> grid -> sprite-id map, plus the enum order.
+- `bold/{players,enemies,objects,drone}.png` — the generated art. These are the source of truth now.
+- `tools/slice_sprites.py` — the old dithered cutter, kept for comparison (`make preview-old`).
 - `Makefile` — `make test` on the PC, `make kindle` for the device binary.
 - `run-on-kindle.sh` — copy `xcom`, `grabtest`, `tools/kindle-run.sh` and `sound/` (as one tar stream) over SSH and run the game. Takes an optional Kindle IP.
 - `tools/kindle-run.sh` — on-device wrapper: kill leftover game, stop `kfbterm`, hard-kill `kfb`, grab-test, run with `--sound /mnt/us/xcom-sound`, then restore the UI. Extra arguments go to the game.
@@ -35,6 +38,12 @@ updated: 2026-10-31
 - [ran 2026-10-31 device] A dead ssh session leaves `xcom` running with the touch grab, so the next launch gets `EVIOCGRAB refused: Resource busy` and a game with no touch. Killing the old `xcom` was necessary before touch came back.
 - [ran 2026-10-31 device] Killing the local ssh (the tool did it at a timeout) killed the remote game with SIGKILL, and the wrapper's EXIT trap still restored the UI and restarted `kfbterm`. Even the ugly path leaves the Kindle usable.
 - [verified 2026-10-31 device] `/mnt/us/DONT_START_FRAMEWORK` left behind after a run is not a bug: a running `kfb` session sets that flag itself and clears it when it exits.
+- [ran 2026-10-31] The dither in `slice_sprites.py` is what made units unreadable: at 40x40 a soldier and a crate dither to the same speckle. Hard threshold (120) + one-pixel ink dilation keeps strokes at 2 px and keeps silhouettes apart.
+- [ran 2026-10-31] cptr's `image_generate` writes **WebP** bytes into a `*.png` file (RIFF/WEBP header, single `VP8 ` chunk, no alpha). Sniff the format, never trust the extension.
+- [ran 2026-10-31] This box had no PIL, no pip, no curl/ffmpeg/ImageMagick. `python3 -m ensurepip --upgrade` then `python3 -m pip install pillow` works (pypi reachable) and gives Pillow 13 with webp support.
+- [ran 2026-10-31 make test] `src/sprites.h` rebuilt from scratch (20 sprites) and the whole suite passed: three PGMs ok, pictures differ, 91 words + 7 effects present.
+- [ran 2026-10-31] Only 20 sprite ids are ever drawn. `src/sprites.h` now holds exactly those; the other 71 (vehicles, misc, ui, quirky) were dead weight. A future lookup of a dropped id fails loudly: `sp_find` returns -1 and `load_pictures`/`spawn` print `missing sprite X` and exit.
+- [ran 2026-10-31] Baked ink coverage: hollow friendlies 33-45% of the body, solid aliens 73-95%. Anything under 15% aborts the bake.
 
 ## Built
 - One mission, FIRST CONTACT: 4 soldiers, 5 aliens, fog, cover, walk or run, shoot, overwatch, hunker, medic heal. Entry is `main` in `src/xcom.c`.
@@ -46,6 +55,8 @@ updated: 2026-10-31
 - Use the existing engine instead of a new framebuffer driver. The update cost is the rect, and that code is already proven on this panel.
 - Keep the game in this repo. `jailbreak-kindle` is shared. No KUAL line was added there.
 - 1-bit sprites with a paper rim around people (`blit_unit`). A black soldier on a black tree tile disappears without the rim.
+- Bold sprites come from generated line art, not from the painted sheet: 512x512 per sprite, threshold, trim to silhouette, dilate 1 px. Terrain is a generator pattern instead, because a picture scaled to 40x40 is noise.
+- **Team is read from fill, not from detail:** friendly units are hollow (white body, black outline), aliens solid black. 40 px has no room for interior detail, so the silhouette alone carries it. The medic's cross and the alien eyes are gone by design.
 - Sheet mobility is divided by 3, and at least 4. The sheet numbers are for a bigger map.
 - Stationary aim is +20. The sheet says "a bonus" and does not give the number. Range numbers live in `tune` because the sheet has none.
 - Every frame forces the GC16 waveform and waits. A turn-based picture should be readable, not a fast DU ghost.
@@ -53,6 +64,8 @@ updated: 2026-10-31
 
 ## Do not redo
 - Do not hunt for a grey path in `eink.h`. It refuses greys on purpose.
+- Do not feed the sprite baker a small source and expect detail: below ~200 px per sprite the threshold eats every interior line. Generate at 512 px per cell (a 2x2 sheet).
+- Do not add a terrain id without a pattern in `PATTERNS`; the baker exits naming the missing id rather than baking a blank tile.
 - Do not use `eips` for on-panel text. The jailbreak KB already measured that it paints nothing on this firmware.
 - Do not `killall kfb` and wait. Stop `kfbterm`, then `kill -9`.
 - Do not put the user@host after the remote command in an `ssh` line: `ssh` takes the first bare argument as the hostname and dies with `hostname contains invalid characters`.

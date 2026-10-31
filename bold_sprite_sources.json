@@ -1,0 +1,109 @@
+{
+  "_comment": "Where each bold sprite comes from. A sheet is split into a cols x rows grid and the sprites list fills it left to right, top to bottom. Terrain is not in here: tools/bake_bold_sprites.py draws those from PATTERNS, because a picture dithered to 40x40 is noise. Order below is the enum order in src/sprites.h; required is every id the game looks up by name.",
+  "prefix": {
+    "player_units": "P",
+    "enemies": "E",
+    "objects_decor": "O",
+    "terrain_tiles": "T"
+  },
+  "sheets": [
+    {
+      "file": "bold/players.png",
+      "grid": [
+        2,
+        2
+      ],
+      "thicken": 1,
+      "sprites": [
+        "player_units/soldier",
+        "player_units/sniper",
+        "player_units/heavy",
+        "player_units/medic"
+      ],
+      "style": "hollow"
+    },
+    {
+      "file": "bold/enemies.png",
+      "grid": [
+        2,
+        2
+      ],
+      "thicken": 1,
+      "sprites": [
+        "enemies/sectoid",
+        "enemies/sniper",
+        "enemies/mutant",
+        "enemies/assault"
+      ]
+    },
+    {
+      "file": "bold/objects.png",
+      "grid": [
+        2,
+        2
+      ],
+      "thicken": 1,
+      "sprites": [
+        "objects_decor/rocks",
+        "objects_decor/tree",
+        "objects_decor/crates",
+        "objects_decor/bush"
+      ]
+    },
+    {
+      "file": "bold/drone.png",
+      "grid": [
+        1,
+        1
+      ],
+      "thicken": 1,
+      "sprites": [
+        "enemies/drone"
+      ]
+    }
+  ],
+  "order": [
+    "player_units/soldier",
+    "player_units/sniper",
+    "player_units/heavy",
+    "player_units/medic",
+    "enemies/sectoid",
+    "enemies/sniper",
+    "enemies/mutant",
+    "enemies/assault",
+    "enemies/drone",
+    "objects_decor/rocks",
+    "objects_decor/tree",
+    "objects_decor/crates",
+    "objects_decor/bush",
+    "terrain_tiles/grass",
+    "terrain_tiles/forest",
+    "terrain_tiles/city",
+    "terrain_tiles/road",
+    "terrain_tiles/water",
+    "terrain_tiles/rubble",
+    "terrain_tiles/mountains"
+  ],
+  "required": [
+    "player_units/soldier",
+    "player_units/sniper",
+    "player_units/heavy",
+    "player_units/medic",
+    "enemies/sectoid",
+    "enemies/sniper",
+    "enemies/mutant",
+    "enemies/assault",
+    "enemies/drone",
+    "objects_decor/rocks",
+    "objects_decor/tree",
+    "objects_decor/crates",
+    "objects_decor/bush",
+    "terrain_tiles/grass",
+    "terrain_tiles/forest",
+    "terrain_tiles/city",
+    "terrain_tiles/road",
+    "terrain_tiles/water",
+    "terrain_tiles/rubble",
+    "terrain_tiles/mountains"
+  ]
+}

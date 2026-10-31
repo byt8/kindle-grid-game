@@ -1,152 +1,112 @@
 # Two games on a Kindle
 
-Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk. Tap an alien to shoot. Wipe them out.
+Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk, tap an alien to shoot, wipe them out.
 And chess against DeepSeek, which talks trash after every move.
+
+---
 
 ## Quick Start
 
-Everything runs on the Kindle; this PC only builds and copies. Kindle must be
-jailbroken, with SSH, on the same network (`192.168.0.66` by default).
+**What you need:** a jailbroken Kindle Touch with SSH on your network, this PC,
+Docker image `kfb-build` (ARM cross-compiler), and `python3`.
 
-```
-cp chess.conf.example chess.conf      # paste your DeepSeek key: key = sk-...
-make chess-kindle                     # the ARM binary (needs the kfb-build docker image)
-./run-chess-on-kindle.sh 192.168.0.66 # copy it over, take the screen, play
-```
-
-Pass the Kindle's address: with more than one Kindle on the network the default
-comes from `jailbreak-kindle/.kfb-secrets` and may be the other one.
-
-The game runs **on the device, not in this window**. Shut the laptop, lose Wi-Fi,
-let the Kindle sleep — it keeps playing. The script only follows
-`/mnt/us/chess.log` and can be closed at any time.
-
-**Play:** tap a piece, tap a square. Black's move and its comment appear under
-the board. Tap QUIT, then SURE, to give the screen back to the reader.
-
-**Power button:** puts the Kindle to sleep (screen says ASLEEP) and wakes it
-again with the position kept. Pressing power during the model's turn cancels
-that question and it is asked again after the wake. The key is *not* an input
-device on this Kindle — no `/dev/input/eventN` ever sees it (measured with
-`tools/keyprobe.c`) — so the game reads the kernel log itself (`klogctl`) and
-looks for the new `PWRON1` record a press writes, then sleeps the machine. That
-is why the stock `powerd` stays stopped while the game runs. Neither
-`/proc/interrupts` (one press moved `PMIC_IRQ` by 94) nor a plain count of
-`PWRON1` lines can be trusted here; see `.agent-kb/areas/chess.md`.
-
-
-**No Kindle, no key, on this PC:**
-```
-make chess-host
-./chess-host --selftest --no-takeover             # rules, notation, perft
-./chess-host --fake-ai --auto 8 --dump /tmp/c.pgm # both sides play, draw the board
-./chess-host --apicheck --conf chess.conf         # ask the API one question
-./chess-host --wifi-shot /tmp/w.pgm pass          # draw a wi-fi screen (list|name|pass|fail)
+```bash
+make kindle                      # XCOM  -> ./xcom      (ARM binary)
+make chess-kindle                # Chess -> ./chess     (needs chess.conf first)
 ```
 
-**Check the screen of a game you cannot see** (it usually runs with the reader UI
-switched off): `kill -USR1 <pid of chess>` writes `/tmp/chess-shot.pgm`.
-
-**Kindle screen draws but ignores taps?** The screen mirror (`kfbterm`) has
-grabbed the touch device. A reboot does not fix it — the mirror starts with the
-reader UI. Stop the job instead:
-```
-ssh root@KINDLE_IP /sbin/initctl stop kfbterm   # then /mnt/us/grabtest says "grab OK"
+```bash
+cp chess.conf.example chess.conf # chess only: paste your key, key = sk-...
 ```
 
-**Board on screen, taps do nothing, nothing wakes it?** Then the game is dead and
-the reader is down too, so the panel is holding the last board for ever. Say what
-is true rather than guessing:
-```
-ssh root@KINDLE_IP 'pidof chess; /sbin/initctl status framework; pidof cvm'
-```
-No pid and no `cvm` means the game is gone; bring the reader back with
-```
-ssh root@KINDLE_IP 'sh /mnt/us/fbdaemon/restore-kindle.sh'
-```
-Run it a second time if `cvm` still does not appear — right after a wake the
-first run has been seen to start X and then leave the reader down. The board is
-not recoverable: the game holds the position in memory only.
+**Play XCOM on the Kindle:**
 
-### Boot straight into the game (gift unit)
-
-```
-mntroot rw
-cp /mnt/us/chess-boot.conf /etc/upstart/chess.conf
-mntroot ro
-```
-(that is on the Kindle; `tools/chess-boot.conf` is pushed to `/mnt/us` by
-`run-chess-on-kindle.sh`.) The Kindle then waits up to **3 minutes** for Wi-Fi
-and starts the game. It starts anyway if Wi-Fi never comes up, because on a
-fresh unit the only place to join a network is the game's own Wi-Fi screen.
-Tapping GIVE UP ends it and the reader comes back — that exit is deliberate, it
-is the only way out.
-
-**One game per boot.** `chess-run.sh` drops `/tmp/chess.started` (ram, so it
-clears at reboot) and the job refuses to start a second game. Without that, every
-restore of the reader — QUIT, or a repair — started a fresh board and hijacked
-the screen. After QUIT, start the game again over ssh, or reboot.
-
-What it did is written to `/mnt/us/chess-boot.log` (`killing the boot splash …`,
-`wifi up after 10s` … `starting the game`). Read it when a boot does not do what
-you expect:
-
-```
-cat /mnt/us/chess-boot.log
+```bash
+./run-on-kindle.sh               # Kindle at 192.168.0.63
+./run-on-kindle.sh 192.168.0.66  # second Kindle
 ```
 
-Undo: `mntroot rw; rm /etc/upstart/chess.conf; mntroot ro`.
+It copies the game and its voice clips over, frees the touch screen, runs it, and
+puts the Kindle back to normal when you quit. **Tap a soldier**, tap a boxed square
+to walk, tap an alien then **FIRE**. **QUIT** then **SURE** exits.
 
-### Change the boot picture (and why the progress bar no longer sticks)
+**Play chess on the Kindle:**
 
-The process that paints the start-up picture is `blanket` (the `x` job runs
-`lxinit blanket -t "splash screensaver langpicker"`), and it reads
-**`/opt/amazon/low_level_screens/600x800/splash.png`** — the copy in
-`/var/local/blanket/...` is *not* what you see at boot.
-
-`blanket` also paints the boot progress bar, and it does not stop when
-`framework` is stopped: it kept repainting its splash over the game, leaving a
-half-finished bar as a black blob on the board. The game now stops the whole `x`
-job once it owns the panel, and does one forced full-panel white flush before
-its first paint. (Do not just `killall blanket`: lxinit then exits abnormally,
-`x_monitor` restarts the GUI five times and reboots the device into repair
-mode.)
-
-```
-python3 tools/make_splash.py --logo ~/aijly.com/static/logo.png --out kindle-splash.png
-cat kindle-splash.png | ssh root@192.168.0.66 '
-  /usr/sbin/mntroot rw
-  cp /opt/amazon/low_level_screens/600x800/splash.png /mnt/us/splash-amazon-orig.png
-  cat > /opt/amazon/low_level_screens/600x800/splash.png
-  sync; /usr/sbin/mntroot ro'
+```bash
+./run-chess-on-kindle.sh 192.168.0.66   # always pass the IP
 ```
 
-The image must be a 600x800 **8-bit greyscale** PNG (colour type 0, no alpha) or
-it draws nothing. `tools/make_splash.py` crops the logo, centres it on white and
-writes exactly that; `--preview` prints it as text first. Undo:
-`cp /mnt/us/splash-amazon-orig.png /opt/amazon/low_level_screens/600x800/splash.png`
-(with `mntroot rw`/`ro` around it).
+Tap a piece, tap a square. **QUIT** then **SURE** gives the screen back.
 
-### Wi-fi without the Kindle UI
+**No Kindle, no key — try it on this PC:**
 
-The game draws its own wi-fi screen: scan, tap a network, type the password on a
-drawn keyboard. It writes the result to `/mnt/us/wifi.conf`, so the next boot
-joins by itself and the screen never appears again. `SKIP` plays offline (no AI
-moves). The joining is done by `/mnt/us/chess-wifi.sh`:
-
+```bash
+make                                    # builds ./xcom-host
+./xcom-host --seed 1 --dump /tmp/x.pgm  # draw the opening screen
+make preview                            # every 40x40 sprite, side by side -> bold-preview.png
+make test                               # plays a pretend game, checks pictures + clips
 ```
-sh /mnt/us/chess-wifi.sh status          # state / ssid / ip, exit 0 when online
-sh /mnt/us/chess-wifi.sh scan            # ssid \t signal \t wpa2|open
-sh /mnt/us/chess-wifi.sh join SSID PSK   # joins and remembers
-sh /mnt/us/chess-wifi.sh auto            # rejoin what was remembered
-```
+
+Both host programs take `tap X Y` lines on stdin and `--dump FILE` writes the
+screen, so a bug is replayable: same `--seed`, same dice.
+
+---
+
+## XCOM: how it fits together
+
+| File | What it is |
+|---|---|
+| `src/xcom.c` | the whole game: rules, drawing, touch, PC self-test |
+| `src/audio.c` | the speaker: one child process owns `aplay`, the game never waits on it |
+| `src/sprites.h` | 20 baked 40x40 tiles, generated — do not hand-edit |
+| `tools/bake_bold_sprites.py` | bakes the tiles from `bold/` art plus the terrain patterns |
+| `bold_sprite_sources.json` | which generated cell becomes which sprite |
+| `bold/` | the generated art sheets (players, enemies, objects, drone) |
+| `tools/make_sound.py` | bakes one `.pcm` per spoken word, plus the effects |
+| `tools/check_sound.py` | reads the source and fails the build if a word has no clip |
+| `sound/` | the baked clips, pushed to `/mnt/us/xcom-sound` |
+| `tools/grabtest.c` | "is the touch device free right now?" probe |
+| `MANUAL.md` | plain-prose game manual for TTS |
+
+### The sprites are drawn bold on purpose
+
+The panel is 1 bit: black or white, no grey. A painted picture dithered to 40x40
+turns into speckle, and a soldier stops looking different from a crate. So:
+
+- **Units and objects** are bold line art generated at 512x512, hard-thresholded
+  (no dither), trimmed to the silhouette, then ink-dilated one pixel so no stroke
+  is thinner than 2 px.
+- **Friendlies are hollow** (white body, black outline). **Aliens are solid black.**
+  At 40 px there is no room for interior detail, so team is read from black vs white.
+- **Terrain is a pattern, not a picture**: dots = grass, trunks = forest, waves =
+  water, dashes = road, windows = city, pluses = rubble, peaks = mountains.
+
+To redo the art: generate new sheets into `bold/`, point
+`bold_sprite_sources.json` at them, then `make preview && make test`.
+
+The baker needs Pillow (`python3 -m pip install pillow`). That is a build-time
+tool on this PC only; nothing extra ships to the Kindle.
+
+`tools/slice_sprites.py` and `spritesheet.png` are the old dithered set, kept for
+comparison only (`make preview-old`).
+
+Sound is spliced from files, not generated on the device: `audio.c` turns a log
+line into lower-case words, a number into "for four", and streams the matching
+clips into `aplay`. A missing clip is reported by name, never swapped for
+something else. No internet needed at runtime.
+
+Painting uses the e-ink engine in
+`jailbreak-kindle/kindle-tools/fbdaemon/engine`; that folder is shared and never
+modified from here.
+
+---
 
 ## Chess: how it fits together
 
-The Kindle talks to `https://api.deepseek.com/v1/chat/completions` itself, model
-`deepseek-flash`. Nothing goes through this PC — no proxy, no relay. The push
-also drops this PC's CA bundle at `/mnt/us/chess-ca.pem`, because the Kindle's
-own trust store is older than DeepSeek's certificate.
+Rules, board and the model call are all in `src/chess.c`. The Kindle talks to
+`https://api.deepseek.com/v1/chat/completions` itself — nothing goes through this
+PC. The push also drops this PC's CA bundle at `/mnt/us/chess-ca.pem`, because the
+Kindle's own trust store is older than DeepSeek's certificate.
 
 | File | What it is |
 |---|---|
@@ -157,109 +117,95 @@ own trust store is older than DeepSeek's certificate.
 | `tools/kindle-run.sh` | on-device launcher: frees the screen, runs, restores |
 | `chess.conf.example` | key, model, url, ca |
 
-## Quick Start (XCOM)
-
-```
-./run-on-kindle.sh                 # the Kindle at 192.168.0.63
-./run-on-kindle.sh 192.168.0.64    # a different Kindle
-```
-
-It copies the game and its voice clips over, frees the touch screen from the
-screen mirror, runs the game, and puts the Kindle back to normal when you quit.
-
-**Play:** tap a soldier along the bottom, tap a boxed square to walk (a thick box
-is a long run, and you cannot shoot after one). Tap an alien then FIRE. END
-moves the aliens, WATCH shoots the next one that appears, HUNKER is harder to
-hit, HEAL is the medic's two heals. Tap QUIT, then SURE.
-
-Pale squares are grass, black trees and rocks block the way, water is closed,
-dark fog is what you have not seen. Win = every alien down, lose = every soldier
-down.
-
-Sound: the Kindle reads the log out loud, word by word, and plays a bang for a
-shot and a thud for a hit. No `/mnt/us/xcom-sound`? Then it says so and runs
-silently. `--mute` is the quiet switch. Needs no internet at runtime.
-
-```
-make            # PC program, xcom-host
-make test       # plays a pretend game and checks pictures, words and clips
-make sound      # bakes the spoken words + effects into sound/ (needs TTS)
-make manual     # bakes MANUAL.md -> manual.wav (needs TTS)
-make kindle     # Kindle program, needs the kfb-build docker image
+```bash
+make chess-host
+./chess-host --selftest --no-takeover             # rules, notation, perft
+./chess-host --fake-ai --auto 8 --dump /tmp/c.pgm # both sides play, draw the board
+./chess-host --apicheck --conf chess.conf         # ask the API one question
 ```
 
-## How it fits together (XCOM)
+Check the screen of a game you cannot see (`kill -USR1 <pid of chess>` writes
+`/tmp/chess-shot.pgm`).
 
-| File | What it is |
-|---|---|
-| `src/xcom.c` | the whole game: rules, drawing, touch, PC self-test |
-| `src/audio.c` | the speaker: one child process owns `aplay`, the game never waits on it |
-| `src/sprites.h` | 40x40 dithered tiles, generated — do not hand-edit |
-| `tools/slice_sprites.py` | cuts `spritesheet.png` into those tiles |
-| `tools/make_sound.py` | bakes one `.pcm` per spoken word, plus the effects |
-| `tools/check_sound.py` | reads the source and fails the build if a word has no clip |
-| `sound/` | the baked clips, pushed to `/mnt/us/xcom-sound` |
-| `tools/grabtest.c` | "is the touch device free right now?" probe |
-| `MANUAL.md` | plain-prose game manual for TTS |
-| `tools/make_manual_audio.py` | bakes MANUAL.md into one spoken WAV |
+### Boot straight into the game
 
-Sound is spliced from files, not generated on the device: `audio.c` turns a log
-line into lower-case words, a number into "for four", streams the matching clips
-into `aplay`. A missing clip is reported by name, never swapped for something
-else.
+On the Kindle:
 
-The screen is 600x800, 8 bits per pixel, and the engine draws pure black/white
-only — shading is done with dither patterns. Painting uses the e-ink engine in
-`jailbreak-kindle/kindle-tools/fbdaemon/engine`; that folder is shared and never
-modified from here.
+```
+mntroot rw
+cp /mnt/us/chess-boot.conf /etc/upstart/chess.conf
+mntroot ro
+```
+
+Undo: `mntroot rw; rm /etc/upstart/chess.conf; mntroot ro`. It waits up to 3
+minutes for Wi-Fi and starts anyway if it never comes up, because the game draws
+its own Wi-Fi screen. One game per boot (`/tmp/chess.started`); after QUIT, start
+it again over ssh or reboot. Progress is in `/mnt/us/chess-boot.log`.
+
+### Wi-fi without the Kindle UI
+
+The game draws its own screen: scan, tap a network, type the password on a drawn
+keyboard, result saved to `/mnt/us/wifi.conf` so the next boot joins by itself.
+
+```
+sh /mnt/us/chess-wifi.sh status          # state / ssid / ip, exit 0 when online
+sh /mnt/us/chess-wifi.sh join SSID PSK   # joins and remembers
+sh /mnt/us/chess-wifi.sh auto            # rejoin what was remembered
+```
+
+### Boot picture
+
+`blanket` paints it from `/opt/amazon/low_level_screens/600x800/splash.png` — the
+copy under `/var/local/blanket` is not what you see. It must be a 600x800 **8-bit
+greyscale** PNG (colour type 0, no alpha) or nothing draws.
+
+```
+python3 tools/make_splash.py --logo LOGO.png --out kindle-splash.png
+```
+
+The game stops the whole `x` job once it owns the panel (never just `killall
+blanket`: lxinit then reboots into repair mode) and forces one white flush.
+
+---
 
 ## When it goes wrong
 
-The launcher pushes `grabtest` first. If it prints `EVIOCGRAB refused: Resource
-busy`, something still holds `/dev/input/event3`. The launcher handles the two
-usual culprits (a leftover game from a killed session, and the `kfb` screen
-mirror); if it still fails, on the Kindle:
+**`EVIOCGRAB refused: Resource busy`** — something still holds
+`/dev/input/event3`. The launcher handles the two usual culprits; if not, on the
+Kindle: `initctl stop kfbterm; kill -9 $(pidof kfb)`.
+
+**Screen draws but taps do nothing** — the screen mirror grabbed touch. A reboot
+does not fix it (the mirror starts with the reader UI). `initctl stop kfbterm`.
+
+**Dead game and dead reader** (panel holding the last picture forever):
 
 ```
-initctl stop kfbterm
-kill -9 $(pidof kfb)
+ssh root@KINDLE_IP 'pidof chess; /sbin/initctl status framework; pidof cvm'
+ssh root@KINDLE_IP 'sh /mnt/us/fbdaemon/restore-kindle.sh'
 ```
 
-`sh /mnt/us/fbdaemon/restore-kindle.sh` gives the Kindle back — but kill the
-game first, or it keeps the panel: `kill $(pidof chess)`, then the restore, then
-`initctl stop kfbterm`. Stopping the workspace service can leave exactly that
-state (the game survives, the reader UI stays down).
+Run the restore twice if `cvm` still does not appear. Kill the game first
+(`kill $(pidof chess)`) or it keeps the panel.
 
-If the picture is fine but there is no sound, the launcher says why before it
-starts. To check the speaker by hand:
+**No sound** — the launcher says why before it starts. By hand:
 
 ```
-amixer sget Speaker          # should read Playback [on]
-cat /mnt/us/xcom-sound/words/contact.pcm | aplay -q -D plughw:0,0 -t raw -f S16_LE -c 1 -r 22050 -
+amixer sget Speaker          # must read Playback [on]
 ```
 
 A `sound: no clip words/x.pcm` line means the game said a word with no file: run
 `make sound`, then push again. `make test` catches that before the device does.
 
-Wi-fi trouble: `/mnt/us/chess-wifi.sh status` prints why (`state=`,
-`ssid=`, `ip=`); the game's own join errors come from the same script, and its
-boot log is on the console. `kill -USR1` on a running game shows the screen.
+---
 
 ## On this computer
 
-```
-make
-./xcom-host --seed 1 --dump /tmp/xcom.pgm            # draw the first screen
-./xcom-host --selftest                               # check the rules
-./xcom-host --auto 2                                 # let the computer play 2 turns
+```bash
+./xcom-host --selftest                           # check the rules
+./xcom-host --auto 2 --no-takeover               # let the computer play 2 turns
 printf 'tap 120 536\n' | ./xcom-host --seed 1 --dump /tmp/picked.pgm
-./xcom-host --soundcheck --auto 1                    # print the words it would say
+./xcom-host --soundcheck --auto 1                 # print the words it would say
 ```
 
-The PC has no speaker, so sound is off there unless you ask for `--soundcheck`,
-which only prints the words. On the Kindle it is on — `--auto 3` plays three
-turns by itself and quits, which is the quickest way to test it.
-
-Both host programmes take `tap X Y` lines on stdin, so a whole flow can be
-replayed without a device; `--dump FILE` writes the screen at the end.
-Same `--seed`, same dice, so a bug is repeatable.
+No speaker on the PC: sound is off unless you ask for `--soundcheck`, which only
+prints the words.

@@ -7,7 +7,7 @@ PY     ?= python3
 
 HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 
-.PHONY: all test kindle sound manual grabtest preview chess chess-test chess-kindle clean
+.PHONY: all test kindle sound manual grabtest preview preview-old bold chess chess-test chess-kindle clean
 
 all: xcom-host
 
@@ -38,8 +38,12 @@ chess-test: chess-host
 	$(PY) tools/check_pgm.py /tmp/chess-mid.pgm /tmp/chess-sel.pgm
 
 
-src/sprites.h: tools/slice_sprites.py spritesheet.png tactical_sprite_map_with_descriptions.json
-	$(PY) tools/slice_sprites.py
+# sprites.h is baked from the bold art in bold/ plus the patterns inside the
+# baker. The generated sheets are committed, so this rule needs no network.
+src/sprites.h: tools/bake_bold_sprites.py bold_sprite_sources.json \
+               bold/players.png bold/enemies.png bold/objects.png bold/drone.png \
+               tactical_sprite_map_with_descriptions.json
+	$(PY) tools/bake_bold_sprites.py
 
 xcom-host: src/xcom.c src/audio.c src/audio.h src/sprites.h $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
 	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/xcom.c src/audio.c $(ENGINE)/eink.c -lm
@@ -93,8 +97,14 @@ test: xcom-host
 	$(PY) tools/check_pgm.py /tmp/xcom-open.pgm /tmp/xcom-sel.pgm /tmp/xcom-mid.pgm
 	$(PY) tools/check_sound.py --sound sound
 
+# Every baked tile twice: raw 2-bit, and as it looks on the panel.
 preview: src/sprites.h
-	$(PY) tools/slice_sprites.py --preview /tmp/xcom-sprites.png
+	$(PY) tools/bake_bold_sprites.py --preview bold-preview.png
+
+# The old dithered look, kept only for comparison. Needs spritesheet.png and
+# writes to /tmp so it never overwrites the current src/sprites.h.
+preview-old:
+	$(PY) tools/slice_sprites.py --preview /tmp/xcom-sprites-old.png
 
 clean:
 	rm -f xcom-host xcom grabtest chess-host chess
