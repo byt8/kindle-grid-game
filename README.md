@@ -84,6 +84,16 @@ turns into speckle, and a soldier stops looking different from a crate. So:
 To redo the art: generate new sheets into `bold/`, point
 `bold_sprite_sources.json` at them, then `make preview && make test`.
 
+The Kindle keeps the last binary you pushed, so new art needs **both** steps:
+
+```bash
+make kindle && ./run-on-kindle.sh 192.168.0.66
+```
+
+Check what is really on a rendered screen (a sprite in the header is not proof it
+was drawn): `python3 tools/find_tile.py /tmp/xcom-open.pgm terrain_tiles/grass`,
+`tools/dump_sprite.py player_units/soldier`, `tools/dump_region.py FILE X Y`.
+
 The baker needs Pillow (`python3 -m pip install pillow`). That is a build-time
 tool on this PC only; nothing extra ships to the Kindle.
 
@@ -169,6 +179,10 @@ blanket`: lxinit then reboots into repair mode) and forces one white flush.
 ---
 
 ## When it goes wrong
+
+**The Kindle still shows the old sprites** — the device is running the binary from
+the last push. `make kindle`, then push again; rebuilding on this PC alone changes
+nothing on the panel.
 
 **`EVIOCGRAB refused: Resource busy`** — something still holds
 `/dev/input/event3`. The launcher handles the two usual culprits; if not, on the

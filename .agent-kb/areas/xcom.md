@@ -73,6 +73,12 @@ updated: 2026-10-31
 - Do not use `grep -E` on the Kindle: BusyBox 1.17 grep has no `-E`. Use `grep -e PAT -e PAT`.
 - Do not run the device binary with `--auto` expecting it to return before this change: it used to fall into the touch loop. `auto_turns >= 0` now skips that loop, which is what makes an on-device smoke test possible.
 
+## "It still shows the old sprites"
+- First suspect the device binary, not the art. `./xcom` is the ARM build actually pushed; if its mtime predates `src/sprites.h`, the panel is running yesterday's tiles. `make kindle` then `./run-on-kindle.sh IP`. Check mtimes first: `ls -l --time-style=+%H:%M:%S src/sprites.h xcom`.
+- Second suspect a stale screenshot: the `xcom-bold-*.png` files are only as new as the last `pgm2png` run over `/tmp/xcom-*.pgm`. Re-run `make test` (writes the dumps) then `pgm2png`.
+- Prove what was really drawn instead of eyeballing: `tools/find_tile.py FILE id` looks for the exact 40x40 sprite in a PGM; `tools/dump_sprite.py id` prints the header tile as ASCII; `tools/dump_region.py FILE X Y` prints a screen patch. Map geometry: `MAP_X 60`, `MAP_Y 36`, `TILE 40`, so tile (col,row) is at `60+40*col, 36+40*row`.
+- Unexplored tiles are filled solid black (fog), so a big black block at the top of a dump is the map, not broken art. Units also get a rim/HP bar drawn over the tile, so `find_tile.py` misses them by design — dump the region instead.
+
 ## Verified on hardware
 - Real fingertip taps work and the tap-to-pixel mapping is correct: a full soldier phase was played on the glass (moves, shots, end of turn) and the alien turn fired back. The "cannot go there" line is the normal refusal for a tap on an unreachable tile.
 - Second Kindle is `192.168.0.66`, same root ssh key as `.63`. `./run-on-kindle.sh 192.168.0.66` pushes, grabs touch, runs and restores.
