@@ -190,6 +190,33 @@ repainted over the game and the bar froze half-drawn — the "black blob".
   `kill -USR1 <pid of chess>` for the game's own canvas and your eyes for the
   panel.
 
+## The power button does not sleep the game (open, 2026-10-31)
+
+Reported: pressing power while chess runs does nothing.
+
+- **The button is not on evdev.** `/proc/bus/input/devices` has 4 nodes and none
+  of them is power: event0 WM8962 beep, event1 headset, event2 `whitney-button`
+  (the **Home** button, KEY 102), event3 zforce touch. powerd's own strings
+  point at **`/proc/whitney_button`** (plain read returns `whitney button is
+  unlocked` — no key data) and at `/sys/power/state`, plus lipc props
+  `powerButton`, `readyToSuspend`, `preventScreenSaver`, `deferSuspend`.
+- **The press reaches the hardware.** `dmesg | grep PWRON` shows
+  `KERNEL: I pmic: PWRON1 event:` on each press, and a boot line
+  `yoshibutton: can't send uevent, returned with error:-3` — the pmic driver
+  delivers the press as a **uevent**, not as an input key.
+- **Nothing suspends.** No `PM: suspend` line in dmesg after the presses, and
+  `powerd` stays `Powerd state: Active`.
+- `powerd` (pid 1127, job `powerd start on started lab126`, **survives** the
+  takeover) *does* run. Its sleep path is `SCREEN SAVER -> READY TO SUSPEND ->
+  suspended`, i.e. it expects pillowd to paint a screen saver first. The game
+  stops the `x` job, so `lab126_gui`, `framework`, `pillow` and `blanket` are
+  all `stop/waiting` — there is nobody to draw the screen saver.
+- So the game has to own this: detect the press and suspend itself
+  (`echo mem > /sys/power/state`), paint a sleep screen first so the press has
+  visible feedback, and force a full refresh on wake.
+- `tools/pw-watch.sh` is the probe: it logs uptime / whitney button / powerd
+  state / `/sys/power/state` once a second to `/tmp/pw.log` on the device.
+
 ## Next
 
 - Confirm on the panel that the new boot picture is what appears (it cannot be
