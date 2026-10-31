@@ -5,3 +5,4 @@ Read this before exploring. Then open at most three area files whose Summary or 
 | Area | File | Summary | Keywords |
 | --- | --- | --- | --- |
 | xcom | areas/xcom.md | One-mission turn-based fight in C for the Kindle Touch 600x800, drawn by the shared e-ink engine, sprites dithered from the sheet. | xcom, kindle, eink, sprites, touch, xcom-host, run-on-kindle |
+| chess | areas/chess.md | You are White on a Kindle Touch 600x800; DeepSeek plays Black over its HTTP API and taunts you. Rules, notation and drawing verified by --selftest and --fake-ai. | chess, deepseek, perft, api, curl, chess-host, run-chess-on-kindle |

@@ -2,6 +2,8 @@
 
 Newest first. One line per task. Current truth is in `areas/`, not here.
 
+- 2026-10-31 — chess — Chess against DeepSeek on the Kindle: full rule set with perft/kiwipete self-tests, tap-to-move board, one API question per move with a retry and a visible failure, `make chess-kindle` and `run-chess-on-kindle.sh`; `tools/kindle-run.sh` became game-generic. Waiting on a real API key.
+
 2026-10-31 — xcom — Added MANUAL.md and make_manual_audio.py for TTS listening
 
 - 2026-10-31 — xcom — The Kindle now talks: log lines are spoken word by word from 91 baked clips with shot/hit/miss/down/turn/win/lose effects; taps use the fast waveform instead of a full GC16 clean; `--auto` quits on the device; `make sound` bakes clips and `make test` fails if a word has none.
