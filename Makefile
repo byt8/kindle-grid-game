@@ -78,6 +78,13 @@ grabtest: tools/grabtest.c
 	    -o grabtest tools/grabtest.c -static -no-pie \
 	    && arm-linux-musleabi-strip grabtest'
 
+keyprobe: tools/keyprobe.c
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" -w /src kfb-build sh -c \
+	  'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -o keyprobe tools/keyprobe.c -static -no-pie \
+	    && arm-linux-musleabi-strip keyprobe'
+
 test: xcom-host
 	./xcom-host --selftest --no-takeover --seed 1
 	./xcom-host --no-takeover --seed 1 --dump /tmp/xcom-open.pgm

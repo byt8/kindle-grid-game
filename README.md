@@ -22,8 +22,11 @@ the board. Tap QUIT, then SURE, to give the screen back to the reader.
 
 **Power button:** puts the Kindle to sleep (screen says ASLEEP) and wakes it
 again with the position kept. Pressing power during the model's turn cancels
-that question and it is asked again after the wake. This is the game's own
-sleep — the stock `powerd` never gets that far once the game holds the panel.
+that question and it is asked again after the wake. The key is *not* an input
+device on this Kindle — no `/dev/input/eventN` ever sees it (measured with
+`tools/keyprobe.c`) — so the game watches the `PMIC_IRQ` counter in
+`/proc/interrupts` and sleeps the machine itself, which is why the stock
+`powerd` stays stopped while the game runs.
 
 **No Kindle, no key, on this PC:**
 ```
@@ -196,7 +199,10 @@ initctl stop kfbterm
 kill -9 $(pidof kfb)
 ```
 
-`sh /mnt/us/fbdaemon/restore-kindle.sh` gives the Kindle back.
+`sh /mnt/us/fbdaemon/restore-kindle.sh` gives the Kindle back — but kill the
+game first, or it keeps the panel: `kill $(pidof chess)`, then the restore, then
+`initctl stop kfbterm`. Stopping the workspace service can leave exactly that
+state (the game survives, the reader UI stays down).
 
 If the picture is fine but there is no sound, the launcher says why before it
 starts. To check the speaker by hand:

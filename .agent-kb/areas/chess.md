@@ -190,106 +190,79 @@ repainted over the game and the bar froze half-drawn — the "black blob".
   `kill -USR1 <pid of chess>` for the game's own canvas and your eyes for the
   panel.
 
-## The power button, and sleep (fixed, 2026-10-31)
+## The power button and sleep (working, confirmed on the panel 2026-10-31)
 
-Reported: pressing power while chess runs does nothing.
+**The key is not an input device.** All of this was measured with the game
+running, not inferred:
 
-**Probed with `tools/pw-watch.sh` and two real presses on the device:**
-`/proc/whitney_button` reads `whitney button is locked` for ~4 s per press (372
-unlocked vs 4 locked samples), and `powerd` does react — `Powerd state: Active`
--> `Screen Saver` for those seconds -> back to `Active`. It never goes further:
-`dmesg | grep -c suspend` was **0** after the presses, i.e. no `PM: suspend
-entry`. So powerd sees the press and stalls in Screen Saver waiting for pillowd
-to paint the screen saver, which the game has stopped. Nothing else on the
-device will suspend, so the game does it.
+- `tools/keyprobe.c` (Makefile `keyprobe`, deployed as `/mnt/us/keyprobe`)
+  watched event0..event4 through ~90 s of presses: **zero** key events on every
+  node, `event2` (`whitney-button`) included. event2 only ever carries the touch
+  codes (325 BTN_TOOL_FINGER, 330 BTN_TOUCH) that zforce also sends.
+- `/proc/whitney_button` never changed in 120 s of 10 Hz polling. It is the
+  screen-saver *lock* flag and reads "unlocked" through every press. (Old trap:
+  `"whitney button is unlocked"` contains `"locked"`.)
+- What a press does produce: one `KERNEL: I pmic: PWRON1 event:` kernel line and
+  **one bump of the `PMIC_IRQ` counter in `/proc/interrupts`** (152 log lines vs
+  153 interrupts, then every press moved it by 1-3).
 
-**The fix (in `src/chess.c`, all `#ifndef EK_HOST`):**
-- `pwr_down()` reads `/proc/whitney_button` and returns 1 while it says
-  `is locked`. Reading it does not consume the press: powerd still sees it.
-  **Trap, cost one build:** `"whitney button is unlocked"` contains `"locked"`,
-  so matching the word froze the game in its wait-for-release loop from the
-  moment it started (board on screen, taps dead). Match the phrase; `--selftest`
-  now covers both strings via `pwr_says_down()`.
-- Every wait on the key is bounded (`pwr_wait_up(max_ms)`) and reports on
-  stderr, so a key that never comes up cannot freeze the game.
-- A game hung in a blocking call never reaches its SIGTERM handler, so
-  `tools/kindle-run.sh` now escalates a leftover game to SIGKILL instead of
-  exiting with "the leftover game will not exit" and blocking every launch.
-- `pwr_poll()` in the device event loop turns a press into `sleep_now()`.
-- `sleep_now()`: waits for the key release, paints an ASLEEP screen
-  (`ek_force_full`), writes `mem` to `/sys/power/state` (the write returns on
-  wake), waits for the release of the waking press (otherwise the game goes
-  straight back to sleep), `ek_force_full` + `present()`, then rejoins wi-fi
-  with `chess-wifi.sh auto` if `wifi_status()` says it is gone.
-- A write failure to `/sys/power/state` is reported on the status line and in
-  stderr, never swallowed. The seconds asleep come from `/proc/uptime`
-  deltas in stderr (`chess: asleep for N s`), visible in `service_logs`.
-- `run_curl()` now waits in `select(2)` with a 200 ms timeout instead of a
-  blocking `read`, so a press during the model's turn is not swallowed: curl is
-  killed, `pwr_latch` is set, `play_ai()` returns -2 without retrying, the loop
-  sleeps, and after the wake asks the model again.
+So the game counts `PMIC_IRQ`. `pmic_irqs()` parses `/proc/interrupts` (sums the
+per-cpu columns, -1 when the line is missing); `pwr_poll()` compares it with
+`pwr_seen` and turns an increase into `sleep_now()`. `--selftest` checks the
+parse against synthetic lines, because getting it wrong costs a build and a trip
+to the device.
 
-**Devices:** two Kindles answer on the LAN — `.66` (serial B010260121322E2D,
-the Kindle Touch the game is built for) and `.63` (serial B011140822260CM1).
-`jailbreak-kindle/.kfb-secrets` sets `KINDLE_IP=192.168.0.63`, so a bare
-`./run-chess-on-kindle.sh` pushes to the **wrong** device. Always pass the
-address: `./run-chess-on-kindle.sh 192.168.0.66`. The workspace service
-`chess-on-kindle` does exactly that.
+- Stock behaviour is the proof the key works at all: with the reader UI up and
+  `powerd` running, a press shows the screensaver and stands the device by. That
+  is also why `powerd` must stay stopped while the game owns the panel - it
+  answers a press by bringing framework+x+blanket+pillowd back over the board.
+- `sleep_now()`: `pwr_settle(200)`, paint ASLEEP (`ek_force_full`), write `mem`
+  to `/sys/power/state` (the write returns on wake), log `asleep for N s` from
+  /proc/uptime, `pwr_settle(800)` so the waking press is not counted again,
+  `ek_force_full` + `present()`, then rejoin wi-fi with `chess-wifi.sh auto`
+  when `wifi_status()` says it is gone.
+- A press during the model's wait cancels the question: `run_curl()` waits in
+  `select(2)` with a 200 ms timeout, takes one `pwr_base` before the loop, and
+  kills curl when the counter moves.
+- A write failure to `/sys/power/state` shows on the status line and stderr and
+  is never swallowed.
 
-### Earlier findings that led here
+**Devices:** two Kindles answer on the LAN - `.66` (serial B010260121322E2D, the
+Touch the game is built for) and `.63`. `jailbreak-kindle/.kfb-secrets` sets
+`KINDLE_IP=192.168.0.63`, so always pass the address:
+`./run-chess-on-kindle.sh 192.168.0.66`. The workspace service `chess-on-kindle`
+does exactly that.
 
-- **The button is not on evdev.** `/proc/bus/input/devices` has 4 nodes and none
-  of them is power: event0 WM8962 beep, event1 headset, event2 `whitney-button`
-  (the **Home** button, KEY 102), event3 zforce touch. powerd's own strings
-  point at **`/proc/whitney_button`** (plain read returns `whitney button is
-  unlocked` — no key data) and at `/sys/power/state`, plus lipc props
-  `powerButton`, `readyToSuspend`, `preventScreenSaver`, `deferSuspend`.
-- **The press reaches the hardware.** `dmesg | grep PWRON` shows
-  `KERNEL: I pmic: PWRON1 event:` on each press, and a boot line
-  `yoshibutton: can't send uevent, returned with error:-3` — the pmic driver
-  delivers the press as a **uevent**, not as an input key.
-- **Nothing suspends.** No `PM: suspend` line in dmesg after the presses.
-- `powerd` (pid 1127, job `powerd start on started lab126`, **survives** the
-  takeover) *does* run. Its sleep path is `SCREEN SAVER -> READY TO SUSPEND ->
-  suspended`, i.e. it expects pillowd to paint a screen saver first. The game
-  stops the `x` job, so `lab126_gui`, `framework`, `pillow` and `blanket` are
-  all `stop/waiting` — there is nobody to draw the screen saver.
-- `tools/pw-watch.sh` is the probe: it logs uptime / whitney button / powerd
-  state / `/sys/power/state` once a second to `/tmp/pw.log` on the device.
+### Probes on the device
 
-## Next
+- `grep PMIC_IRQ /proc/interrupts` - the press counter, one bump per press.
+- `/mnt/us/keyprobe [seconds] [dev...]` - held key codes and EVIOCGKEY bits per
+  input device.
+- `tools/pw-watch.sh` - uptime / whitney_button / powerd state /
+  `/sys/power/state` once a second to `/tmp/pw.log`.
 
-- Confirm on the panel that the new boot picture is what appears (it cannot be
-  captured remotely).
-- Power button: code is in, the sleep screen and the wake are **not yet
-  confirmed on the panel** — still needs one press on the device.
-- The promotion picker exists (`draw_promo`/`do_promo`, taps at 1311) but has no
-  automated test; the tap test in `make chess-test` only covers select+move.
+### Trap: a stopped service can leave the game holding the panel
 
-## The screen mirror grabs the touch device (2025-10-31)
+Stopping the workspace service kills the ssh side; the game can survive, with
+`x`/`pillow`/`framework` all `stop/waiting` and `/mnt/us/grabtest` reporting
+`EVIOCGRAB refused: Resource busy`. Recovery, in this order:
+
+    kill $(pidof chess)                     # SIGTERM exits it
+    sh /mnt/us/fbdaemon/restore-kindle.sh   # UI, x, pillow, framework, powerd
+    /sbin/initctl stop kfbterm              # the mirror grabs touch
+    /mnt/us/grabtest                        # must say "grab OK"
+
+## The screen mirror grabs the touch device
 
 `kfbterm` (the kfb screen mirror) starts on `started lab126_gui` and EVIOCGRABs
 `/dev/input/event3`. While it is up the stock Kindle UI **draws but ignores
-every tap** -- it looks like a bricked device. It also makes the game's grab
-fail, so `kindle-run.sh` stops it at launch.
+every tap** - it looks like a bricked device. It also makes the game's grab
+fail, so `kindle-run.sh` stops it at launch. A reboot does not help: kfbterm
+respawns with the UI and grabs touch again.
 
-The trap: the launcher's `restore` restarts the mirror if it was running when
-the game started (`mirror_was=1`), so each launch/exit cycle keeps it alive and
-the reader UI stays dead to touch. Recovery is always:
+## Next
 
-    ssh root@KINDLE /sbin/initctl stop kfbterm     # then /mnt/us/grabtest -> "grab OK"
-
-A **reboot does not help**: kfbterm respawns with the UI and grabs touch again.
-
-## The power key
-
-`/proc/whitney_button` is the wrong source -- it reports whether the *screen
-saver has locked* the device, not whether the key is down, so it reads
-"unlocked" through every press. The key is its own input device:
-`N: Name="whitney-button"` -> `Handlers=kbd event2`, `EV=3` (EV_KEY), so read
-`KEY_POWER` (116, type 1) from `/dev/input/event2` in non-blocking mode.
-
-`powerd` reads the same key and answers a press with the Kindle's screen saver,
-and with the game holding the panel it brought framework+x+blanket+pillowd back
-over the board. The game stops powerd while it owns the screen;
-`kindle-run.sh`'s restore starts it again.
+- The promotion picker exists (`draw_promo`/`do_promo`, taps at 1311) but has no
+  automated test; the tap test in `make chess-test` only covers select+move.
+- Confirm on the panel that the new boot picture is what appears (it cannot be
+  captured remotely).

@@ -686,68 +686,69 @@ static int json_content(const char *body, char *out, size_t n) {
 }
 
 /* ---- the power button --------------------------------------------------
- * The power button is not a touch event and it is not on event2 or event3: it
- * is a one-line status file, /proc/whitney_button, that reads "whitney button
- * is locked" while the key is held and "... is unlocked" the rest of the time.
- * Turning that into a sleep is powerd's job. powerd is running here and does
- * react to the press -- probed on the device, its state goes Active -> Screen
- * Saver for a few seconds on every press -- but it never suspends: after
- * Screen Saver it waits for pillowd to paint the screen saver, and pillowd is
- * part of the reader UI the game deliberately stops. So the game does the rest
- * itself (see sleep_now() below).
+ * The power button is not an input device on this Kindle. Measured on the
+ * device: 90 s of presses and 120 s more produced *zero* events on every
+ * /dev/input/eventN, INCLUDING event2 -- "whitney-button", which only ever
+ * carries the touch codes. /proc/whitney_button is not the key either: it only
+ * ever says "unlocked", because it reports whether the screen saver has locked
+ * the machine, not whether the key is down.
+ *
+ * What a press does produce is one PMIC interrupt: the kernel log gains a
+ * "pmic: PWRON1 event" line and the PMIC_IRQ count in /proc/interrupts goes up
+ * by exactly one (152 log lines, 153 interrupts). So the game counts that.
+ *
+ * Counting works with powerd stopped, which is what the game wants: powerd
+ * answers a press with the Kindle's screen saver, and with the game holding the
+ * panel that brought the whole reader UI back over the board. So the game stops
+ * powerd (see main) and sleeps and wakes the machine itself.
  *
  * pwr_latch is set when a press has been seen and not yet acted on; the event
  * loop is the only place that acts on it.
  */
-#define PWR_STATE  "/sys/power/state"
+#define PWR_STATE      "/sys/power/state"
+#define PWR_INTERRUPTS "/proc/interrupts"
 
 static int pwr_latch;
+#ifndef EK_HOST
+static long pwr_seen = -1;      /* the PMIC count at the last look */
+#endif
 
-/* The power key is its own input device -- `whitney-button`, kernel event2 --
- * not part of the touch panel, so it can be read straight from evdev as
- * KEY_POWER. powerd reads the same key and answers it with the Kindle's
- * screensaver, which brings the whole reader UI back over the game; the game
- * therefore stops powerd while it owns the panel (see main) and the launcher
- * starts it again on exit.
+/* The total on the PMIC_IRQ line of a /proc/interrupts dump, or -1 when there
+ * is no such line. A line looks like
  *
- * /proc/whitney_button was the wrong source: it reports whether the screensaver
- * has *locked* the device, not whether the key is down, so it stayed "unlocked"
- * through every press.
- */
-#define PWR_KEY_DEV "/dev/input/event2"
-/* Raw evdev numbers, not <linux/input.h>: that header's BTN_* names collide
- * with this file's own (BTN_Y and friends). EV_KEY is 1, KEY_POWER is 116. */
-#define PWR_KEY_CODE 116
-#define EV_KEY_CODE  1
-
-/* struct input_event on this 32-bit device: two 32-bit time fields, the type
- * and code, then the value. */
-struct pwr_event {
-    int32_t  sec, usec;
-    uint16_t type, code;
-    int32_t  value;
-};
-
-static int pwr_fd = -1;
-static int pwr_held;
-
-/* Only a key event carrying KEY_POWER is the power button. */
-static int is_pwr_key(uint16_t type, uint16_t code) {
-    return type == EV_KEY_CODE && code == PWR_KEY_CODE;
+ *       296:        153           -  PMIC_IRQ
+ *
+ * i.e. the irq number, one column per cpu, then the name; "-" is a cpu that
+ * may not take it. Split out so --selftest can check it against real text. */
+static long pmic_irqs(const char *text) {
+    const char *line = NULL;
+    for (const char *p = text; p && *p; ) {
+        const char *e = strchr(p, '\n');
+        size_t len = e ? (size_t)(e - p) : strlen(p);
+        if (len >= 8 && !memcmp(p + len - 8, "PMIC_IRQ", 8)) line = p;
+        p = e ? e + 1 : NULL;
+    }
+    if (!line) return -1;
+    const char *p = strchr(line, ':');        /* past the irq number */
+    if (!p) return -1;
+    long total = 0;
+    for (p++;;) {
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p < '0' || *p > '9') break;      /* "-" or the end of the counts */
+        total += strtol(p, (char **)&p, 10);
+    }
+    return total;
 }
 
-/* 1 when the key is down, 0 when it is up, -1 when the device cannot be read. */
-static int pwr_down(void) {
-    if (pwr_fd < 0) {
-        pwr_fd = open(PWR_KEY_DEV, O_RDONLY | O_NONBLOCK);
-        if (pwr_fd < 0) return -1;
-    }
-    struct pwr_event ev;
-    while (read(pwr_fd, &ev, sizeof ev) == (ssize_t)sizeof ev) {
-        if (is_pwr_key(ev.type, ev.code))
-            pwr_held = ev.value != 0;      /* 1 down, 0 up, 2 repeat */
-    }
-    return pwr_held;
+/* PMIC interrupts counted so far, or -1 if the file cannot be read. */
+static long pwr_count(void) {
+    static char buf[16384];
+    FILE *f = fopen(PWR_INTERRUPTS, "r");
+    if (!f) return -1;
+    size_t n = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[n] = 0;
+    return pmic_irqs(buf);
 }
 
 /* Run curl with the JSON on its stdin and collect what it prints. */
@@ -793,10 +794,11 @@ static int run_curl(const char *json, char *out, size_t n, char *err, size_t en)
 
     /* Wait for the reply, but keep an eye on the power button: a press during
      * a three-minute wait must not be swallowed, and a reply is worthless if
-     * the machine is going to sleep. Watching the file rather than sitting in
-     * read() is what makes that possible. */
+     * the machine is going to sleep. Watching the PMIC counter rather than
+     * sitting in read() is what makes that possible. */
     size_t got = 0;
     int cancelled = 0;
+    long pwr_base = pwr_count();            /* a press adds to this */
     for (;;) {
         fd_set rd;
         FD_ZERO(&rd);
@@ -811,7 +813,8 @@ static int run_curl(const char *json, char *out, size_t n, char *err, size_t en)
             break;
         }
         if (sel == 0) {
-            if (pwr_down() == 1) { cancelled = 1; break; }
+            long now = pwr_count();
+            if (pwr_base >= 0 && now > pwr_base) { cancelled = 1; break; }
             continue;
         }
         ssize_t r = read(op[0], out + got, n - 1 - got);
@@ -1516,7 +1519,7 @@ static int wait_tap(int *x, int *y) {
             if (ek_ms() - hb > 5000) {
                 hb = ek_ms();
                 fprintf(stderr, "chess: heartbeat: waiting for a tap elsewhere");
-                fprintf(stderr, " (button %d)\n", pwr_down());
+                fprintf(stderr, " (pmic %ld)\n", pwr_count());
             }
         }
         while (ek_poll(&ev)) {
@@ -1753,15 +1756,12 @@ static int wifi_setup(void) {
  */
 
 #ifndef EK_HOST
-/* Wait for the key to come up, for at most max_ms. 1 if it came up. */
-static int pwr_wait_up(int max_ms) {
-    int waited = 0;
-    while (pwr_down() == 1) {
-        if (waited >= max_ms) return 0;
-        ek_sleep_ms(20);
-        waited += 20;
-    }
-    return 1;
+/* Settle: let any interrupt the last press is still adding land, then take the
+ * count as the new baseline, so that one press is never acted on twice. */
+static void pwr_settle(int ms) {
+    ek_sleep_ms(ms);
+    long now = pwr_count();
+    if (now >= 0) pwr_seen = now;
 }
 
 /* Seconds since boot, from /proc/uptime; -1 if it cannot be read. */
@@ -1803,8 +1803,7 @@ static void draw_sleep(void) {
 static void sleep_now(void) {
     char err[200] = "";
 
-    if (!pwr_wait_up(3000))
-        fprintf(stderr, "chess: power still held after 3 s; sleeping anyway\n");
+    pwr_settle(200);
 
     draw_sleep();
     ek_force_full();
@@ -1822,10 +1821,9 @@ static void sleep_now(void) {
     if (t0 >= 0 && t1 >= 0 && t1 > t0)
         fprintf(stderr, "chess: asleep for %.1f s\n", t1 - t0);
 
-    /* The press that woke the machine is still down for a moment; read it as
-     * a wake-up, not as a new press, or the game goes straight back to sleep. */
-    if (!pwr_wait_up(2000))
-        fprintf(stderr, "chess: power still held after waking\n");
+    /* The press that woke the machine added to the counter too; take that as
+     * the new baseline or the game goes straight back to sleep. */
+    pwr_settle(800);
 
     /* The panel still holds the sleep screen: one full pass wipes it. */
     ek_force_full();
@@ -1847,16 +1845,18 @@ static void sleep_now(void) {
 
 /* Called from the event loop. 1 when a press has just been handled. */
 static int pwr_poll(void) {
-    /* One line per change of state, so the log shows whether this is being
-     * polled at all and what the button file says. */
-    static int last = -2;
-    int now = pwr_down();
-    if (now != last) {
-        fprintf(stderr, "chess: power button %s\n",
-                now == 1 ? "down" : now == 0 ? "up" : "unreadable");
-        last = now;
+    long now = pwr_count();
+    if (now < 0) return 0;
+    if (pwr_seen < 0) {                      /* first look: just take a baseline */
+        pwr_seen = now;
+        fprintf(stderr, "chess: power button counter at %ld\n", now);
+        return 0;
     }
-    if (!pwr_latch && now == 1) pwr_latch = 1;
+    if (now > pwr_seen) {
+        fprintf(stderr, "chess: power button pressed (%ld -> %ld)\n", pwr_seen, now);
+        pwr_seen = now;
+        if (!pwr_latch) pwr_latch = 1;
+    }
     if (!pwr_latch) return 0;
     pwr_latch = 0;
     sleep_now();
@@ -2100,9 +2100,12 @@ static int selftest(void) {
     want(strcmp(san, "Nf3") == 0, 1, "g1f3 is Nf3");
 
     /* the power key: only KEY_POWER from the key device counts */
-    want(is_pwr_key(EV_KEY_CODE, PWR_KEY_CODE), 1, "the power key is recognised");
-    want(is_pwr_key(EV_KEY_CODE, 30), 0, "another key is not the power key");
-    want(is_pwr_key(3, PWR_KEY_CODE), 0, "a touch event is not the power key");
+    want((int)pmic_irqs(" 296:        153           -  PMIC_IRQ\n"), 153,
+         "the PMIC interrupt count is read");
+    want((int)pmic_irqs(" 296:  7  9  PMIC_IRQ\n"), 16,
+         "one column per cpu is summed");
+    want((int)pmic_irqs(" 296:        153           -  GPIO\n"), -1,
+         "no PMIC_IRQ line reads as -1");
 
     /* SAN of a castle and of a capture */
     {
@@ -2385,8 +2388,8 @@ int main(int argc, char **argv) {
             static uint32_t hb;
             if (ek_ms() - hb > 5000) {
                 hb = ek_ms();
-                fprintf(stderr, "chess: heartbeat: board loop, button %d\n",
-                        pwr_down());
+                fprintf(stderr, "chess: heartbeat: board loop, pmic %ld\n",
+                        pwr_count());
             }
         }
         while (ek_poll(&ev)) {
