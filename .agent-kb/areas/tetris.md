@@ -1,7 +1,8 @@
 # tetris
 
-Status: **working end to end** — builds, self-test clean, three screen dumps
-verified by the picture checker. Not yet pushed to a real Kindle.
+Status: **working on the device** — builds, self-test clean, three screen dumps
+verified by the picture checker, and it holds the screen on a real Kindle
+(192.168.0.66, pushed via `run-tetris-on-kindle.sh`).
 
 ## What it is
 
@@ -25,6 +26,16 @@ make tetris-kindle         # static ARM musl, docker kfb-build
 `make tetris-test` needs `tetris-host` built first (it calls `./tetris-host`).
 
 ## Facts learned the hard way
+
+- **The device build flashed and closed instantly ("it starts then closes").**
+  The real-Kindle loop is `while (running && !stop_req)`, but `static int
+  running;` was declared with no initializer and only ever set to `0` (QUIT), so
+  the loop was skipped entirely: the game took over the screen, `ek_close()` ran
+  and the launcher restored the reader — all within ~15s. Fixed with `running =
+  1;` in `reset_game()`. **`make tetris-test` cannot catch this**: the host build
+  compiles the `#ifdef EK_HOST` pipe/interactive path, never the `#else` device
+  event loop, so a device-loop bug is invisible to every host check. Verify any
+  change to the `#else` loop on the real Kindle.
 
 - **The auto-player silently played nothing.** `bot_move()` used `best` (the
   placement *score*) as its "found a placement" sentinel: `best = -1`, then

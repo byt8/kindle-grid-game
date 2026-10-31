@@ -479,6 +479,7 @@ static void reset_game(uint32_t seed) {
     level = 1;
     over = 0;
     quit_armed = 0;
+    running = 1;
     rng_state = seed ? seed : 1;
     bag_left = 0;
     next_pt = pick_piece();
