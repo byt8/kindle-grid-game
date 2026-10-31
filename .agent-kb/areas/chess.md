@@ -205,7 +205,16 @@ device will suspend, so the game does it.
 
 **The fix (in `src/chess.c`, all `#ifndef EK_HOST`):**
 - `pwr_down()` reads `/proc/whitney_button` and returns 1 while it says
-  `locked`. Reading it does not consume the press: powerd still sees it.
+  `is locked`. Reading it does not consume the press: powerd still sees it.
+  **Trap, cost one build:** `"whitney button is unlocked"` contains `"locked"`,
+  so matching the word froze the game in its wait-for-release loop from the
+  moment it started (board on screen, taps dead). Match the phrase; `--selftest`
+  now covers both strings via `pwr_says_down()`.
+- Every wait on the key is bounded (`pwr_wait_up(max_ms)`) and reports on
+  stderr, so a key that never comes up cannot freeze the game.
+- A game hung in a blocking call never reaches its SIGTERM handler, so
+  `tools/kindle-run.sh` now escalates a leftover game to SIGKILL instead of
+  exiting with "the leftover game will not exit" and blocking every launch.
 - `pwr_poll()` in the device event loop turns a press into `sleep_now()`.
 - `sleep_now()`: waits for the key release, paints an ASLEEP screen
   (`ek_force_full`), writes `mem` to `/sys/power/state` (the write returns on
