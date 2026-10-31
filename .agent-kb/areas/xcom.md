@@ -40,6 +40,7 @@ updated: 2026-10-31
 - One mission, FIRST CONTACT: 4 soldiers, 5 aliens, fog, cover, walk or run, shoot, overwatch, hunker, medic heal. Entry is `main` in `src/xcom.c`.
 - Device: `./run-on-kindle.sh [ip]`, then QUIT and SURE. That calls `ek_close`, which gives the book screen back. `make grabtest` builds the touch probe it pushes.
 - PC: `./xcom-host --selftest` and `--dump`. Pipe `tap X Y` lines before `--dump` to play a picture.
+- **Manual:** `MANUAL.md` is the full game rules in plain-spoken prose. `make manual` bakes `manual.wav` via the local TTS service (same one the game's sound clips use).
 
 ## Decisions
 - Use the existing engine instead of a new framebuffer driver. The update cost is the rect, and that code is already proven on this panel.

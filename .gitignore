@@ -17,3 +17,6 @@
 
 # Python bytecode from the tools
 __pycache__/
+
+# Generated audio (baked by make manual / make_manual_audio.py)
+*.wav

@@ -4,9 +4,14 @@ Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk. Tap an al
 
 ## Quick Start
 
-**1. Install and start it** (Kindle is already jailbroken with SSH, on your network):
+## Quick Start
 
+**Listen to the manual:**
 ```
+make manual   # bakes manual.wav from MANUAL.md using the same TTS the game uses
+```
+
+**1. Install and start it** (Kindle is already jailbroken with SSH, on your network):```
 ./run-on-kindle.sh                 # the Kindle at 192.168.0.63
 ./run-on-kindle.sh 192.168.0.64    # a different Kindle
 ```
@@ -35,6 +40,7 @@ Win = every alien down. Lose = every soldier down.
 make            # PC program, xcom-host
 make test       # plays a pretend game and checks pictures, words and clips
 make sound      # bakes the spoken words + effects into sound/ (needs TTS)
+make manual     # bakes MANUAL.md -> manual.wav (needs TTS)
 make kindle     # Kindle program, needs the kfb-build docker image
 ```
 
@@ -51,6 +57,8 @@ make kindle     # Kindle program, needs the kfb-build docker image
 | `sound/` | the baked clips, pushed to `/mnt/us/xcom-sound` |
 | `tools/kindle-run.sh` | on-device launcher: frees the screen, runs, restores |
 | `tools/grabtest.c` | "is the touch device free right now?" probe |
+| `MANUAL.md` | plain-prose game manual for TTS |
+| `tools/make_manual_audio.py` | bakes MANUAL.md into one spoken WAV |
 
 Sound is spliced from files, not generated on the device: `audio.c` turns a log line into lower-case words, a number into "for four", drops the bracketed roll, and streams the matching clips into `aplay`. A missing clip is reported by name, never swapped for something else.
 

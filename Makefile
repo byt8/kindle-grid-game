@@ -7,7 +7,7 @@ PY     ?= python3
 
 HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 
-.PHONY: all test kindle sound grabtest preview clean
+.PHONY: all test kindle sound manual grabtest preview clean
 
 all: xcom-host
 
@@ -21,6 +21,12 @@ xcom-host: src/xcom.c src/audio.c src/audio.h src/sprites.h $(ENGINE)/eink.c $(E
 # Needs the local TTS service; the device itself only reads the files.
 sound:
 	$(PY) tools/make_sound.py --out sound
+
+# Spoken manual for offline listening. Needs the same local TTS service.
+manual: manual.wav
+
+manual.wav: MANUAL.md tools/make_manual_audio.py
+	$(PY) tools/make_manual_audio.py
 
 # Static musl ARM, same shape as ekdemo. The engine lives outside this
 # folder, so the container gets its own mount at /jb.
