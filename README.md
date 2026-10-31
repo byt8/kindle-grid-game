@@ -24,9 +24,12 @@ the board. Tap QUIT, then SURE, to give the screen back to the reader.
 again with the position kept. Pressing power during the model's turn cancels
 that question and it is asked again after the wake. The key is *not* an input
 device on this Kindle — no `/dev/input/eventN` ever sees it (measured with
-`tools/keyprobe.c`) — so the game watches the `PMIC_IRQ` counter in
-`/proc/interrupts` and sleeps the machine itself, which is why the stock
-`powerd` stays stopped while the game runs.
+`tools/keyprobe.c`) — so the game reads the kernel log itself (`klogctl`) and
+looks for the new `PWRON1` record a press writes, then sleeps the machine. That
+is why the stock `powerd` stays stopped while the game runs. Neither
+`/proc/interrupts` (one press moved `PMIC_IRQ` by 94) nor a plain count of
+`PWRON1` lines can be trusted here; see `.agent-kb/areas/chess.md`.
+
 
 **No Kindle, no key, on this PC:**
 ```

@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/klog.h>
 #include <sys/select.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -693,63 +694,147 @@ static int json_content(const char *body, char *out, size_t n) {
  * ever says "unlocked", because it reports whether the screen saver has locked
  * the machine, not whether the key is down.
  *
- * What a press does produce is one PMIC interrupt: the kernel log gains a
- * "pmic: PWRON1 event" line and the PMIC_IRQ count in /proc/interrupts goes up
- * by exactly one (152 log lines, 153 interrupts). So the game counts that.
+ * What a press does produce is one `pmic: PWRON1 event` line in the kernel log,
+ * readable from /dev/kmsg, and a bump of PMIC_IRQ in /proc/interrupts.
  *
- * Counting works with powerd stopped, which is what the game wants: powerd
- * answers a press with the Kindle's screen saver, and with the game holding the
- * panel that brought the whole reader UI back over the board. So the game stops
- * powerd (see main) and sleeps and wakes the machine itself.
+ * The game reads /dev/kmsg, not the PMIC_IRQ counter, because that counter
+ * counts *every* power-chip interrupt -- charger, RTC, USB, and the wake from
+ * suspend itself. Using it put the game to sleep with nobody touching it. The
+ * PMIC_IRQ line is still handy as a human check: one bump per press.
+ *
+ * Reading the log works with powerd stopped, which is what the game wants:
+ * powerd answers a press with the Kindle's screen saver, and with the game
+ * holding the panel that brought the whole reader UI back over the board. So the
+ * game stops powerd (see main) and sleeps and wakes the machine itself.
  *
  * pwr_latch is set when a press has been seen and not yet acted on; the event
  * loop is the only place that acts on it.
  */
-#define PWR_STATE      "/sys/power/state"
-#define PWR_INTERRUPTS "/proc/interrupts"
+#define PWR_STATE "/sys/power/state"
+
+/* The kernel log, reached the way dmesg reaches it. This kernel is 2.6.31: it has
+ * a /dev/kmsg node but no devkmsg driver behind it, so every read of that node
+ * fails with EINVAL (tools/kmsgprobe.c shows this). klogctl(READ_ALL) reads the
+ * ring buffer instead and, unlike /proc/kmsg, does not consume it.
+ */
+#define PWR_LOG_READ_ALL 3
+#define PWR_LOG_SIZE     10
+#define PWR_LOG_MAX      (256 * 1024)
+#define PWR_LOG_EVERY_MS 150      /* reading 100+ KB is not free on this arm */
+
+static void set_status(const char *fmt, ...);   /* defined further down */
 
 static int pwr_latch;
-#ifndef EK_HOST
-static long pwr_seen = -1;      /* the PMIC count at the last look */
-#endif
 
-/* The total on the PMIC_IRQ line of a /proc/interrupts dump, or -1 when there
- * is no such line. A line looks like
- *
- *       296:        153           -  PMIC_IRQ
- *
- * i.e. the irq number, one column per cpu, then the name; "-" is a cpu that
- * may not take it. Split out so --selftest can check it against real text. */
-static long pmic_irqs(const char *text) {
-    const char *line = NULL;
-    for (const char *p = text; p && *p; ) {
-        const char *e = strchr(p, '\n');
-        size_t len = e ? (size_t)(e - p) : strlen(p);
-        if (len >= 8 && !memcmp(p + len - 8, "PMIC_IRQ", 8)) line = p;
-        p = e ? e + 1 : NULL;
-    }
-    if (!line) return -1;
-    const char *p = strchr(line, ':');        /* past the irq number */
-    if (!p) return -1;
-    long total = 0;
-    for (p++;;) {
-        while (*p == ' ' || *p == '\t') p++;
-        if (*p < '0' || *p > '9') break;      /* "-" or the end of the counts */
-        total += strtol(p, (char **)&p, 10);
-    }
-    return total;
+/* How many power-button records a run of kernel log text holds. One press
+ * writes `pmic: PWRON1 event`; nothing else in this kernel says PWRON1, which is
+ * why PMIC_IRQ (which counts charger, RTC, USB and the wake from suspend too)
+ * is not used. Split out so --selftest can check it against real text. */
+static int count_pwr_records(const char *text) {
+    int n = 0;
+    for (const char *p = strstr(text, "PWRON1"); p; p = strstr(p + 6, "PWRON1")) n++;
+    return n;
 }
 
-/* PMIC interrupts counted so far, or -1 if the file cannot be read. */
-static long pwr_count(void) {
-    static char buf[16384];
-    FILE *f = fopen(PWR_INTERRUPTS, "r");
-    if (!f) return -1;
-    size_t n = fread(buf, 1, sizeof buf - 1, f);
-    fclose(f);
-    buf[n] = 0;
-    return pmic_irqs(buf);
+/* How many bytes were written to the log between two looks. The buffer is a
+ * fixed size ring that is always full, so a new record pushes the oldest bytes
+ * out of the front: the tail of the older copy reappears earlier in the newer
+ * one, and the distance it moved is exactly how much was written. -1 when it
+ * moved further than the probe can see.
+ *
+ * Split out so --selftest can check it against synthetic buffers. */
+static int pwr_log_grew(const char *prev, const char *cur, int len) {
+    const int probe = 128;
+    if (len <= probe) return -1;
+    for (int p = len - probe; p >= 0; p--)
+        if (!memcmp(cur + p, prev + len - probe, (size_t)probe)) return len - probe - p;
+    return -1;
 }
+
+#ifdef EK_HOST
+/* A desktop has no Kindle power chip; the tests and the fake-input harness never
+ * need it. This is a dev-only build, not the game that runs on the device. */
+static int pwr_presses(void) { return 0; }
+__attribute__((unused)) static void pwr_drain(int ms) { (void)ms; }
+#else
+/* Two copies of the ring buffer, so "what was there last time" is free. */
+static char    *pwr_log;
+static char    *pwr_log_prev;
+static int      pwr_log_len;
+static int      pwr_log_had = -1;      /* PWRON1 lines in it at the last look */
+static uint32_t pwr_log_at;            /* ek_ms of the last look */
+static int      pwr_log_broke;         /* already complained about the log */
+
+static int pwr_log_size(void) {
+    if (pwr_log_len) return pwr_log_len;
+    int n = klogctl(PWR_LOG_SIZE, NULL, 0);
+    if (n <= 0 || n > PWR_LOG_MAX) {
+        if (!pwr_log_broke++) {
+            fprintf(stderr, "chess: no power button: cannot size the kernel log: %s\n",
+                    strerror(errno));
+            set_status("no power button - %s", strerror(errno));
+        }
+        return -1;
+    }
+    pwr_log = malloc((size_t)n + 2);
+    pwr_log_prev = malloc((size_t)n + 2);
+    if (!pwr_log || !pwr_log_prev) {
+        fprintf(stderr, "chess: out of memory reading the kernel log\n");
+        return -1;
+    }
+    pwr_log_len = n;
+    return n;
+}
+
+/* How many presses have arrived since the last call; -1 when the log cannot be
+ * read at all. The read is rate limited, so a press is noticed within 150 ms.
+ *
+ * Only the bytes written since the last look are examined, so a record that
+ * scrolls out of the ring can never look like a press and can never hide one --
+ * both of which a plain count of PWRON1 lines in the buffer would do, because
+ * this buffer turns over in a few minutes of the device's own USB chatter. */
+static int pwr_presses(void) {
+    int len = pwr_log_size();
+    if (len < 0) return -1;
+    uint32_t now = ek_ms();
+    if (pwr_log_at && now - pwr_log_at < PWR_LOG_EVERY_MS) return 0;
+    pwr_log_at = now ? now : 1;
+
+    int n = klogctl(PWR_LOG_READ_ALL, pwr_log, len);
+    if (n < 0) {
+        if (!pwr_log_broke++) {
+            fprintf(stderr, "chess: no power button: cannot read the kernel log: %s\n",
+                    strerror(errno));
+            set_status("no power button - %s", strerror(errno));
+        }
+        return -1;
+    }
+    pwr_log[n] = 0;
+    int had = count_pwr_records(pwr_log);
+    int hits = 0;
+    int grew = pwr_log_had < 0 ? -1 : pwr_log_grew(pwr_log_prev, pwr_log, n);
+    if (grew > 0)
+        hits = count_pwr_records(pwr_log + n - grew);
+    else if (grew < 0 && pwr_log_had >= 0 && had > pwr_log_had)
+        /* Lost the overlap -- the log turned over faster than it could be read.
+         * Counting cannot invent a press, so all this can do is miss one. */
+        hits = had - pwr_log_had;
+    pwr_log_had = had;
+
+    char *swap = pwr_log_prev;             /* keep this look for the next one */
+    pwr_log_prev = pwr_log;
+    pwr_log = swap;
+    return hits;
+}
+
+/* Let anything the press is still writing land, then throw it away: the press
+ * that woke the machine must not count as a new one. */
+static void pwr_drain(int ms) {
+    ek_sleep_ms(ms);
+    pwr_log_at = 0;                      /* ignore the rate limit */
+    while (pwr_presses() > 0) { }
+}
+#endif  /* EK_HOST */
 
 /* Run curl with the JSON on its stdin and collect what it prints. */
 static int run_curl(const char *json, char *out, size_t n, char *err, size_t en) {
@@ -798,7 +883,6 @@ static int run_curl(const char *json, char *out, size_t n, char *err, size_t en)
      * sitting in read() is what makes that possible. */
     size_t got = 0;
     int cancelled = 0;
-    long pwr_base = pwr_count();            /* a press adds to this */
     for (;;) {
         fd_set rd;
         FD_ZERO(&rd);
@@ -813,8 +897,7 @@ static int run_curl(const char *json, char *out, size_t n, char *err, size_t en)
             break;
         }
         if (sel == 0) {
-            long now = pwr_count();
-            if (pwr_base >= 0 && now > pwr_base) { cancelled = 1; break; }
+            if (pwr_presses() != 0) { cancelled = 1; break; }
             continue;
         }
         ssize_t r = read(op[0], out + got, n - 1 - got);
@@ -1519,7 +1602,8 @@ static int wait_tap(int *x, int *y) {
             if (ek_ms() - hb > 5000) {
                 hb = ek_ms();
                 fprintf(stderr, "chess: heartbeat: waiting for a tap elsewhere");
-                fprintf(stderr, " (pmic %ld)\n", pwr_count());
+                fprintf(stderr, " (power log %s)\n",
+                        pwr_presses() < 0 ? "unreadable" : "ok");
             }
         }
         while (ek_poll(&ev)) {
@@ -1756,13 +1840,6 @@ static int wifi_setup(void) {
  */
 
 #ifndef EK_HOST
-/* Settle: let any interrupt the last press is still adding land, then take the
- * count as the new baseline, so that one press is never acted on twice. */
-static void pwr_settle(int ms) {
-    ek_sleep_ms(ms);
-    long now = pwr_count();
-    if (now >= 0) pwr_seen = now;
-}
 
 /* Seconds since boot, from /proc/uptime; -1 if it cannot be read. */
 static double up_secs(void) {
@@ -1803,7 +1880,7 @@ static void draw_sleep(void) {
 static void sleep_now(void) {
     char err[200] = "";
 
-    pwr_settle(200);
+    pwr_drain(200);
 
     draw_sleep();
     ek_force_full();
@@ -1821,9 +1898,9 @@ static void sleep_now(void) {
     if (t0 >= 0 && t1 >= 0 && t1 > t0)
         fprintf(stderr, "chess: asleep for %.1f s\n", t1 - t0);
 
-    /* The press that woke the machine added to the counter too; take that as
-     * the new baseline or the game goes straight back to sleep. */
-    pwr_settle(800);
+    /* The press that woke the machine wrote to the log too; throw that away or
+     * the game goes straight back to sleep. */
+    pwr_drain(800);
 
     /* The panel still holds the sleep screen: one full pass wipes it. */
     ek_force_full();
@@ -1845,18 +1922,12 @@ static void sleep_now(void) {
 
 /* Called from the event loop. 1 when a press has just been handled. */
 static int pwr_poll(void) {
-    long now = pwr_count();
-    if (now < 0) return 0;
-    if (pwr_seen < 0) {                      /* first look: just take a baseline */
-        pwr_seen = now;
-        fprintf(stderr, "chess: power button counter at %ld\n", now);
-        return 0;
-    }
-    if (now > pwr_seen) {
-        fprintf(stderr, "chess: power button pressed (%ld -> %ld)\n", pwr_seen, now);
-        pwr_seen = now;
-        if (!pwr_latch) pwr_latch = 1;
-    }
+    int hits = pwr_presses();
+    if (hits > 0) {
+        fprintf(stderr, "chess: power button pressed\n");
+        pwr_latch = 1;
+    } else if (hits < 0)
+        return 0;                            /* already reported: no log, no key */
     if (!pwr_latch) return 0;
     pwr_latch = 0;
     sleep_now();
@@ -2100,12 +2171,32 @@ static int selftest(void) {
     want(strcmp(san, "Nf3") == 0, 1, "g1f3 is Nf3");
 
     /* the power key: only KEY_POWER from the key device counts */
-    want((int)pmic_irqs(" 296:        153           -  PMIC_IRQ\n"), 153,
-         "the PMIC interrupt count is read");
-    want((int)pmic_irqs(" 296:  7  9  PMIC_IRQ\n"), 16,
-         "one column per cpu is summed");
-    want((int)pmic_irqs(" 296:        153           -  GPIO\n"), -1,
-         "no PMIC_IRQ line reads as -1");
+    want(count_pwr_records("<6>pmic: PWRON1 event\n<6>pmic: PWRON1 release\n"), 2,
+         "both records of one press are counted");
+    want(count_pwr_records("<6>pmic: CHGINS event\n<6>pmic: PWRON2 event\n"), 0,
+         "charger and other pmic lines are not the button");
+    want(count_pwr_records("<7>whitney-button: unknown key\n"), 0,
+         "another kernel record is not the power button");
+    {
+        /* A ring buffer turning over: 300 bytes of old text, new text appended,
+         * the oldest bytes dropped. pwr_log_grew must report exactly the number
+         * of bytes written, and only those bytes may be searched for a press. */
+        static char prev[1024], cur[1024];
+        memset(prev, 'x', sizeof prev);
+        memcpy(prev + 400, "<6>pmic: PWRON1 event\n", 22);
+        memcpy(cur, prev + 300, 700);                       /* dropped 300 */
+        memcpy(cur + 700, "<6>usb 1-1: new high speed USB device\n", 37);
+        int grew = pwr_log_grew(prev, cur, 1000);
+        want(grew, 300, "the log says exactly how many bytes it grew by");
+        want(count_pwr_records(cur + 1000 - grew), 0,
+             "a press from before the last look is not a new press");
+        memcpy(prev, cur, 1000);
+        memcpy(cur, prev + 100, 900);                        /* dropped 100 */
+        memcpy(cur + 900, "<6>pmic: PWRON1 event\n", 22);
+        grew = pwr_log_grew(prev, cur, 1000);
+        want(grew, 100, "a press that scrolls an old line out still counts");
+        want(count_pwr_records(cur + 1000 - grew), 1, "the new press is found");
+    }
 
     /* SAN of a castle and of a capture */
     {
@@ -2388,8 +2479,7 @@ int main(int argc, char **argv) {
             static uint32_t hb;
             if (ek_ms() - hb > 5000) {
                 hb = ek_ms();
-                fprintf(stderr, "chess: heartbeat: board loop, pmic %ld\n",
-                        pwr_count());
+                fprintf(stderr, "chess: heartbeat: board loop\n");
             }
         }
         while (ek_poll(&ev)) {

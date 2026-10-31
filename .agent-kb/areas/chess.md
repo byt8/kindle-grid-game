@@ -118,6 +118,13 @@ screen with TRY AGAIN / OTHER NETWORKS). Joining is shelled out to
 The existing runner restores the reader on exit, so GIVE UP on the board is the
 way out and a crash still leaves a usable Kindle. Remove the file to undo.
 
+- **A quit relaunches the game.** The job is `start on started lab126_gui`, and
+  giving the screen back starts `framework`/`lab126_gui` again -- which starts
+  the job again. So tap QUIT then SURE and the Kindle flashes its splash and
+  comes back to a fresh board: not a crash, by design on a gift unit. A game
+  that ends with `chess-run: game exited rc=0` and no message of its own is a
+  quit, not a fault; look for the tap, not for a bug.
+
 **Verified on a real reboot** (2026-10-31): `/mnt/us/chess-boot.log` reads
 `wifi up after 10s … starting the game`, `pidof chess` returns a pid, `kfbterm`
 and `framework` are `stop/waiting`, and `kill -USR1` gives a live board.
@@ -202,28 +209,45 @@ running, not inferred:
 - `/proc/whitney_button` never changed in 120 s of 10 Hz polling. It is the
   screen-saver *lock* flag and reads "unlocked" through every press. (Old trap:
   `"whitney button is unlocked"` contains `"locked"`.)
-- What a press does produce: one `KERNEL: I pmic: PWRON1 event:` kernel line and
-  **one bump of the `PMIC_IRQ` counter in `/proc/interrupts`** (152 log lines vs
-  153 interrupts, then every press moved it by 1-3).
+- What a press does produce: one `KERNEL: I pmic: PWRON1 event:` kernel line.
+- Two counters that look right and are not:
+  - `PMIC_IRQ` in `/proc/interrupts` counts **every** power-chip interrupt -
+    charger, RTC, USB wake, the wake from suspend itself. Measured 2026-10-31:
+    94 bumps for one press, and the old build logged
+    `power button pressed (180 -> 181)` with nobody touching the device, so the
+    game slept whenever it felt like it. **Do not use it.**
+  - A plain *count* of `PWRON1` lines in the kernel log. The ring buffer is only
+    16 KB and this device fills it with USB chatter, so a press whose line
+    arrives as an older one scrolls out leaves the count unchanged - and a
+    saturated buffer then hides every press. Measured: the buffer held exactly 5
+    `PWRON1` lines while its whole 16 KB turned over in minutes.
 
-So the game counts `PMIC_IRQ`. `pmic_irqs()` parses `/proc/interrupts` (sums the
-per-cpu columns, -1 when the line is missing); `pwr_poll()` compares it with
-`pwr_seen` and turns an increase into `sleep_now()`. `--selftest` checks the
-parse against synthetic lines, because getting it wrong costs a build and a trip
-to the device.
+How the code finds a press now (`pwr_presses()`, `pwr_log_grew()`):
+`klogctl(SIZE_BUFFER)` then `klogctl(READ_ALL)` 150 ms apart into two buffers;
+`pwr_log_grew()` finds where the older copy's last 128 bytes now sit in the
+newer one, which is exactly how many bytes were written in between, and only
+those bytes are searched for `PWRON1`. Scrolling out can neither invent a press
+nor hide one. `--selftest` covers both, with synthetic buffers that shift by a
+known amount.
+
+**`/dev/kmsg` does not exist on this kernel** (2.6.31, no devkmsg driver): plain
+read, `SEEK_END`, `SEEK_DATA` and a 128-byte buffer all fail `EINVAL`, proven by
+`tools/kmsgprobe.c`. `klogctl` is the only way in. `klogctl(2)` (the old
+`/proc/kmsg` read) is **not** used: it advances the shared `log_start`, so the
+game would eat the device's `dmesg` and destroy the evidence of its own waking.
 
 - Stock behaviour is the proof the key works at all: with the reader UI up and
   `powerd` running, a press shows the screensaver and stands the device by. That
   is also why `powerd` must stay stopped while the game owns the panel - it
   answers a press by bringing framework+x+blanket+pillowd back over the board.
-- `sleep_now()`: `pwr_settle(200)`, paint ASLEEP (`ek_force_full`), write `mem`
+- `sleep_now()`: `pwr_drain(200)`, paint ASLEEP (`ek_force_full`), write `mem`
   to `/sys/power/state` (the write returns on wake), log `asleep for N s` from
-  /proc/uptime, `pwr_settle(800)` so the waking press is not counted again,
+  /proc/uptime, `pwr_drain(800)` so the waking press is not counted again,
   `ek_force_full` + `present()`, then rejoin wi-fi with `chess-wifi.sh auto`
   when `wifi_status()` says it is gone.
 - A press during the model's wait cancels the question: `run_curl()` waits in
-  `select(2)` with a 200 ms timeout, takes one `pwr_base` before the loop, and
-  kills curl when the counter moves.
+  `select(2)` with a 200 ms timeout and kills curl when `pwr_presses()` reports
+  anything at all.
 - A write failure to `/sys/power/state` shows on the status line and stderr and
   is never swallowed.
 
@@ -235,7 +259,10 @@ does exactly that.
 
 ### Probes on the device
 
-- `grep PMIC_IRQ /proc/interrupts` - the press counter, one bump per press.
+- `grep PMIC_IRQ /proc/interrupts` - **not** a press counter (see above). It is
+  only useful as a sanity number.
+- `dmesg | grep -c PWRON1` - how many press records the 16 KB log still holds;
+  a new press makes the last one appear at the tail.
 - `/mnt/us/keyprobe [seconds] [dev...]` - held key codes and EVIOCGKEY bits per
   input device.
 - `tools/pw-watch.sh` - uptime / whitney_button / powerd state /
