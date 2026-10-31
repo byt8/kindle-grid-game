@@ -50,6 +50,9 @@ updated: 2026-10-31
 - Do not put the user@host after the remote command in an `ssh` line: `ssh` takes the first bare argument as the hostname and dies with `hostname contains invalid characters`.
 - Do not trust `set -e` behind a pipe: `./run-on-kindle.sh | tail` hides its exit status. Test by running it plain.
 
+## Verified on hardware
+- Real fingertip taps work and the tap-to-pixel mapping is correct: a full soldier phase was played on the glass (moves, shots, end of turn) and the alien turn fired back. The "cannot go there" line is the normal refusal for a tap on an unreachable tile.
+- Second Kindle is `192.168.0.66`, same root ssh key as `.63`. `./run-on-kindle.sh 192.168.0.66` pushes, grabs touch, runs and restores.
+
 ## Open
-- A real finger on the glass is still not verified. The grab succeeds and host taps pass; the tap-to-pixel mapping on the panel is unconfirmed.
-- The second Kindle's IP is unknown. `run-on-kindle.sh <ip>` takes it, but the address and whether the same ssh key works are untested.
+- Nothing blocking. The game needs only a LAN, not the internet.
