@@ -56,3 +56,8 @@ updated: 2026-10-31
 
 ## Open
 - Nothing blocking. The game needs only a LAN, not the internet.
+
+## One unexplained kill (watch)
+- On 2026-10-31 the game was `Killed` (rc=137) a few seconds after `seed` on `.66`, immediately after a previous session had just restored X/`cvm`. Not reproducible: the next launch ran normally for the whole session.
+- Ruled out: no OOM / `lowmemorykiller` line in dmesg (the ring is only 329 lines but `grep -i oom` and `-i killed` are empty), no `xcom` mention, and `watchdog.log` shows only "framework running, nothing to do" (so `kfb-watchdog.sh` did not run `restore-kindle.sh` under us). `restore-kindle.sh` only `killall`s `cvm` and `kfb`, never `xcom`.
+- If it returns: suspect a race with the previous session's restore still finishing (`cvm` starting) rather than anything in our scripts. Catch it with `dmesg | grep -i kill` on the device the moment it happens.
