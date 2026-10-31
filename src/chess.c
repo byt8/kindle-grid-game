@@ -2003,6 +2003,15 @@ int main(int argc, char **argv) {
     ek_ghost(4, 30);
     ek_policy(180, 6, 35);
 
+    /* One forced full-panel white pass before anything is drawn. E-ink keeps
+     * the last image, and the framework's boot screen (splash + progress bar)
+     * is still on the glass when the game takes over; the game's partial
+     * updates would never touch those pixels, so the half-drawn bar stayed as
+     * a black blob over the board. A full-mode GC16 wipes the glass properly. */
+    ek_clear(EK_PAPER);
+    ek_force_full();
+    ek_flush();
+
     int rc = 0;
     new_game();
 

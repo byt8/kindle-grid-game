@@ -43,8 +43,9 @@ fresh unit the only place to join a network is the game's own Wi-Fi screen.
 Tapping GIVE UP ends it and the reader comes back — that exit is deliberate, it
 is the only way out.
 
-What it did is written to `/mnt/us/chess-boot.log` (`wifi up after 10s` …
-`starting the game`). Read it when a boot does not do what you expect:
+What it did is written to `/mnt/us/chess-boot.log` (`killing the boot splash …`,
+`wifi up after 10s` … `starting the game`). Read it when a boot does not do what
+you expect:
 
 ```
 cat /mnt/us/chess-boot.log
@@ -52,25 +53,32 @@ cat /mnt/us/chess-boot.log
 
 Undo: `mntroot rw; rm /etc/upstart/chess.conf; mntroot ro`.
 
-### Change the boot picture
+### Change the boot picture (and drop the progress bar)
 
-The Kindle shows `/var/local/blanket/low_level_screens/images/splash.png` while
-it starts. That file is a symlink into the read-only root, and `/var/local` is a
-writable partition, so the replacement is just a real file in its place — the
-root filesystem is never opened for writing.
+The process that paints the start-up picture is `blanket` (started by the `x` job
+as `lxinit blanket -t "splash screensaver langpicker"`). It reads
+**`/opt/amazon/low_level_screens/600x800/splash.png`** — the copy in
+`/var/local/blanket/...` is not what you see at boot. It also paints the boot
+progress bar, and nothing stops it when the framework is stopped, so a bar
+frozen halfway used to sit on top of the game. Both problems are now handled:
+`tools/chess-boot.conf` kills `blanket` a few seconds into boot (leaving the
+splash picture it already painted on the glass) and `chess.c` does one forced
+full-panel white flush before its first paint.
 
 ```
 python3 tools/make_splash.py --logo ~/aijly.com/static/logo.png --out kindle-splash.png
 cat kindle-splash.png | ssh root@192.168.0.66 '
-  d=/var/local/blanket/low_level_screens/images
-  [ -L $d/splash.png ] && mv $d/splash.png $d/splash.png.orig-symlink
-  cat > $d/splash.png; chmod 644 $d/splash.png'
+  /usr/sbin/mntroot rw
+  cp /opt/amazon/low_level_screens/600x800/splash.png /mnt/us/splash-amazon-orig.png
+  cat > /opt/amazon/low_level_screens/600x800/splash.png
+  sync; /usr/sbin/mntroot ro'
 ```
 
 The image must be a 600x800 **8-bit greyscale** PNG (colour type 0, no alpha) or
-the framework draws nothing. `tools/make_splash.py` crops the logo, centres it on
-white and writes exactly that; `--preview` prints it as text first. Undo:
-`mv splash.png.orig-symlink splash.png`.
+it draws nothing. `tools/make_splash.py` crops the logo, centres it on white and
+writes exactly that; `--preview` prints it as text first. Undo:
+`cp /mnt/us/splash-amazon-orig.png /opt/amazon/low_level_screens/600x800/splash.png`
+(with `mntroot rw`/`ro` around it).
 
 ### Wi-fi without the Kindle UI
 

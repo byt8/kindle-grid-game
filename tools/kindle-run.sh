@@ -81,6 +81,28 @@ if [ -n "$(pidof kfb 2>/dev/null || true)" ]; then
     fi
 fi
 
+# 2b. The boot splash process. `blanket` (started by the `x` job as
+#     `lxinit blanket -t "splash screensaver langpicker"`) draws the boot splash
+#     AND the boot progress bar straight onto /dev/fb0. Stopping `framework`
+#     does not stop it: it keeps repainting its splash surface over the game and
+#     the progress bar freezes half-drawn, which is the black blob users see on
+#     top of the board. Nothing respawns it (the x job only kills it), so a
+#     plain SIGKILL is enough; the picture it already painted stays on the glass
+#     until the game's first full white flush.
+if [ -n "$(pidof blanket 2>/dev/null || true)" ]; then
+    say "killing the boot splash (pid $(pidof blanket)) so it cannot draw over the game"
+    killall -9 blanket 2>/dev/null
+    i=0
+    while [ -n "$(pidof blanket 2>/dev/null || true)" ] && [ $i -lt 10 ]; do
+        i=$((i + 1))
+        sleep 1
+    done
+    if [ -n "$(pidof blanket 2>/dev/null || true)" ]; then
+        say "WARNING: the boot splash (pid $(pidof blanket)) will not die; it may"
+        say "         draw its progress bar over the game"
+    fi
+fi
+
 # 3. Prove the touch device is free before drawing anything. A refusal here is
 #    a hard stop: running anyway gives a game whose screen responds to nothing.
 if [ ! -x /mnt/us/grabtest ]; then

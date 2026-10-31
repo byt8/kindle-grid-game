@@ -144,10 +144,12 @@ and `framework` are `stop/waiting`, and `kill -USR1` gives a live board.
 
 ## The boot picture
 
-Shown at start from `/var/local/blanket/low_level_screens/images/splash.png`, a
-symlink into the read-only root. `/var/local` (mmcblk0p3, ext3) is writable, so
-the swap is `mv splash.png splash.png.orig-symlink` then a real file in its
-place — no `mntroot` involved. `tools/make_splash.py` builds it.
+**The file that is actually shown is `/opt/amazon/low_level_screens/600x800/splash.png`**
+(rootfs: needs `mntroot rw` / `cp` / `sync` / `mntroot ro`). The copy in
+`/var/local/blanket/low_level_screens/images/` is *not* what paints at boot —
+replacing it changed nothing on the glass, which is how this was found.
+`tools/make_splash.py` builds the image; the stock original is backed up to
+`/mnt/us/splash-amazon-orig.png`.
 
 - **The format is not negotiable**: 600x800, PNG, bit depth 8, colour type **0**
   (greyscale), no alpha. The stock file is exactly that; anything else (RGBA,
@@ -159,14 +161,32 @@ place — no `mntroot` involved. `tools/make_splash.py` builds it.
 - A landscape logo can only get so big on a portrait panel: auto-crop to the ink,
   then fit inside `600 - 2*margin` gives 552x368 for the aijly logo.
 
-Unverified as of this note: the job has not yet been through a real reboot — the
-Kindle went offline mid-install.
+## The progress bar over the game (solved)
+
+`blanket` (`lxinit blanket -t "splash screensaver langpicker"`, started by the
+`x` job) paints BOTH the start-up picture and the boot progress bar directly on
+`/dev/fb0`. Stopping `framework` does not stop it, so its splash surface got
+repainted over the game and the bar froze half-drawn — the "black blob".
+
+- `tools/chess-boot.conf` kills it ~3 s into the job (`killall -9 blanket`),
+  before the Wi-Fi wait, so the bar never advances; the splash picture already
+  painted stays on the glass (e-ink keeps it) until the game draws.
+- `tools/kindle-run.sh` kills it too, as a backstop for hand runs.
+- `src/chess.c` does `ek_clear(EK_PAPER); ek_force_full(); ek_flush();` right
+  after `ek_open`, one full-panel GC16 white pass, so nothing from before the
+  game can ghost through.
+- **Reading `/dev/fb0` does not tell you what is on the glass** — the engine
+  pushes its own canvas through mxcfb ioctls and never writes fb0, so fb0 still
+  holds the framework's last picture. Don't diagnose from it.
+- Killing blanket takes `lxinit` (and usually Xorg/awesome) with it; that is
+  fine, and `restore-kindle.sh` brings the whole GUI back — verified: after a
+  boot-launched game was killed, cvm, Xorg and blanket were all running again.
 
 ## Next
 
-- Confirm on the panel that the new boot picture is what appears — it cannot be
-  captured remotely, it is drawn before anything scriptable runs.
-- GIVE UP has not been exercised since the boot job started launching the game
-  by itself; check the reader really returns on a boot-launched game.
+- Confirm on the panel that the new boot picture is what appears (it cannot be
+  captured remotely).
+- Restore is verified; sleep/screensaver behaviour with blanket killed mid-run
+  is not.
 - The promotion picker exists (`draw_promo`/`do_promo`, taps at 1311) but has no
   automated test; the tap test in `make chess-test` only covers select+move.
