@@ -6,14 +6,18 @@ Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk. Tap an al
 
 **1. Put a key in it:**
 ```
-cp chess.conf.example chess.conf     # then edit: key = <your DeepSeek API key>
+cp chess.conf.example chess.conf     # then edit: key = sk-... (your DeepSeek key)
 ```
+The Kindle talks to `https://api.deepseek.com/v1/chat/completions` itself, model
+`deepseek-flash`. Nothing goes through this PC — no proxy, no relay.
 
 **2. Build and push:**
 ```
 make chess-kindle                    # the ARM binary (needs the kfb-build image)
 ./run-chess-on-kindle.sh             # copies it over, takes the screen, runs it
 ```
+The push also drops this PC's CA bundle at `/mnt/us/chess-ca.pem`, because the
+Kindle's own trust store is older than DeepSeek's certificate.
 
 **3. Play:** tap a piece, tap a square. The camera file names the AI's move and its comment under the board. Tap QUIT, then SURE, to give the screen back.
 

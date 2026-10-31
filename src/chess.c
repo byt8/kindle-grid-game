@@ -577,7 +577,7 @@ static void conf_defaults(void) {
 #ifdef EK_HOST
     snprintf(CFG.ca, sizeof CFG.ca, "/etc/ssl/certs/ca-certificates.crt");
 #else
-    snprintf(CFG.ca, sizeof CFG.ca, "/mnt/us/chess/ca.pem");
+    snprintf(CFG.ca, sizeof CFG.ca, "/mnt/us/chess-ca.pem");
 #endif
 }
 

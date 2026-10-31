@@ -1,8 +1,8 @@
 # chess
 
-Status: **works on the PC and on the Kindle; the AI needs a real key** — the
-`[[secret:openai_key]]` placeholder never expanded, so every API test so far
-used either the local proxy (PC only) or `--fake-ai`.
+Status: **working end to end** — the Kindle itself calls
+`https://api.deepseek.com/v1/chat/completions` (model `deepseek-flash`) and the
+moves come back. `chess.conf` holds the real key and is gitignored.
 
 ## What it is
 
@@ -45,13 +45,24 @@ make chess-kindle          # static ARM musl, docker kfb-build, 83 KB
 - **White pieces on white squares are nearly invisible** with a 1-pixel rim: the
   rim is now two rings (12 offsets), so a white pawn on a light square still
   reads (ink per square went 385 -> ~500).
-- **Kindle API reachability**: `https://api.deepseek.com` answers **401** from
-  the device with both `-k` and a copied fresh CA bundle, so TLS is fine; only a
-  real key is missing. `scp` does not work (no sftp-server) — push with
-  `cat file | ssh ... 'cat > /path'`.
-- **PC proxy** `http://127.0.0.1:4020/v1/chat/completions` works from the PC but
-  is not reachable from the Kindle (WSL2 localhost), so it is only useful for
-  `--apicheck` on this machine.
+- **The Kindle must call DeepSeek directly.** `http://127.0.0.1:4020/...` only
+  exists on this PC, so a conf pointing at it fails from the device. Direct is
+  `https://api.deepseek.com/v1/chat/completions`, model `deepseek-flash`
+  (V4.1-Flash; `deepseek-v4-flash` is a retired alias).
+- **TLS works on the device with a pushed CA bundle.** The Kindle's own store
+  predates DeepSeek's certificate. `run-chess-on-kindle.sh` pushes this PC's
+  `/etc/ssl/certs/ca-certificates.crt` to **`/mnt/us/chess-ca.pem`** and the
+  binary uses `--cacert` — verified HTTP 200 and a real reply on the Kindle.
+  The old default was `/mnt/us/chess/ca.pem`, i.e. a path *inside* the binary
+  file (`/mnt/us/chess` is the executable), so it could never have existed.
+- **Pushing over a running binary fails** with `Text file busy`. Write
+  `/mnt/us/chess.new`, `chmod +x`, then `mv` — the script does this now.
+- **`scp` does not work** (no sftp-server) — push with `cat file | ssh ... 'cat > /path'`.
+- **No PIL, no ImageMagick on this PC**: use `tools/pgm2png.py in.pgm out.png`
+  to turn a `--dump` into something viewable.
+- **`--auto N --dump FILE --no-takeover` is the cheap device test**: it plays N
+  half moves against the real API, writes the board and leaves the Kindle UI
+  alone. `--apicheck` prints one raw reply and the parsed move and taunt.
 
 ## Screen layout
 

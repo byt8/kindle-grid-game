@@ -14,6 +14,8 @@
 /chess-host
 *:Zone.Identifier
 *.pgm
+# Board dumps pulled from the device for a look; regenerate any time.
+/chess-live.*
 
 # The file with the real API key in it. The example is tracked instead.
 /chess.conf

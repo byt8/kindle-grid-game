@@ -54,10 +54,22 @@ ssh_run() {
 }
 
 echo "run-chess-on-kindle: pushing the game to $ip"
-cat ./chess                     | ssh_run 'cat > /mnt/us/chess && chmod +x /mnt/us/chess'
+# Write beside it and rename: a copy over a running binary is "Text file busy".
+cat ./chess                     | ssh_run 'cat > /mnt/us/chess.new && chmod +x /mnt/us/chess.new && mv /mnt/us/chess.new /mnt/us/chess'
 cat ./grabtest                  | ssh_run 'cat > /mnt/us/grabtest && chmod +x /mnt/us/grabtest'
 cat tools/kindle-run.sh         | ssh_run 'cat > /mnt/us/chess-run.sh && chmod +x /mnt/us/chess-run.sh'
 cat ./chess.conf                | ssh_run 'cat > /mnt/us/chess.conf && chmod 600 /mnt/us/chess.conf'
+
+# The Kindle's own trust store predates DeepSeek's certificate, so hand it this
+# PC's current roots. Override with CHESS_CA=/path/to/bundle.crt if you like.
+ca=${CHESS_CA:-/etc/ssl/certs/ca-certificates.crt}
+if [ -f "$ca" ]; then
+    echo "run-chess-on-kindle: pushing CA bundle $ca"
+    cat "$ca" | ssh_run 'cat > /mnt/us/chess-ca.pem && chmod 644 /mnt/us/chess-ca.pem'
+else
+    echo "run-chess-on-kindle: no CA bundle at $ca; the device will have to" >&2
+    echo "                      trust DeepSeek on its own old certificates." >&2
+fi
 
 echo "run-chess-on-kindle: taking the $ip screen. Tap QUIT, then SURE, to give it back."
 exec ssh -tt -i "$key" -o BatchMode=yes -o IdentitiesOnly=yes \
