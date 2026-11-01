@@ -149,11 +149,15 @@ int main(int argc, char **argv) {
         fprintf(stderr, "menu: could not open the e-ink panel\n");
         return 1;
     }
-    /* One forced full white pass: the framework's splash + progress bar are
-     * still on the glass after takeover and partial updates never touch them. */
-    ek_clear(EK_PAPER);
+    /* Full black-then-white GC16 pair to reset every e-ink particle, eradicating
+     * the framework's progress bar / boot splash from the glass. */
+    ek_clear(EK_INK);
+    ek_waveform(ek_waveform_by_name("GC16"));
     ek_force_full();
     ek_flush();
+    ek_clear(EK_PAPER);
+    ek_flush();
+    ek_waveform(0);
 
     if (dump_path) {
         draw_menu();
