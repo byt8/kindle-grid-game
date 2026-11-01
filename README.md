@@ -184,16 +184,26 @@ sh /mnt/us/chess-wifi.sh auto            # rejoin what was remembered
 
 ### Boot picture
 
-`blanket` paints it from `/opt/amazon/low_level_screens/600x800/splash.png` — the
-copy under `/var/local/blanket` is not what you see. It must be a 600x800 **8-bit
-greyscale** PNG (colour type 0, no alpha) or nothing draws.
+Checked on `192.168.0.63` (Kindle 5.3.7.3). The boy-under-the-tree is still the
+2015 file. The root disk is read-only (`/usr/sbin/mntroot rw` unlocks it).
+
+The splash program opens `/usr/share/blanket/bg_xsmall_defaultbg.png`. A second
+copy of the same picture is `/opt/amazon/low_level_screens/600x800/splash.png`
+(the link under `/var/local/blanket` only points there). Replace both. The file
+must be 600x800, 8-bit, no alpha. The bar that fills along the bottom is drawn
+by code, so a new picture still gets the bar.
 
 ```
 python3 tools/make_splash.py --logo LOGO.png --out kindle-splash.png
 ```
 
-The game stops the whole `x` job once it owns the panel (never just `killall
-blanket`: lxinit then reboots into repair mode) and forces one white flush.
+Then on the Kindle: `mntroot rw`, copy that png over both paths above,
+`mntroot ro`, reboot. A firmware update puts the tree back.
+
+To skip the picture, take `splash` out of the two lines in `/etc/upstart/x.conf`.
+Not tried yet. Do not `killall blanket` — the Kindle reboots into repair mode.
+The game already stops the whole `x` job once it owns the screen, and paints one
+white frame so the tree does not stay on the glass.
 
 ---
 

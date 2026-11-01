@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Make a Kindle boot splash (600x800, 8-bit greyscale PNG) from any PNG.
+"""Make a Kindle boot picture (600x800, 8-bit greyscale PNG) from any PNG.
 
     python3 tools/make_splash.py --logo ~/aijly.com/static/logo.png \
                                  --out kindle-splash.png
 
-The Kindle shows /var/local/blanket/low_level_screens/images/splash.png while
-it boots. That path is a symlink into the read-only root, and /var/local is a
-writable ext3 partition, so the replacement is a real file in its place: the
-root filesystem is never touched.
+The splash program opens /usr/share/blanket/bg_xsmall_defaultbg.png.
+A second copy of the same picture is
+/opt/amazon/low_level_screens/600x800/splash.png
+(the /var/local/blanket link only points at that file). Both sit on the
+read-only root: /usr/sbin/mntroot rw, copy over both, /usr/sbin/mntroot ro.
 
 Why this script exists: the box has no PIL, no ImageMagick and no ffmpeg, so
-the decode/scale/encode is done here with zlib and struct only. The output
-format is exactly what the stock splash.png uses: PNG, 8-bit, colour type 0
-(greyscale), 600x800, no alpha -- an alpha channel or colour type 6 is not
-rendered by the framework, it draws nothing.
+the decode/scale/encode is done here with zlib and struct only. Output is PNG,
+8-bit, colour type 0 (greyscale), 600x800, no alpha. Colour type 6 draws
+nothing. The stock defaultbg file is a palette PNG of the same picture; this
+writes the greyscale form the stock splash.png already uses.
 """
 import argparse
 import struct
