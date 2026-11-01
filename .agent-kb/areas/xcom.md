@@ -80,6 +80,11 @@ updated: 2026-11-01
 - Prove what was really drawn instead of eyeballing: `tools/find_tile.py FILE id` looks for the exact 40x40 sprite in a PGM; `tools/dump_sprite.py id` prints the header tile as ASCII; `tools/dump_region.py FILE X Y` prints a screen patch. Map geometry: `MAP_X 60`, `MAP_Y 36`, `TILE 40`, so tile (col,row) is at `60+40*col, 36+40*row`.
 - Unexplored tiles are filled solid black (fog), so a big black block at the top of a dump is the map, not broken art. Units also get a rim/HP bar drawn over the tile, so `find_tile.py` misses them by design — dump the region instead.
 
+## Post-processing (why good art looks bad on the panel)
+- [ran 2026-11-01 `tools/sprite_stages.py`] The baker's `cell_to_tile` gained an opt-in `trace=` dict that records `src`, `src_ink`, `small`, `small_ink`, `cut`, `tile` as `(bytes, w, h)`. **Verified inert**: `src/sprites.h` md5 was `a0820c89…` before and after `make preview`.
+- [ran 2026-11-01 measured] Seven steps sit between `bold/` art and the panel: threshold(120) -> bbox -> `area_resize` into <=36x34 -> threshold again -> `dilate(thicken=1)` -> `shape_mask` -> (friendlies) `erode(2)` and subtract. `tools/sprite_stages.py` renders each stage magnified 4x plus a mock of the tile on grass/forest with rim + badge + HP bar, so feedback can name the step, not the result.
+- [ran 2026-11-01 measured] **Friendlies lose ~40% of their ink to the hollow erosion** (soldier 402 px -> 220, heavy 580 -> 266; tile 33-45% ink) so they read as a thin outline ring. **Solid enemies gain ink** (sectoid 144 -> 361, mutant 289 -> 687; tile 73-95% ink) because dilation at 40x40 fuses interior detail into one black blob. Those two effects are the whole "art is fine, game is terrible" gap. The knobs are `thicken` per sheet in `bold_sprite_sources.json`, `THRESH`, `FIT_W/FIT_H`, and the `erode(..., 2)` depth in `cell_to_tile`.
+
 ## Verified on hardware
 - Real fingertip taps work and the tap-to-pixel mapping is correct: a full soldier phase was played on the glass (moves, shots, end of turn) and the alien turn fired back. The "cannot go there" line is the normal refusal for a tap on an unreachable tile.
 - Second Kindle is `192.168.0.66`, same root ssh key as `.63`. `./run-on-kindle.sh 192.168.0.66` pushes, grabs touch, runs and restores.

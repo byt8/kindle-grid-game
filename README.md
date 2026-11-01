@@ -149,6 +149,29 @@ Rules the baker enforces, so the art has to be drawn to them:
 - A cell with no ink, or under 15% ink once fitted to 40x40, **aborts the bake** rather than
   shipping a blank tile. Nothing is substituted.
 
+### Why the art looks fine but the game does not
+
+The baker runs seven steps on the way down to 40x40, and only the last one is
+what the panel shows. See all of them at once:
+
+```bash
+python3 tools/sprite_stages.py                 # -> sprite-stages.png
+python3 tools/sprite_stages.py --only soldier  # one row
+```
+
+One row per sprite: source art, the box-resize into <=36x34, the hard
+threshold that survives it, the dilation and (for friendlies) the hollow
+erosion, the stored 40x40 tile, then a mock of that tile on grass and on
+forest with the paper rim, team badge and HP bar the game draws over it. The
+40x40 beside each name is true panel size; every other column is magnified
+4x with nearest-neighbour, no smoothing.
+
+Measured on the current art: friendlies lose about 40% of their ink to the
+hollow erosion (~400 px down to ~240) and end up as a thin outline; solid
+enemies *gain* ink (144-289 px up to 361-687) because dilation fuses their
+interior into one black blob, 73-95% of the tile. Those two effects are the
+whole difference between "looks fine" and "looks terrible".
+
 Then `make preview && make test`. Unit stats (HP, aim, damage) come from
 `tactical_sprite_map_with_descriptions.json`, not the art, so new pictures change no rules.
 Different filenames or grids mean editing `bold_sprite_sources.json` too.

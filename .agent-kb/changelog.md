@@ -3,6 +3,7 @@
 Newest first. One line per task. Current truth is in `areas/`, not here.
 
 - 2026-11-01 — xcom — **Sprite supply contract written down** (README "The sprites are drawn bold on purpose" + `areas/xcom.md`): four sheets in `bold/` = 13 cells (players/enemies/objects 2x2, drone 1x1), 512 px per cell, black-on-white, grey >= 120 is paper, players bake hollow and the rest solid, blank or <15% ink aborts the bake. Terrain is never supplied (`PATTERNS` owns the seven) and stats come from `tactical_sprite_map_with_descriptions.json`, so new art changes no rules. `make preview` re-verified green (20 sprites). Ready for the user to drop in replacement art.
+- 2026-11-01 — xcom — **Made the post-processing visible** (`tools/sprite_stages.py` → `sprite-stages.png`): source art → box-resize ≤36×34 → threshold → dilate/hollow → stored 40×40 → mock on grass and forest with rim + badge + HP bar, magnified 4× with the true 40×40 beside each name. `cell_to_tile` gained an opt-in `trace=` dict, verified inert (`sprites.h` md5 unchanged). Measured: friendlies shed ~40% of their ink to the hollow erosion (402→220 px) while solid enemies *gain* it (144→361 px) as dilation fuses them into 73–95% black blobs — that is the whole "art fine, game terrible" gap.
 
 - 2026-11-01 — rockman — `tools/extract_rockman.py` now emits `src/rockman_data.h` (rooms, exits, diamonds, tune, tick limits, 8x16 charset) with `--check` self-tests.
 

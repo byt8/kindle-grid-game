@@ -184,8 +184,19 @@ def erode(ink, w, h, passes):
     return cur
 
 
-def cell_to_tile(g, cw, ch, thicken, hollow):
-    """One 512x512 cell of generated art -> TILE*TILE values of 0/1/2."""
+def cell_to_tile(g, cw, ch, thicken, hollow, trace=None):
+    """One 512x512 cell of generated art -> TILE*TILE values of 0/1/2.
+
+    `trace`, when it is a dict, receives every intermediate stage as
+    (bytes, width, height) under its step name, so a diagnostic can show
+    exactly what the panel gets. It cannot change the tile produced.
+    """
+
+    def note(key, val, w=None, h=None):
+        if trace is not None:
+            trace[key] = (bytearray(val), w, h)
+
+    note("src", g, cw, ch)
     ink = threshold(g, cw * ch)
     if sum(ink) == 0:
         return None
@@ -193,6 +204,7 @@ def cell_to_tile(g, cw, ch, thicken, hollow):
     # silhouette is always the darker side.
     if sum(ink) * 2 > cw * ch:
         ink = bytearray(0 if v else 1 for v in ink)
+    note("src_ink", ink, cw, ch)
     box = bbox(ink, cw, ch)
     if box is None:
         return None
@@ -205,9 +217,11 @@ def cell_to_tile(g, cw, ch, thicken, hollow):
         src = (by + y) * cw + bx
         cut[y * bw:(y + 1) * bw] = g[src:src + bw]
     small = area_resize(cut, bw, bh, dw, dh)
+    note("small", small, dw, dh)
     small_ink = threshold(small, dw * dh)
     if sum(small_ink) == 0:
         die("art vanished when scaled to 40 px")
+    note("small_ink", small_ink, dw, dh)
     small_ink = dilate(small_ink, dw, dh, thicken)
     mask = shape_mask(small_ink, dw, dh)
     if hollow:
@@ -221,6 +235,7 @@ def cell_to_tile(g, cw, ch, thicken, hollow):
             die("hollow outline disappeared at 40 px; the shape is too thin")
         small_ink = bytearray(1 if a and not b else 0
                               for a, b in zip(small_ink, eaten))
+    note("cut", small_ink, dw, dh)
 
     tile = bytearray(TILE * TILE)
     ox = (TILE - dw) // 2
@@ -231,6 +246,7 @@ def cell_to_tile(g, cw, ch, thicken, hollow):
             if not mask[i]:
                 continue
             tile[(oy + y) * TILE + ox + x] = INK if small_ink[i] else PAPER
+    note("tile", tile, TILE, TILE)
     return tile
 
 
