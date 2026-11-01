@@ -1,9 +1,9 @@
-# Four games on a Kindle
+# Five games on a Kindle
 
 Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk, tap an alien to shoot, wipe them out.
 Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack blocks and clear lines.
-And Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
-**Rockman** (in progress): the 1984 VIC-20 cave digger — rules in `docs/ROCKMAN_SPEC.md`, all data + pixel art machine-extracted into `src/rockman_data.h`, build plan in `docs/ROCKMAN_PLAN.md`; the port itself is not written yet.
+Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
+Rockman: dig dirt, grab diamonds, don't let the rocks fall on you.
 
 ---
 
@@ -17,6 +17,7 @@ make kindle                      # XCOM  -> ./xcom      (ARM binary)
 make chess-kindle                # Chess -> ./chess     (needs chess.conf first)
 make tetris-kindle               # Tetris -> ./tetris   (no key needed)
 make sudoku-kindle               # Sudoku -> ./sudoku  (no key needed)
+make rockman-kindle              # Rockman -> ./rockman (no key needed)
 ```
 
 ```bash
@@ -61,15 +62,23 @@ The three chips up top (**EASY / MED / HARD**) start a fresh puzzle; **NEW** res
 A wrong digit gets a box, and a completed, conflict-free board is the win.
 Pass `--seed N` to the runner to play the same puzzle again.
 
+**Play Rockman on the Kindle:**
+
+```bash
+./run-rockman-on-kindle.sh 192.168.0.66   # pass the IP
+```
+
+**LEFT / UP / RIGHT / DOWN** dig and walk. **PUSH** shoves a rock sideways. Get all 8 diamonds and the exits open. **QUIT** then **SURE** exits.
+
 **Boot straight into the launcher menu** (instead of the Amazon UI):
 
 ```bash
 ./install-menu-on-kindle.sh [IP]
 ```
 
-Builds the menu + all four games, pushes them, installs `/etc/upstart/menu.conf`
-(replacing the old direct-to-chess boot job), and shows the menu now. Six
-buttons: **XCOM / CHESS / TETRIS / SUDOKU / WIFI / KINDLE**. Play a game; when you quit
+Builds the menu + all five games, pushes them, installs `/etc/upstart/menu.conf`
+(replacing the old direct-to-chess boot job), and shows the menu now. Seven
+buttons: **XCOM / CHESS / TETRIS / SUDOKU / ROCKMAN / WIFI / KINDLE**. Play a game; when you quit
 you land back on the menu. **WIFI** reuses chess's wi-fi screens (join a
 network, it remembers it). **KINDLE** hands the screen back to the Amazon
 reader. Undo (stock boot again):
@@ -87,6 +96,7 @@ make preview                            # every 40x40 sprite, side by side -> bo
 make test                               # plays a pretend game, checks pictures + clips
 make tetris-host && make tetris-test    # self-test + three screens the checker reads
 make sudoku-host && make sudoku-test    # self-test + three screens the checker reads
+make rockman-host && make rockman-test  # self-test + title, room 1, and a short dig
 make menu-host && make menu-test        # menu: draw + tap every button on the PC
 ```
 
@@ -224,29 +234,18 @@ really stack.
 
 ---
 
-## Rockman: status
+## Rockman: how it fits together
 
-Rules and data are fully extracted; the port is not written yet. Read the two docs in
-this order before touching `src/rockman.c`:
+One file, `src/rockman.c`. The caves, exits and 8x16 tiles come from
+`src/rockman_data.h`, which `make rockman-data` rebuilds from `scratch/Rockman.asm`.
+Do not edit that header by hand.
 
-1. `docs/ROCKMAN_SPEC.md` — rules + every data table, verbatim from the disassembly.
-2. `docs/ROCKMAN_PLAN.md` — the reviewed build plan: spec corrections (map bit 1 =
-   **rock**, not wall; `CELL_*` = screen offsets), the 27x40 cell layout for 600x800,
-   tick timings (16 ms pass, 14/16/9 action ticks, 9 x 120 x 6 timer passes),
-   function-by-function build order, tests, and the handful of asm spots still to
-   verify line by line.
+`make rockman-test` checks the rules, then writes three pictures:
+`/tmp/rockman-title.pgm` (the title), `/tmp/rockman-room.pgm` (room 1),
+`/tmp/rockman-play.pgm` (24 steps of digging).
 
-The data tables and 8x16 pixel art are regenerated straight from the asm, not hand-typed:
-
-```bash
-make rockman-data   # tools/extract_rockman.py --check -> rewrites src/rockman_data.h
-python3 scratch/show_tiles.py   # every tile as ASCII: check 1-bit legibility
-```
-
-`src/rockman_data.h` is generated — any room/tile change goes in `scratch/Rockman.asm`
-first, then `make rockman-data`. Once the port exists it joins the others:
-`make rockman-host && make rockman-test` on the PC, `make rockman-kindle` +
-`./run-rockman-on-kindle.sh <ip>` on the device.
+On the Kindle: `make rockman-kindle`, then `./run-rockman-on-kindle.sh <ip>`.
+The menu's ROCKMAN button is exit code 5; WIFI moved to 6. No sound.
 
 ---
 

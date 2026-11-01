@@ -9,13 +9,41 @@ HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 
 .PHONY: all test kindle sound manual grabtest preview preview-old bold chess chess-test chess-kindle \
         tetris tetris-host tetris-test tetris-kindle sudoku sudoku-host sudoku-test sudoku-kindle \
-        menu-host menu-kindle menu-test rockman-data clean
+        menu-host menu-kindle menu-test rockman-data rockman-host rockman-test rockman-kindle rockman clean
 
 # ---- rockman data: regenerate from the commented VIC-20 disassembly --------
 
 .PHONY: rockman-data
 rockman-data:
 	$(PY) tools/extract_rockman.py --check
+
+# ---- rockman: the 1984 cave digger, same panel, tap buttons -------------
+
+rockman-host: src/rockman.c src/rockman_data.h $(ENGINE)/eink.c $(ENGINE)/eink.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/rockman.c $(ENGINE)/eink.c -lm
+
+rockman-kindle: src/rockman.c src/rockman_data.h $(ENGINE)/eink.c $(ENGINE)/eink.h
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" \
+	  -v /home/brendan/jailbreak-kindle:/jb \
+	  -w /src kfb-build \
+	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -ffunction-sections -fdata-sections \
+	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
+	    -o rockman src/rockman.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -static -no-pie -Wl,--gc-sections -lm \
+	    && arm-linux-musleabi-strip rockman'
+
+rockman: rockman-kindle
+
+# Rules first, then three pictures: the title, room 1, and 24 bot steps.
+rockman-test: rockman-host
+	./rockman-host --selftest --no-takeover --seed 1
+	./rockman-host --no-takeover --seed 1 --dump /tmp/rockman-title.pgm
+	printf 'tap 300 400\n' | ./rockman-host --no-takeover --seed 1 --dump /tmp/rockman-room.pgm
+	./rockman-host --auto 24 --no-takeover --seed 1 --dump /tmp/rockman-play.pgm
+	$(PY) tools/check_pgm.py /tmp/rockman-title.pgm /tmp/rockman-room.pgm /tmp/rockman-play.pgm
+	$(PY) tools/check_rockman.py /tmp/rockman-title.pgm /tmp/rockman-room.pgm /tmp/rockman-play.pgm
 
 # ---- tetris: 10x20 well, on-screen buttons, no keyboard ------------------
 
@@ -76,11 +104,12 @@ menu: menu-kindle
 menu-test: menu-host
 	./menu-host --no-takeover --dump /tmp/menu.pgm
 	printf ''                        | ./menu-host --no-takeover; test $$? -eq 0
-	printf 'tap 300 170\n'           | ./menu-host --no-takeover; test $$? -eq 1
-	printf 'tap 300 275\n'           | ./menu-host --no-takeover; test $$? -eq 2
-	printf 'tap 300 380\n'           | ./menu-host --no-takeover; test $$? -eq 3
-	printf 'tap 300 527\n'           | ./menu-host --no-takeover; test $$? -eq 4
-	printf 'tap 300 627\n'           | ./menu-host --no-takeover; test $$? -eq 5
+	printf 'tap 300 206\n'           | ./menu-host --no-takeover; test $$? -eq 1
+	printf 'tap 300 290\n'           | ./menu-host --no-takeover; test $$? -eq 2
+	printf 'tap 300 374\n'           | ./menu-host --no-takeover; test $$? -eq 3
+	printf 'tap 300 458\n'           | ./menu-host --no-takeover; test $$? -eq 4
+	printf 'tap 300 542\n'           | ./menu-host --no-takeover; test $$? -eq 5
+	printf 'tap 300 627\n'           | ./menu-host --no-takeover; test $$? -eq 6
 	printf 'tap 300 687\n'           | ./menu-host --no-takeover; test $$? -eq 0
 	$(PY) -c 'import sys;d=open("/tmp/menu.pgm","rb").read();p=b"P5\n600 800\n255\n";assert d.startswith(p);pix=d[len(p):];assert len(pix)==600*800;assert pix.count(0)>1000 and pix.count(255)>1000;print("menu.pgm ok")'
 
@@ -204,4 +233,5 @@ preview-old:
 	$(PY) tools/slice_sprites.py --preview /tmp/xcom-sprites-old.png
 
 clean:
-	rm -f xcom-host xcom grabtest chess-host chess tetris-host tetris sudoku-host sudoku
+	rm -f xcom-host xcom grabtest chess-host chess tetris-host tetris sudoku-host sudoku \
+	      rockman-host rockman

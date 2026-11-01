@@ -374,8 +374,8 @@ static const int8_t rm_fixed_diamonds[RM_NUM_ROOMS][5][2] = {{
 }};
 
 /* Room maps: 22 maps (room 0 = title picture, 1-20 play, 21 = win picture)
- * of 14 rows x 16 columns, packed 8 bits per map byte.  In the map a 1 bit is
- * brick (wall/rock), a 0 bit is dirt. */
+ * of 14 rows x 16 columns, packed 8 bits per map byte.  A set bit is a rock
+ * (DrawMapByte); a clear bit is dirt.  Brick is not stored in the map. */
 static const uint8_t rm_room_maps[22][28] = {{
 {'\n'.join('    {' + ', '.join(f'0x{b:02X}' for b in rooms[n]) + '},  // room %d' % n for n in range(22))}
 }};

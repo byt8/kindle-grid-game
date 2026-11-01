@@ -102,7 +102,9 @@ while :; do
             GAME=tetris sh /mnt/us/tetris-run.sh >> "$LOG" 2>&1 ;;
         4)  say "launching SUDOKU"
             GAME=sudoku sh /mnt/us/sudoku-run.sh >> "$LOG" 2>&1 ;;
-        5)  say "WIFI setup"
+        5)  say "launching ROCKMAN"
+            GAME=rockman sh /mnt/us/rockman-run.sh >> "$LOG" 2>&1 ;;
+        6)  say "WIFI setup"
             /mnt/us/chess --wifi-only --conf /mnt/us/chess.conf >> "$LOG" 2>&1 ;;
         *)  say "menu exited rc=$rc; showing it again" ;;
     esac

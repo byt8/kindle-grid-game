@@ -1,4 +1,4 @@
-/* menu.c -- the Kindle's home screen: XCOM / CHESS / TETRIS / SUDOKU / WIFI / KINDLE.
+/* menu.c -- the Kindle's home screen: XCOM / CHESS / TETRIS / SUDOKU / ROCKMAN / WIFI / KINDLE.
  *
  * This is what the Kindle boots into instead of the Amazon UI. It shares the
  * e-ink engine with the games and the same takeover rules:
@@ -20,7 +20,8 @@
  *        2  CHESS
  *        3  TETRIS
  *        4  SUDOKU
- *        5  WIFI
+ *        5  ROCKMAN
+ *        6  WIFI
  *   - The KINDLE button restores the Amazon UI; the menu comes back after any
  *     game ends because the boot job restarts it.
  *
@@ -48,18 +49,19 @@ static void usage(void) {
         "\n"
         "On the Kindle it owns the panel until a button is tapped, then exits "
         "with:\n"
-        "  0 back to the Kindle UI, 1 XCOM, 2 CHESS, 3 TETRIS, 4 SUDOKU, 5 WIFI\n");
+        "  0 back to the Kindle UI, 1 XCOM, 2 CHESS, 3 TETRIS, 4 SUDOKU,\n"
+        "  5 ROCKMAN, 6 WIFI\n");
 }
 
-/* The six buttons. Rows 0..3 are the tall game list, then WIFI and KINDLE. */
-enum { B_XCOM = 0, B_CHESS, B_TETRIS, B_SUDOKU, B_WIFI, B_KINDLE, B_N };
+/* Seven buttons. Five games, then WIFI and KINDLE. */
+enum { B_XCOM = 0, B_CHESS, B_TETRIS, B_SUDOKU, B_ROCKMAN, B_WIFI, B_KINDLE, B_N };
 
 /* Geometry (panel is 600x800). Kept in one place so the drawing, the hit test
  * and --list all agree. */
 #define MX     28
-#define LIST_T  170        /* top of the three game buttons */
-#define ROW_H   105
-#define BTN_H   84
+#define LIST_T  170        /* top of the game buttons */
+#define ROW_H   84
+#define BTN_H   72
 #define WIFI_T  600
 #define WIFI_H  54
 #define KB_T    660
@@ -74,9 +76,10 @@ static int btn_top(int i) {
     switch (i) {
         case B_XCOM:   return LIST_T;
         case B_CHESS:  return LIST_T + ROW_H;
-        case B_TETRIS: return LIST_T + 2 * ROW_H;
-        case B_SUDOKU: return LIST_T + 3 * ROW_H;
-        case B_WIFI:   return WIFI_T;
+        case B_TETRIS:  return LIST_T + 2 * ROW_H;
+        case B_SUDOKU:  return LIST_T + 3 * ROW_H;
+        case B_ROCKMAN: return LIST_T + 4 * ROW_H;
+        case B_WIFI:    return WIFI_T;
         default:       return KB_T;        /* B_KINDLE */
     }
 }
@@ -92,7 +95,7 @@ static int btn_h(int i) {
 
 static const char *btn_name(int i) {
     static const char *names[B_N] = {
-        "XCOM", "CHESS", "TETRIS", "SUDOKU", "WIFI", "KINDLE"
+        "XCOM", "CHESS", "TETRIS", "SUDOKU", "ROCKMAN", "WIFI", "KINDLE"
     };
     return names[i];
 }
@@ -228,7 +231,7 @@ int main(int argc, char **argv) {
     }
 
     if (chosen >= 0) {
-        rc = chosen + 1;                    /* 1 XCOM, 2 CHESS, 3 TETRIS, 4 SUDOKU, 5 WIFI */
+        rc = chosen + 1;                    /* 1 XCOM .. 5 ROCKMAN, 6 WIFI */
         draw_launch(btn_name(chosen));
         ek_sleep_ms(300);
         /* Let go of the touch device and the panel, so the game's own

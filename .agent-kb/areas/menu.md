@@ -1,15 +1,16 @@
 # Area: menu launcher
 
-The Kindle boots into a five-button launcher (`src/menu.c`) instead of the
+The Kindle boots into a seven-button launcher (`src/menu.c`) instead of the
 Amazon UI. Same e-ink engine as the games, same takeover rules.
 
 ## How it works
 
-- `src/menu.c` — buttons: XCOM / CHESS / TETRIS / WIFI / KINDLE. On tap it
-  draws a "starting..." card, releases the panel + touch grab (`ek_close()`),
-  and `_exit(rc)` with `1=XCOM 2=CHESS 3=TETRIS 4=WIFI`. KINDLE/signal → 0
-  (restore the UI). Host build reads `tap X Y` from stdin and `--dump` writes
-  a PGM, so `make menu-test` walks every button on the PC.
+- `src/menu.c` — buttons: XCOM / CHESS / TETRIS / SUDOKU / ROCKMAN / WIFI / KINDLE.
+  On tap it draws a "starting..." card, releases the panel + touch grab
+  (`ek_close()`), and `_exit(rc)` with `1=XCOM 2=CHESS 3=TETRIS 4=SUDOKU
+  5=ROCKMAN 6=WIFI`. KINDLE/signal → 0 (restore the UI). Host build reads
+  `tap X Y` from stdin and `--dump` writes a PGM, so `make menu-test` walks
+  every button on the PC.
 - `tools/menu-boot.sh` — the always-on session, run by the upstart job. Stops
   the screen mirror (kfbterm) so the touch grab wins, waits ~20 s for wi-fi,
   runs `/mnt/us/menu`, then launches the chosen game via its runner; loops back
@@ -18,7 +19,7 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
   started lab126_gui`, `stop on runlevel [06]` (one line only, so stopping
   `x`/`lab126_gui` mid-session never kills the menu job). Replaces the old
   `chess.conf` job.
-- `install-menu-on-kindle.sh` — builds menu/chess/tetris/xcom + grabtest,
+- `install-menu-on-kindle.sh` — builds menu/chess/tetris/sudoku/rockman/xcom + grabtest,
   pushes binaries, runners, wifi script, chess.conf, installs
   `/etc/upstart/menu.conf` (removing `chess.conf`), and starts the session
   immediately via `setsid sh menu-boot.sh &`.
@@ -39,4 +40,4 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
 ## Status
 
 Not yet installed on a real Kindle (installed + reboot-tested on next session).
-Host tests pass: `make menu-test` walks all five buttons and the dump is sane.
+Host tests pass: `make menu-test` walks all seven buttons and the dump is sane.

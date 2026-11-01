@@ -1,5 +1,8 @@
 # Rockman on the Kindle — implementation plan
 
+Implemented in `src/rockman.c`. Where this brief and `scratch/Rockman.asm`
+disagree, the asm won. See `.agent-kb/areas/rockman.md`.
+
 Goal: one new source file, `src/rockman.c`, that plays the 1984 VIC-20 Rockman
 ruleset faithfully on a 1-bit 600x800 Kindle Touch, with tap buttons, the house
 test target, and a run script. No audio (the VIC tune is not ported; noted as

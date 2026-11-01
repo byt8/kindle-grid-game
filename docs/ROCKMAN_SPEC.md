@@ -54,19 +54,11 @@ VIC colours 0-7: black, white, red, cyan, purple, green, blue, yellow.
 
 - Room 0 is the title picture, rooms 1-20 playable, room 21 the win picture.
 - **Map format**: 14 rows × 16 columns, two bytes per row (28 bytes per room),
-  22 maps. Bit 1 of a map byte = **rock**; bit 0 = **dirt**.
-  > ⚠️ The source's comments say "1 bit is a rock (red), 0 bit is dirt" — the
-  > data says the opposite: maps whose walls are `%11111111` (all 1s) are
-  > labelled "################" (a solid brick wall) in the same comments. So a
-  > 1 bit is a **wall (brick)**, a 0 bit is **dirt**. Confirmed by rooms 4, 5,
-  > 9, 10 etc. having fully solid border rows. Note the map is *drawn* with the
-  > same bytes: DrawMapByte uses "set bit → red rock" — but the original draws
-  > the room with **rocks only where the map says rock**, and the border walls
-  > come from a separate full-screen brick fill (`DrawBorderScreen`). The
-  > playfield rows 0-13/cols 3-18 are dirt/rocks per map, and the surrounding
-  > brick is part of the border fill, not the map. Only rooms whose map has a
-  > **gap in the top wall** (dirt in top-row cells) get that gap sealed with
-  > bricks by DrawRoom.
+  22 maps. A set bit is a **rock**, a clear bit is **dirt** (`DrawMapByte`).
+  Brick is never in the map. `DrawBorderScreen` fills the whole screen with
+  brick first, and the map only overwrites rows 0-13, columns 3-18. A row of
+  `0xFF` is a row of rocks, not a brick wall. `DrawRoom` then seals the top
+  exit (row 0, columns 10-11) with brick when column 10 was dirt.
 - **Exit gaps**: the map's wall rows contain `0` bits where the player can
   leave (once the room is cleared). The gaps are in the border rows/cols of the
   map (top/bottom/left/right edges).
