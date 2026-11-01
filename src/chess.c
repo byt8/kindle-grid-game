@@ -2273,6 +2273,7 @@ static void usage(void) {
             "  --dump FILE   write the picture (PGM) and exit\n"
             "  --no-takeover do not hold the Kindle's screen (for testing)\n"
             "  --wifi        open the wi-fi screen even when already online\n"
+            "  --wifi-only   open the wi-fi screen, then exit without a board\n"
             "  --no-wifi     do not check wi-fi on start\n"
             "  --wifi-shot F write a wi-fi screen (PGM) and exit: F then\n"
             "                list|name|pass|fail, default list\n"
@@ -2286,7 +2287,7 @@ static void usage(void) {
 int main(int argc, char **argv) {
     unsigned flags = EK_TAKEOVER;
     int do_test = 0, api_check = 0, fake = 0, autoplay = -1;
-    int no_wifi = 0, force_wifi = 0;
+    int no_wifi = 0, force_wifi = 0, wifi_only = 0;
     const char *dump_path = NULL, *wifi_shot = NULL;
     const char *wifi_shot_what = "list";
     const char *conf_path = conf_default();
@@ -2304,6 +2305,7 @@ int main(int argc, char **argv) {
             autoplay = (int)v;
         } else if (!strcmp(argv[i], "--dump") && i + 1 < argc) dump_path = argv[++i];
         else if (!strcmp(argv[i], "--wifi")) force_wifi = 1;
+        else if (!strcmp(argv[i], "--wifi-only")) wifi_only = 1;
         else if (!strcmp(argv[i], "--no-wifi")) no_wifi = 1;
         else if (!strcmp(argv[i], "--wifi-shot") && i + 1 < argc) {
             wifi_shot = argv[++i];
@@ -2370,6 +2372,17 @@ int main(int argc, char **argv) {
     ek_flush();
 
     int rc = 0;
+
+    /* --wifi-only: the menu's WIFI button. Same screens, no board: join a
+     * network (or skip), then hand the panel back. */
+    if (wifi_only) {
+        if (wifi_setup() != 0)
+            fprintf(stderr, "chess: wifi setup left the unit offline (%s)\n",
+                    g_wifi_err[0] ? g_wifi_err : "nothing chosen");
+        ek_close();
+        return 0;
+    }
+
     new_game();
 
     /* A picture of a wi-fi screen, for checking the layout. */

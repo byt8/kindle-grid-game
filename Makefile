@@ -8,7 +8,7 @@ PY     ?= python3
 HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 
 .PHONY: all test kindle sound manual grabtest preview preview-old bold chess chess-test chess-kindle \
-        tetris tetris-host tetris-test tetris-kindle clean
+        tetris tetris-host tetris-test tetris-kindle menu-host menu-kindle menu-test clean
 
 # ---- tetris: 10x20 well, on-screen buttons, no keyboard ------------------
 
@@ -16,6 +16,36 @@ tetris-host: src/tetris.c $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
 	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/tetris.c $(ENGINE)/eink.c -lm
 
 tetris: tetris-kindle
+
+# ---- launcher menu: what the Kindle boots into ---------------------------------
+
+menu-host: src/menu.c $(ENGINE)/eink.c $(ENGINE)/eink.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/menu.c $(ENGINE)/eink.c -lm
+
+menu-kindle: src/menu.c $(ENGINE)/eink.c $(ENGINE)/eink.h
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" \
+	  -v /home/brendan/jailbreak-kindle:/jb \
+	  -w /src kfb-build \
+	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -ffunction-sections -fdata-sections \
+	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
+	    -o menu src/menu.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -static -no-pie -Wl,--gc-sections -lm \
+	    && arm-linux-musleabi-strip menu'
+
+menu: menu-kindle
+
+# Layout + walk: draw it, dump it, then tap each button and check the exit code.
+menu-test: menu-host
+	./menu-host --no-takeover --dump /tmp/menu.pgm
+	printf ''                        | ./menu-host --no-takeover; test $$? -eq 0
+	printf 'tap 300 170\n'           | ./menu-host --no-takeover; test $$? -eq 1
+	printf 'tap 300 275\n'           | ./menu-host --no-takeover; test $$? -eq 2
+	printf 'tap 300 380\n'           | ./menu-host --no-takeover; test $$? -eq 3
+	printf 'tap 300 627\n'           | ./menu-host --no-takeover; test $$? -eq 4
+	printf 'tap 300 687\n'           | ./menu-host --no-takeover; test $$? -eq 0
+	$(PY) -c 'import sys;d=open("/tmp/menu.pgm","rb").read();p=b"P5\n600 800\n255\n";assert d.startswith(p);pix=d[len(p):];assert len(pix)==600*800;assert pix.count(0)>1000 and pix.count(255)>1000;print("menu.pgm ok")'
 
 all: xcom-host
 

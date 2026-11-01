@@ -47,6 +47,23 @@ Tap a piece, tap a square. **QUIT** then **SURE** gives the screen back.
 
 Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down, **QUIT** then **SURE** to exit.
 
+**Boot straight into the launcher menu** (instead of the Amazon UI):
+
+```bash
+./install-menu-on-kindle.sh [IP]
+```
+
+Builds the menu + all three games, pushes them, installs `/etc/upstart/menu.conf`
+(replacing the old direct-to-chess boot job), and shows the menu now. Five
+buttons: **XCOM / CHESS / TETRIS / WIFI / KINDLE**. Play a game; when you quit
+you land back on the menu. **WIFI** reuses chess's wi-fi screens (join a
+network, it remembers it). **KINDLE** hands the screen back to the Amazon
+reader. Undo (stock boot again):
+
+```
+ssh root@KINDLE_IP '/usr/sbin/mntroot rw; rm /etc/upstart/menu.conf; /usr/sbin/mntroot ro'
+```
+
 **No Kindle, no key — try it on this PC:**
 
 ```bash
@@ -55,6 +72,7 @@ make                                    # builds ./xcom-host
 make preview                            # every 40x40 sprite, side by side -> bold-preview.png
 make test                               # plays a pretend game, checks pictures + clips
 make tetris-host && make tetris-test    # self-test + three screens the checker reads
+make menu-host && make menu-test        # menu: draw + tap every button on the PC
 ```
 
 Both host programs take `tap X Y` lines on stdin and `--dump FILE` writes the
@@ -141,7 +159,9 @@ Kindle's own trust store is older than DeepSeek's certificate.
 |---|---|
 | `src/chess.c` | the whole game: rules, drawing, touch, wi-fi screen |
 | `tools/chess-wifi.sh` | scan / join / remember, over `wpa_cli` |
-| `tools/chess-boot.conf` | upstart job that boots into the game |
+| `tools/chess-boot.conf` | (superseded by `menu-boot.conf`) the old direct-to-chess boot job |
+| `tools/menu-boot.conf` | upstart job that boots the Kindle into the launcher menu |
+| `tools/menu-boot.sh` | the menu session: stop mirror, run menu, launch game, loop back |
 | `tools/make_splash.py` | turns a PNG into the Kindle's 600x800 greyscale boot picture |
 | `tools/kindle-run.sh` | on-device launcher: frees the screen, runs, restores |
 | `chess.conf.example` | key, model, url, ca |
@@ -154,7 +174,8 @@ make chess-host
 ```
 
 Check the screen of a game you cannot see (`kill -USR1 <pid of chess>` writes
-`/tmp/chess-shot.pgm`).
+`/tmp/chess-shot.pgm`). `--wifi-only` opens the wi-fi screens and exits without
+a board (what the menu's WIFI button uses).
 
 ### Boot straight into the game
 
@@ -170,6 +191,17 @@ Undo: `mntroot rw; rm /etc/upstart/chess.conf; mntroot ro`. It waits up to 3
 minutes for Wi-Fi and starts anyway if it never comes up, because the game draws
 its own Wi-Fi screen. One game per boot (`/tmp/chess.started`); after QUIT, start
 it again over ssh or reboot. Progress is in `/mnt/us/chess-boot.log`.
+
+### Wi-fi without the Kindle UI
+
+### The launcher menu boot job
+
+`tools/menu-boot.conf` (installed as `/etc/upstart/menu.conf`) is what makes the
+Kindle boot into the menu. `tools/menu-boot.sh` is the always-on session: it
+stops the screen mirror so the menu's touch grab wins, waits briefly for
+wi-fi, runs the menu, launches the chosen game, and loops back when the game
+exits. The menu itself is one file, `src/menu.c` (same e-ink engine as the
+games). Progress is in `/mnt/us/menu-boot.log`.
 
 ### Wi-fi without the Kindle UI
 
