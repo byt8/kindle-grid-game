@@ -7,10 +7,10 @@ Each is a 600x800 PNG; the stock files are palette (colour type 3), the
 greyscale form (colour type 0) that make_splash writes works the same through
 cairo and is what the boot files already use.
 
-The 5 new AI pieces are dense ink, so each is inverted to a white panel with
-dark etching (same treatment as the boot screens) and every slot gets one of
-four crops of its art -- full frame, zoomed centre, zoomed top, zoomed bottom --
-so the slideshow actually varies while staying one style.
+The 5 new AI pieces are dense ink; the slideshow shows the art as-is (no boot
+labels are painted over a screensaver, so nothing needs washing out). Each piece
+fills four slots -- full frame, zoomed centre, zoomed top, zoomed bottom -- so
+it varies while staying one style.
 
 Usage:
   python3 tools/make_screensaver_screens.py   # rebuild screens/ss00..ss19.png
@@ -20,7 +20,7 @@ import os
 import subprocess
 import sys
 
-from PIL import Image, ImageOps
+from PIL import Image
 
 # art filename token -> the 4 screen slots it fills
 ARTS = [
@@ -63,7 +63,6 @@ def main():
         base = Image.open(art).convert('RGB')
         for (zoom, anchor), slot in zip(VARIANTS, slots):
             v = crop_variant(base, zoom, anchor)
-            v = ImageOps.invert(v)          # white canvas, dark etching
             tmp = f'/tmp/ss-{slot}.png'
             v.save(tmp)
             out = f'screens/ss/{slot}.png'

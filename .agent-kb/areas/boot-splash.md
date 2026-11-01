@@ -54,6 +54,12 @@ updated: 2026-11-01
 ## Built
 - [2026-11-01] `tools/make_screensaver_screens.py` builds all 20 from the five newest AI art PNGs (4 zoom/crop variants each: full/centre, zoom-top, zoom-bottom, deep-zoom) into `screens/ss/ss00..ss19.png` (600x800 8-bit greyscale, inverted-to-white-etching like the boot screens). All 20 distinct (md5 of 60x80 resized hash — no duplicate groups). Installed on `.63` over all 20 `ss` files, md5-verified on device, rootfs back `ro`. Contact sheet: `ss-preview.png`.
 
+## OTA defaultbg (last stock copy)
+- [installed 2026-11-01 .63] `/usr/share/blanket/ota/bg_xsmall_defaultbg.png` was the FINAL stock `bg_xsmall_defaultbg*` on the device: a 2382-byte 600x800 8-bit palette PNG (md5 `600a7b8a…`) that renders pure white (dark%=0) — a blank OTA background, NOT the tree. Replaced it with `screens/boot.png`; on-device md5 now `9dd7823b` (= all other defaultbg copies). Stock backed up at `/mnt/us/boot-splash-backup/ota/bg_xsmall_defaultbg.png`.
+- All `bg_xsmall_defaultbg*` copies are now custom `9dd7823b`: root, `splash/`, `langpicker/` (symlink to root), `ota/`, plus low-level `splash.png` and langpicker `bg_xsmall_splash_with_bar.png`. Device sweep confirms no file with stock md5 `600a7b8a` remains under `/usr/share/blanket`.
+- [verified 2026-11-01 device's own captures] The 11:59 and 12:09 reboot sequences on `.63` show only **black → our boot art with progress bar → home**. The tree frames in `bootshots/shot_*.png` (10:15) predate the fix — they were the pre-fix boot. The user's "Kindle bitmap before the boot screen" was the pre-fix tree or the then-stock OTA/restart frames; none remain.
+- Shutdown `bg_xsmall_reboot.png` md5 is `86bdefa6` = `screens/restart-shutdown.png` (already custom).
+
 ## Do not redo
 - SSH to `.63` and `strings` on `splash.so` / `libblanket.so`. Asset name is `defaultbg`. Low-level dir strings are `/opt/amazon/low_level_screens/%dx%d` and `/var/local/blanket/low_level_screens/images`.
 

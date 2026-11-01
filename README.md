@@ -232,13 +232,18 @@ mntroot ro
 
 All five are now installed on the device — the Settings → Restart flow shows our
 `restart-shutdown.png` (dialog) then `restart-low.png` (rebooting) before the
-boot art. Their stock files are backed up at
+boot art. Every `bg_xsmall_defaultbg*` copy on the device — root, `splash/`,
+`langpicker/`, and `ota/` — now carries our art (the `ota` one was the last
+stock holdout; a blank white 600x800, backed up to
+`/mnt/us/boot-splash-backup/ota/`). Their stock files are backed up at
 `/mnt/us/boot-splash-backup/shutdown/` and `/mnt/us/boot-splash-backup/low-level/`.
 
 Reboot to see it. The bar that fills along the bottom of the boot screen is
-drawn by code, so a new picture still gets the bar. Stock pictures are backed
-up at `/mnt/us/boot-splash-backup/` — copy them back over the same paths to
-revert. A firmware update also puts the tree back.
+drawn by code, so a new picture still gets the bar. Verified against the
+device's own boot captures (11:59 / 12:09): the only frames are black → our
+boot art with the progress bar → home; no stock tree frame remains. Stock
+pictures are backed up at `/mnt/us/boot-splash-backup/` — copy them back over
+the same paths to revert. A firmware update also puts the tree back.
 
 To skip the picture, take `splash` out of the two lines in `/etc/upstart/x.conf`.
 Not tried yet. Do not `killall blanket` — the Kindle reboots into repair mode.
