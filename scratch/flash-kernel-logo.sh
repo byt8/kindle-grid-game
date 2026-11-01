@@ -41,23 +41,27 @@ print('device is unpatched; safe to write')
 PY
 
 echo "== 3/5 upload patched image =="
-scp -i "$KEY" -o BatchMode=yes -o IdentitiesOnly=yes "$LOCAL_PATCHED" root@"$IP":/mnt/us/mmcblk0-first32m-patched.bin
+# scp is broken on this Kindle (sftp-server missing); pipe over stdin instead.
+ssh_k 'cat > /mnt/us/mmcblk0-first32m-patched.bin' < "$LOCAL_PATCHED"
 DEV_MD5=$(ssh_k 'md5sum /mnt/us/mmcblk0-first32m-patched.bin | cut -d" " -f1')
 [ "$DEV_MD5" = "$WANT_MD5_LOCAL" ] && echo "upload md5 OK  $WANT_MD5_LOCAL" || { echo "md5 mismatch $DEV_MD5 != $WANT_MD5_LOCAL"; exit 1; }
 
 echo "== 4/5 write only the changed bytes (4 logo slots + 2 header crcs x 2 kernels) =="
+# BusyBox 1.17.1 dd has NO conv=notrunc; block device so no truncation anyway.
+# Use bs=1 with decimal offsets (hex literals in $(( )) unsupported in ash).
 ssh_k 'set -e
   O=/mnt/us/mmcblk0-first32m-patched.bin
-  # one continuous window per kernel region: main 0xC92C0..0xCAF68, second 0xEC7104..0xEC8DAC
-  # main window: 0xC92C0, len 0xCAF68-0xC92C0 = 0x1CA8 (7336)
-  dd if=$O of=/dev/mmcblk0 bs=512 seek=$((0xC92C0/512)) count=$(( (0xC92C0%512 + 7336 + 511)/512 )) conv=notrunc
-  # second window: 0xEC7104, len 0xEC8DAC-0xEC7104 = 0x1CA8 (7336)
-  dd if=$O of=/dev/mmcblk0 bs=512 seek=$((0xEC7104/512)) count=$(( (0xEC7104%512 + 7336 + 511)/512 )) conv=notrunc
-  # header hcrc + dcrc words for both kernels: offsets +4..7 and +24..27
-  for base in 0x41000 0xE41000; do
-    dd if=$O of=/dev/mmcblk0 bs=1 skip=$((base+4))  seek=$((base+4))  count=4 conv=notrunc
-    dd if=$O of=/dev/mmcblk0 bs=1 skip=$((base+24)) seek=$((base+24)) count=4 conv=notrunc
-  done
+  # main kernel logo window: 0xC92C0 (824000) .. 0xCAF68-1, len 7336
+  dd if=$O of=/dev/mmcblk0 bs=1 skip=824000 seek=824000 count=7336
+  # second kernel logo window: 0xEC7104 (15495428) .. 0xEC8DAC-1, len 7336
+  dd if=$O of=/dev/mmcblk0 bs=1 skip=15495428 seek=15495428 count=7336
+  # uImage header hcrc (+4) and dcrc (+24) for both kernels
+  # main uImage @ 0x41000 (266240): hcrc=266244 dcrc=266264
+  dd if=$O of=/dev/mmcblk0 bs=1 skip=266244 seek=266244 count=4
+  dd if=$O of=/dev/mmcblk0 bs=1 skip=266264 seek=266264 count=4
+  # second uImage @ 0xE41000 (14946304): hcrc=14946308 dcrc=14946328
+  dd if=$O of=/dev/mmcblk0 bs=1 skip=14946308 seek=14946308 count=4
+  dd if=$O of=/dev/mmcblk0 bs=1 skip=14946328 seek=14946328 count=4
   sync
   echo WRITTEN'
 

@@ -207,8 +207,10 @@ etching (`tools/make_boot_screens.py` does this). The mapping:
 
 The **screensaver slideshow** (sleep) is the same idea: 20 pictures on the
 read-only root at `/usr/share/blanket/screensaver/bg_xsmall_ss00..19.png`,
-each a 600x800 greyscale PNG. Rebuild the whole set from the five newest art
-pieces (four zoom/crop variants per piece so the slideshow varies):
+each a 600x800 greyscale PNG. Unlike the boot screens, these are **not**
+inverted — the dark art is shown as-is (nothing is painted over a
+screensaver). Rebuild the whole set from the five newest art pieces (four
+zoom/crop variants per piece so the slideshow varies):
 
 ```
 python3 tools/make_screensaver_screens.py   # rebuilds screens/ss/ss00..ss19.png
