@@ -37,6 +37,14 @@ updated: 2026-11-01
 - Writing a real file over the `/var/local/blanket/.../splash.png` symlink does not change the file `splash.so` opens. That symlink is not the splash module's path.
 - `killall blanket` while `lxinit` is up: lxinit exits, `x_monitor` restarts the UI, then the device reboots onto `repair.png`. Use `initctl stop x` or do not touch it.
 
+## Screensaver slideshow (sleep pictures)
+- The sleep screensaver is 20 pictures on the read-only root: `/usr/share/blanket/screensaver/bg_xsmall_ss00..19.png` (600x800, 8-bit palette originally; greyscale works). `mntroot rw` to write, `mntroot ro` after. Stock `ss` files backed up at `/mnt/us/boot-splash-backup/screensaver/` — but the busybox `cp` on this Kindle has NO `-n`, so the `cp -n` backup line silently copied nothing before the overwrite. Originals are not restorable from that dir; a firmware image would restore them.
+- Install path that worked: `tar -C screens/ss -cf - -- * | ssh root@KINDLE 'cd /tmp && tar -xf -'` (scp is broken — sftp-server missing), then `mntroot rw; for i in $(seq -w 0 19); do cp /tmp/ss$i.png /usr/share/blanket/screensaver/bg_xsmall_ss$i.png; done; sync; mntroot ro`. Verified: md5 of on-device `bg_xsmall_ss0{0,5,19}.png` == local.
+- The framework (`/etc/upstart/framework_setup.conf`) names `com.lab126.hal.screensaver`; slideshow order/selection was not inspected (stock files already replaced).
+
+## Built
+- [2026-11-01] `tools/make_screensaver_screens.py` builds all 20 from the five newest AI art PNGs (4 zoom/crop variants each: full/centre, zoom-top, zoom-bottom, deep-zoom) into `screens/ss/ss00..ss19.png` (600x800 8-bit greyscale, inverted-to-white-etching like the boot screens). All 20 distinct (md5 of 60x80 resized hash — no duplicate groups). Installed on `.63` over all 20 `ss` files, md5-verified on device, rootfs back `ro`. Contact sheet: `ss-preview.png`.
+
 ## Do not redo
 - SSH to `.63` and `strings` on `splash.so` / `libblanket.so`. Asset name is `defaultbg`. Low-level dir strings are `/opt/amazon/low_level_screens/%dx%d` and `/var/local/blanket/low_level_screens/images`.
 

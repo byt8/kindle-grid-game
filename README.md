@@ -205,6 +205,22 @@ etching (`tools/make_boot_screens.py` does this). The mapping:
 | `screens/repair-update.png` | `/opt/amazon/low_level_screens/600x800/repair.png` (repair mode) — also a candidate for the `update_*.png` trio |
 | `screens/misc.png` | any leftover: `critbatt`, `shipping_mode`, `cust_service`, langpicker, usb, ota |
 
+The **screensaver slideshow** (sleep) is the same idea: 20 pictures on the
+read-only root at `/usr/share/blanket/screensaver/bg_xsmall_ss00..19.png`,
+each a 600x800 greyscale PNG. Rebuild the whole set from the five newest art
+pieces (four zoom/crop variants per piece so the slideshow varies):
+
+```
+python3 tools/make_screensaver_screens.py   # rebuilds screens/ss/ss00..ss19.png
+mntroot rw
+cp screens/ss/ss*.png /usr/share/blanket/screensaver/bg_xsmall_ssNN.png   # per-slot, on the kindle
+mntroot ro
+```
+
+The stock `ss` pictures were overwritten in place (busybox `cp` has no `-n`,
+so the backup copy silently failed); restore them from a firmware image if you
+ever need the originals back. See `ss-preview.png` for a contact sheet of all 20.
+
 Install any of them the same way (example: boot pair):
 
 ```
