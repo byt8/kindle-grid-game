@@ -12,6 +12,7 @@ updated: 2026-11-01
 - `tools/make_splash.py` — builds the 600x800 greyscale PNG. Does not install it.
 - `/usr/share/blanket/bg_xsmall_defaultbg.png` on the Kindle — file the splash module opens.
 - `/opt/amazon/low_level_screens/600x800/splash.png` — second copy of the same picture. `/var/local/blanket/low_level_screens/images/splash.png` is a symlink to it.
+- `/var/local/blanket/low_level_screens/images/` — where the low-level renderer actually reads `reboot.png` / `repair.png` / `update_*.png` from. These were REAL files from the 2012 factory tree, NOT symlinks (unlike `splash.png`/`shipping_mode.png`/`critbatt.png` which symlink to `/opt/amazon`). The `/opt/amazon/.../reboot.png` twin must match the `/var/local` one.
 - `/etc/upstart/x.conf` — starts `lxinit`, which loads the splash module.
 - `/etc/upstart/splash.conf` — walks the progress bar 0→90 while the reader UI starts.
 - `/usr/sbin/mntroot` — `rw` / `ro` remount of the root disk.
@@ -24,6 +25,7 @@ updated: 2026-11-01
 - [verified 2026-11-01 src/chess.c] After the game takes the panel it runs `initctl stop x` and one full white flush. `killall blanket` is the repair-reboot path.
 - [verified 2026-11-01 ssh .63 after reboot] Replacing BOTH files (`bg_xsmall_defaultbg.png` + `low_level_screens/600x800/splash.png`) with one greyscale png puts OUR picture on the glass at boot, and it survives the reboot. Stock files backed up to `/mnt/us/boot-splash-backup/`; restore by copying them back over the two paths. Firmware update would put the tree back.
 - [ran 2026-11-01 /usr/share/early_progress/0.png] A 120x120 spinner. `early_progress.conf` plays it at x=319 y=823, which is just past the 800px glass. Not the full-screen tree.
+- [installed 2026-11-01 .63] The restart frame after the "device restarting" dialog was STILL stock even though `/opt/amazon/.../reboot.png` had been replaced — because the low-level renderer reads `/var/local/blanket/low_level_screens/images/reboot.png` (real 2012 file, 8807B), separate from the `/opt` twin. Copied `restart-low.png` over the `/var/local` file; both paths now md5 `445a2836…`. Stock backed up at `/mnt/us/boot-splash-backup/var-local-low-level/reboot.png`. The other `/var/local` files (repair 9148B, update_initial/success/failure, all 2012) are still stock and NOT installed.
 
 ## Built
 - `python3 tools/make_splash.py --logo LOGO.png --out kindle-splash.png` writes the greyscale PNG (600x800, 8-bit, md5 `4a669252…`).

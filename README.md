@@ -200,7 +200,7 @@ etching (`tools/make_boot_screens.py` does this). The mapping:
 | screen file | device paths it replaces |
 |---|---|
 | `screens/boot.png` | `/usr/share/blanket/bg_xsmall_defaultbg.png` **and** `/opt/amazon/low_level_screens/600x800/splash.png` (both must match; the `/var/local/blanket` link only points at the latter) |
-| `screens/restart-low.png` | `/opt/amazon/low_level_screens/600x800/reboot.png` — the second restart screen ("rebooting") |
+| `screens/restart-low.png` | `/opt/amazon/low_level_screens/600x800/reboot.png` **and** `/var/local/blanket/low_level_screens/images/reboot.png` (the low-level renderer reads the `/var/local` copy — a real file, not a symlink) — the second restart screen ("rebooting") |
 | `screens/restart-shutdown.png` | `/usr/share/blanket/shutdown/bg_xsmall_reboot.png` — the first restart screen (Settings → Restart dialog) |
 | `screens/repair-update.png` | `/opt/amazon/low_level_screens/600x800/repair.png` (repair mode) — also a candidate for the `update_*.png` trio |
 | `screens/misc.png` | any leftover: `critbatt`, `shipping_mode`, `cust_service`, langpicker, usb, ota |
