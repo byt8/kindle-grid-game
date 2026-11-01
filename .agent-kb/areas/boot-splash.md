@@ -40,7 +40,7 @@ updated: 2026-11-01
 - Keys must be bytes in the replacements dict (`{msgid.encode(): to}`), or the lookup silently no-ops.
 
 ## Decisions
-- Replace both tree files, not one. The splash module names `defaultbg`. An older note said a reboot changed after `splash.png` was swapped. This session did not reboot, so both copies stay in the install step.
+- Leave the kernel blobs alone until a same-size-or-smaller gzip is ready and the uImage header CRC and data CRC are both recomputed. A longer blob overwrites the kernel. Two copies must stay in agreement or a bad main kernel drops the device into the second image.
 
 ## Dead ends
 - Writing a real file over the `/var/local/blanket/.../splash.png` symlink does not change the file `splash.so` opens. That symlink is not the splash module's path.
@@ -57,12 +57,12 @@ updated: 2026-11-01
 ## OTA defaultbg (last stock copy)
 - [installed 2026-11-01 .63] `/usr/share/blanket/ota/bg_xsmall_defaultbg.png` was the FINAL stock `bg_xsmall_defaultbg*` on the device: a 2382-byte 600x800 8-bit palette PNG (md5 `600a7b8a…`) that renders pure white (dark%=0) — a blank OTA background, NOT the tree. Replaced it with `screens/boot.png`; on-device md5 now `9dd7823b` (= all other defaultbg copies). Stock backed up at `/mnt/us/boot-splash-backup/ota/bg_xsmall_defaultbg.png`.
 - All `bg_xsmall_defaultbg*` copies are now custom `9dd7823b`: root, `splash/`, `langpicker/` (symlink to root), `ota/`, plus low-level `splash.png` and langpicker `bg_xsmall_splash_with_bar.png`. Device sweep confirms no file with stock md5 `600a7b8a` remains under `/usr/share/blanket`.
-- [verified 2026-11-01 device's own captures] The 11:59 and 12:09 reboot sequences on `.63` show only **black → our boot art with progress bar → home**. The tree frames in `bootshots/shot_*.png` (10:15) predate the fix — they were the pre-fix boot. The user's "Kindle bitmap before the boot screen" was the pre-fix tree or the then-stock OTA/restart frames; none remain.
+- [ran 2026-11-01 dd /dev/mmcblk0 first 32MiB] The screen before the PNG boot art is baked into the kernel, not a file. Main uImage at disk `0x41000` (Linux-2.6.31-rt11-lab126, uncompressed, 5197856 bytes). Inside it, three gzip members of a 600x800 2-bit image (12-byte LE header width, height, 2, then 120000 bytes, 4 pixels/byte): plain tree logo at `0xC92C0` (2668 bytes), tree plus "Please wait a moment while your Kindle starts up." at `0xC9D30` (4660 bytes), repair page at `0xCAF68` (4088 bytes). Second kernel at `0xE41000` has the same logo and wait blobs (`0xEC7104` 2668 bytes, `0xEC7B74` 4660 bytes, byte-identical). Boot captures start too late to see this frame. PNG swaps and the blanket.mo string patch do not touch it.
 - Shutdown `bg_xsmall_reboot.png` md5 is `86bdefa6` = `screens/restart-shutdown.png` (already custom).
 
 ## Do not redo
 - SSH to `.63` and `strings` on `splash.so` / `libblanket.so`. Asset name is `defaultbg`. Low-level dir strings are `/opt/amazon/low_level_screens/%dx%d` and `/var/local/blanket/low_level_screens/images`.
 
 ## Open
-- Greyscale png over the palette `defaultbg` is confirmed on device.
-- Taking `splash` out of `/etc/upstart/x.conf` (the way to drop the poster and the bar) is not tried.
+- Kernel logo not replaced. Need a 2-bit 600x800 gzip that fits in 2668 and 4660 bytes, then recompute both uImage CRCs, on both kernels.
+- Taking `splash` out of `/etc/upstart/x.conf` (the way to drop the later poster and the bar) is not tried. That would not remove the kernel frame.

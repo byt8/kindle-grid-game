@@ -238,12 +238,19 @@ stock holdout; a blank white 600x800, backed up to
 `/mnt/us/boot-splash-backup/ota/`). Their stock files are backed up at
 `/mnt/us/boot-splash-backup/shutdown/` and `/mnt/us/boot-splash-backup/low-level/`.
 
-Reboot to see it. The bar that fills along the bottom of the boot screen is
-drawn by code, so a new picture still gets the bar. Verified against the
-device's own boot captures (11:59 / 12:09): the only frames are black → our
-boot art with the progress bar → home; no stock tree frame remains. Stock
-pictures are backed up at `/mnt/us/boot-splash-backup/` — copy them back over
-the same paths to revert. A firmware update also puts the tree back.
+Reboot to see the PNG swap. The bar along the bottom is drawn by code, so a
+new picture still gets the bar. Stock PNG backups are at
+`/mnt/us/boot-splash-backup/`. A firmware update puts those trees back.
+
+The screen **before** that one is not one of these files. The kernel paints it
+from a picture baked into the kernel, before Linux opens any PNG. It is the
+boy under the tree plus the line "Please wait a moment while your Kindle
+starts up." The boot captures missed it because they start after this frame.
+Both kernel copies on the raw disk carry it (main kernel at offset `0x41000`,
+second at `0xE41000`). The pictures are small gzip blobs: the plain logo
+(2668 bytes) and the logo with the sentence (4660 bytes). A new picture has
+to gzip down to that size or it spills into the kernel and the Kindle will
+not boot. The kernel checksums have to be rewritten too. Not done.
 
 To skip the picture, take `splash` out of the two lines in `/etc/upstart/x.conf`.
 Not tried yet. Do not `killall blanket` — the Kindle reboots into repair mode.
@@ -265,7 +272,8 @@ python3 tools/patch_blanket_mo.py blanket.mo --msgid shutdown.reboot.message --t
 
 The patched `en` catalog is installed on the Kindle (backed up to
 `/mnt/us/boot-splash-backup/locale/`); `en_GB` was left stock, and the change
-shows at the next reboot.
+shows on the restart dialog. It does not change the first screen. Those same
+words are painted into the kernel picture, not read from this catalog.
 
 ---
 
