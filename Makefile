@@ -9,7 +9,13 @@ HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 
 .PHONY: all test kindle sound manual grabtest preview preview-old bold chess chess-test chess-kindle \
         tetris tetris-host tetris-test tetris-kindle sudoku sudoku-host sudoku-test sudoku-kindle \
-        menu-host menu-kindle menu-test clean
+        menu-host menu-kindle menu-test rockman-data clean
+
+# ---- rockman data: regenerate from the commented VIC-20 disassembly --------
+
+.PHONY: rockman-data
+rockman-data:
+	$(PY) tools/extract_rockman.py --check
 
 # ---- tetris: 10x20 well, on-screen buttons, no keyboard ------------------
 

@@ -3,7 +3,7 @@
 Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk, tap an alien to shoot, wipe them out.
 Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack blocks and clear lines.
 And Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
-**Rockman** (in progress): the 1984 VIC-20 cave digger, rules extracted — see `docs/ROCKMAN_SPEC.md`; the Kindle port is not written yet.
+**Rockman** (in progress): the 1984 VIC-20 cave digger — rules in `docs/ROCKMAN_SPEC.md`, all data + pixel art machine-extracted into `src/rockman_data.h`; the Kindle port is not written yet.
 
 ---
 
@@ -177,9 +177,18 @@ really stack.
 
 ## Rockman: status
 
-Port not started. The full ruleset and data of the 1984 VIC-20 *Rockman* (22 room maps,
+Port not started. The full ruleset and data of the 1984 VIC-20 *Rockman` (22 room maps,
 diamond positions, exits, monster AI, rock physics, timer, tune) are extracted from the
 commented disassembly into `docs/ROCKMAN_SPEC.md`; the raw source lives in `scratch/`.
+
+The data tables and 8x16 pixel art are regenerated straight from the asm, not hand-typed:
+
+```bash
+make rockman-data   # tools/extract_rockman.py --check -> rewrites src/rockman_data.h
+```
+
+`src/rockman_data.h` is generated — any room/tile change goes in `scratch/Rockman.asm`
+first, then `make rockman-data`.
 
 ---
 

@@ -1,9 +1,9 @@
 # rockman
 
-Status: **extraction done, no code yet** — the full ruleset and all data tables
-of the 1984 VIC-20 *Rockman* (Mastertronic) have been pulled out of the
-commented disassembly into `docs/ROCKMAN_SPEC.md`. The Kindle port has not been
-started.
+Status: **data extraction automated, no game code yet** — ruleset in
+`docs/ROCKMAN_SPEC.md`; all data tables + pixel art are now machine-extracted by
+`tools/extract_rockman.py` into `src/rockman_data.h` (regenerate with
+`python3 tools/extract_rockman.py --check`). The Kindle port has not been started.
 
 ## What it is
 
@@ -24,6 +24,10 @@ engine (`EK_HOST` for PC), 600x800 Kindle Touch, tap buttons, `run-rockman-on-ki
   it (backup).
 - `docs/ROCKMAN_SPEC.md` — rules + data extracted this session; use it to build
   the port without re-reading the asm.
+- `tools/extract_rockman.py` — parses the asm directly; emits `src/rockman_data.h`
+  (rooms, exits, entries, diamond spawns, tune, tick limits, 8x16 charset) and
+  self-checks with `--check` (start-pointer table validates map entry positions).
+- `src/rockman_data.h` — generated, never hand-edit; regenerate after any asm change.
 - `scratch/rockman.prg` — the assembled original binary (for reference).
 
 ## Rules extracted (key facts; full detail in the spec)
@@ -64,7 +68,11 @@ engine (`EK_HOST` for PC), 600x800 Kindle Touch, tap buttons, `run-rockman-on-ki
   spec lists them as (row, col) in map coordinates — row 0-13, col 3-18
   (screen columns), i.e. map col = screen col - 3. Careful when porting.
 - The 8x16 char tiles are stored in `scratch/Rockman.asm` at `charset:` (~line
-  1763) — tile $11 is unused/free, tiles $27/$28 hold ClassifyTile in the
-  original memory layout (irrelevant for a rewrite).
+  1763) — tile $11 is unused/free (`.fill 16,0`), tiles $27/$28 hold ClassifyTile
+  in the original memory layout (irrelevant for a rewrite). The extractor covers
+  $05-$26 + $29-$2C (explosions) as `rm_tiles[0x2D][16]` in rockman_data.h.
+- [verified 2026-11-01 extractor] each room block is a `// room N` comment line
+  directly above 14 `.byte %..,%..` rows; `.fill` must be honoured (tile $11),
+  otherwise the next `.byte` block leaks into the tile.
 - Player faces are encoded in the tile drawn (L/R/UD frames) and PushRock reads
   the player's own tile to decide which side to push.
