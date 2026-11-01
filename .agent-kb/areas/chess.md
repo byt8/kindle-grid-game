@@ -39,9 +39,14 @@ make chess-kindle          # static ARM musl, docker kfb-build, 83 KB
   the dump instead of returning.
 - **Device config path is `/mnt/us/chess.conf`**, not `/mnt/us/chess/...` — the
   binary itself is `/mnt/us/chess`.
-- **`tools/kindle-run.sh` is game-generic**: `GAME=chess sh /mnt/us/chess-run.sh`
-  runs `/mnt/us/chess` and skips the xcom sound setup. `run-chess-on-kindle.sh`
-  pushes chess, grabtest, the wrapper and `chess.conf`.
+- **`tools/kindle-run.sh` is game-generic and owns the whole handoff**:
+  `GAME=chess sh /mnt/us/chess-run.sh` runs `/mnt/us/chess`; it detects leftover
+  games, stops the screen mirror, stops powerd, proves event3 is free, runs the
+  game (with `--detach` re-homing itself under setsid so the ssh link dying
+  changes nothing), then `restore()` brings powerd/framework back. Every game —
+  and the boot menu via `menu-boot.sh` — goes through this one script, so a
+  handoff fix lands everywhere at once. `run-chess-on-kindle.sh` pushes chess,
+  grabtest, the wrapper and `chess.conf`.
 - **White pieces on white squares are nearly invisible** with a 1-pixel rim: the
   rim is now two rings (12 offsets), so a white pawn on a light square still
   reads (ink per square went 385 -> ~500).
@@ -180,12 +185,15 @@ repainted over the game and the bar froze half-drawn — the "black blob".
   `RESULT!=ok`, and `/etc/upstart/x_monitor.conf` restarts the whole GUI —
   up to `RESTART_LIMIT=5` in one boot, and then `REBOOT_LIMIT=1` fires a
   "repair" shutdown. It also comes back painting, so the bar returns anyway.
-- **The fix: the game stops the `x` job**, `system("/sbin/initctl stop x")` in
-  `src/chess.c` right after `ek_open` (only when it took the panel over). A
-  deliberate stop is `RESULT=ok`, so `x_monitor` leaves it down, and
-  `restore-kindle.sh` starts x again on exit because `x_ready` is false.
-  Verified twice: after `kill <chess>` the device came back with
-  `x start/running`, `framework start/running`, cvm and blanket up.
+- **The fix that stuck: never touch the `x` job.** Chess used to
+  `system("/sbin/initctl stop x")` right after `ek_open`; that stopped blanket
+  painting over the board, but on exit `restore-kindle.sh` restarted X and
+  blanket repainted the boot splash + progress bar over the returning menu —
+  the "rebooting" flash after QUIT. Removed 2026-11-01: XCOM proved X can stay
+  up while a game holds the panel (engine `EK_TAKEOVER` stops framework+pillow
+  only), and with X never stopping, the restore finds X up and never flashes.
+  `src/chess.c` now has no initctl calls at all; this is exactly XCOM's path.
+  The one forced full-panel white flush after takeover stays.
 - Then `ek_clear(EK_PAPER); ek_force_full(); ek_flush();` — one full-panel
   GC16 white pass, so the splash/progress-bar pixels (which the game's partial
   updates would never touch) are wiped before the board is drawn.
@@ -240,6 +248,11 @@ game would eat the device's `dmesg` and destroy the evidence of its own waking.
   `powerd` running, a press shows the screensaver and stands the device by. That
   is also why `powerd` must stay stopped while the game owns the panel - it
   answers a press by bringing framework+x+blanket+pillowd back over the board.
+- **powerd is now stopped by the shared runner, not in-game.** Chess used to
+  `initctl stop powerd` inside `main`; that moved to `tools/kindle-run.sh` step 3
+  (one place, covers xcom/tetris/chess/menu identically) and `restore()` starts
+  it again on exit. Chess's own power-key sleep still works — it reads the
+  kernel log, not powerd.
 - `sleep_now()`: `pwr_drain(200)`, paint ASLEEP (`ek_force_full`), write `mem`
   to `/sys/power/state` (the write returns on wake), log `asleep for N s` from
   /proc/uptime, `pwr_drain(800)` so the waking press is not counted again,

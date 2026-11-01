@@ -127,7 +127,17 @@ if [ -n "$(pidof kfb 2>/dev/null || true)" ]; then
     fi
 fi
 
-# 3. Prove the touch device is free before drawing anything. A refusal here is
+# 3. Every game owns the power key while it runs. powerd answers a press
+#    with the Kindle screen saver, which would paint over the board (chess
+#    used to stop powerd in-game; doing it once here covers every game the
+#    same way, and restore() on exit starts it again).
+if /sbin/initctl status powerd 2>/dev/null | grep -q 'start/running'; then
+    say "stopping powerd so the power key belongs to the game"
+    /sbin/initctl stop powerd >/dev/null 2>&1 || \
+        say "WARNING: could not stop powerd; a power press may raise the screen saver"
+fi
+
+# 4. Prove the touch device is free before drawing anything. A refusal here is
 #    a hard stop: running anyway gives a game whose screen responds to nothing.
 if [ ! -x /mnt/us/grabtest ]; then
     say "ERROR: /mnt/us/grabtest is missing, cannot check the touch device"
@@ -143,7 +153,7 @@ if ! /mnt/us/grabtest; then
     exit 1
 fi
 
-# 4. Play. xcom talks, so it gets its clips or an explicit --mute; anything
+# 5. Play. xcom talks, so it gets its clips or an explicit --mute; anything
 #    else (chess) has no sound to arrange. Any argument passed to this script
 #    goes to the game (--auto 3, --apicheck and friends).
 args=""

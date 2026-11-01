@@ -296,8 +296,12 @@ be recomputed, which the builder does.
 
 To skip the picture, take `splash` out of the two lines in `/etc/upstart/x.conf`.
 Not tried yet. Do not `killall blanket` — the Kindle reboots into repair mode.
-The game already stops the whole `x` job once it owns the screen, and paints one
-white frame so the tree does not stay on the glass.
+Games never stop the `x` job: stopping X makes restore-kindle.sh restart it on
+exit, which makes blanket redraw the boot splash (the flicker after QUIT). They
+take the screen with the engine's `EK_TAKEOVER` (framework + pillow only), and
+the shared runner (`tools/kindle-run.sh`) stops powerd before each game so the
+power key cannot raise the screen saver over the board — same clean start/stop
+as XCOM for every game.
 
 ### Language strings (the "Kindle starts up" text)
 

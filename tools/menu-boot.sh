@@ -77,10 +77,18 @@ while :; do
         say "touch device still grabbed (grabtest failed); reader stays up"
         exit 1
     fi
+    # The power key belongs to the menu while it shows (same rule as the game
+    # runner: powerd answers a press with the screen saver, painting over the
+    # panel). The runners of the games stop/restart powerd per game; this loop
+    # covers the menu phases between them. restore_ui() starts it again.
+    /sbin/initctl stop powerd >> "$LOG" 2>&1 || say "could not stop powerd for the menu"
     /mnt/us/menu >> "$LOG" 2>&1
     rc=$?
+    /sbin/initctl start powerd >> "$LOG" 2>&1 || say "could not restart powerd after the menu"
     case $rc in
         0)  say "KINDLE chosen; restoring the reader UI"
+            /sbin/initctl start powerd >> "$LOG" 2>&1 || \
+                say "could not restart powerd for the reader UI"
             sh /mnt/us/fbdaemon/restore-kindle.sh >> "$LOG" 2>&1
             exit 0 ;;
         1)  say "launching XCOM"

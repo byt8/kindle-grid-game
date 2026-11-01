@@ -13,6 +13,7 @@
 /xcom-host
 /chess-host
 /tetris-host
+/menu-host
 *:Zone.Identifier
 *.pgm
 /tetris-open.png
