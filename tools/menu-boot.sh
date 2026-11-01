@@ -71,10 +71,12 @@ wait_wifi
 while :; do
     if ! stop_mirror; then
         say "cannot free the touch device; leaving the Kindle UI up"
+        : > /mnt/us/.menu-stop
         exit 1
     fi
     if [ -x /mnt/us/grabtest ] && ! /mnt/us/grabtest >> "$LOG" 2>&1; then
         say "touch device still grabbed (grabtest failed); reader stays up"
+        : > /mnt/us/.menu-stop
         exit 1
     fi
     # The power key belongs to the menu while it shows (same rule as the game
@@ -87,6 +89,7 @@ while :; do
     /sbin/initctl start powerd >> "$LOG" 2>&1 || say "could not restart powerd after the menu"
     case $rc in
         0)  say "KINDLE chosen; restoring the reader UI"
+            : > /mnt/us/.menu-stop
             /sbin/initctl start powerd >> "$LOG" 2>&1 || \
                 say "could not restart powerd for the reader UI"
             sh /mnt/us/fbdaemon/restore-kindle.sh >> "$LOG" 2>&1
