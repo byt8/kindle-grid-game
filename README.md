@@ -200,8 +200,8 @@ etching (`tools/make_boot_screens.py` does this). The mapping:
 | screen file | device paths it replaces |
 |---|---|
 | `screens/boot.png` | `/usr/share/blanket/bg_xsmall_defaultbg.png` **and** `/opt/amazon/low_level_screens/600x800/splash.png` (both must match; the `/var/local/blanket` link only points at the latter) |
-| `screens/restart-low.png` | `/opt/amazon/low_level_screens/600x800/reboot.png` — the low-battery reboot screen |
-| `screens/restart-shutdown.png` | `/usr/share/blanket/shutdown/bg_xsmall_reboot.png` — the restart dialog screen |
+| `screens/restart-low.png` | `/opt/amazon/low_level_screens/600x800/reboot.png` — the second restart screen ("rebooting") |
+| `screens/restart-shutdown.png` | `/usr/share/blanket/shutdown/bg_xsmall_reboot.png` — the first restart screen (Settings → Restart dialog) |
 | `screens/repair-update.png` | `/opt/amazon/low_level_screens/600x800/repair.png` (repair mode) — also a candidate for the `update_*.png` trio |
 | `screens/misc.png` | any leftover: `critbatt`, `shipping_mode`, `cust_service`, langpicker, usb, ota |
 
@@ -229,6 +229,11 @@ cp screens/boot.png /usr/share/blanket/bg_xsmall_defaultbg.png
 cp screens/boot.png /opt/amazon/low_level_screens/600x800/splash.png
 mntroot ro
 ```
+
+All five are now installed on the device — the Settings → Restart flow shows our
+`restart-shutdown.png` (dialog) then `restart-low.png` (rebooting) before the
+boot art. Their stock files are backed up at
+`/mnt/us/boot-splash-backup/shutdown/` and `/mnt/us/boot-splash-backup/low-level/`.
 
 Reboot to see it. The bar that fills along the bottom of the boot screen is
 drawn by code, so a new picture still gets the bar. Stock pictures are backed
