@@ -52,6 +52,14 @@ conventions as tetris/chess (host build reads `tap X Y` from stdin and
 ## Status
 
 Verified: `make sudoku-test` (selftest + check_pgm picture walk) and menu
-walk (`make menu-test`) pass; ARM build clean. Not yet played on a real
-Kindle (devices were offline; `run-sudoku-on-kindle.sh 192.168.0.66` next
-session).
+walk (`make menu-test`) pass; ARM build clean. Deployed to the device at
+192.168.0.66: menu (with the SUDOKU button) was pushed, the button band
+(y485-569) verified on the live panel via `--dump`, and the menu-boot
+session runs under a supervising upstart loop so any crash auto-restarts
+it. Push caveats: the device answers ssh but not ping, and binaries that
+are executing on the device ("Text file busy") must be killed first —
+`install-menu-on-kindle.sh` does not stop running games before pushing.
+
+Also remember: the menu session at boot launched SUDOKU without a tap
+(after the boot log showed it) — a ghost/spurious tap on the panel, not
+user input; not reproduced.
