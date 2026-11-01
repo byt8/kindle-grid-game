@@ -2,6 +2,8 @@
 
 Newest first. One line per task. Current truth is in `areas/`, not here.
 
+- 2026-11-01 — boot-splash — **Removed "Kindle" from the "Please wait a moment while your Kindle starts up." reboot dialog on `.63`.** It is the gettext msgstr `shutdown.reboot.message` in `/usr/share/locale/en/LC_MESSAGES/blanket.mo` (read-only root). New `tools/patch_blanket_mo.py` swaps one msgstr keeping every other byte intact (NUL-separated pools) and self-verifies. Installed over `en` (md5 c3b94fe7… → 8c3a08ce…), backup at `/mnt/us/boot-splash-backup/locale/blanket-en.mo`, root back `ro`; `en_GB` left stock. Gotchas: `mntroot` needs the full path `/usr/sbin/mntroot` over ssh; replacement keys must be bytes.
+
 - 2026-11-01 — boot-splash — **Five art screens built from AI art** (`tools/make_boot_screens.py`, rebuild byte-identical): `screens/{boot,restart-low,restart-shutdown,repair-update,misc}.png`, 600x800 8-bit greyscale, dense ink art inverted to white-with-etching. Mapping recorded in README. **Not installed** — `.63` was offline ("No route to host").
 
 - 2026-11-01 — boot-splash — Boot tree is two rootfs PNGs; bar is code. `.63` still stock.

@@ -245,6 +245,23 @@ Not tried yet. Do not `killall blanket` — the Kindle reboots into repair mode.
 The game already stops the whole `x` job once it owns the screen, and paints one
 white frame so the tree does not stay on the glass.
 
+### Language strings (the "Kindle starts up" text)
+
+The boot/restart screens' text comes from gettext catalogs on the read-only
+root. The restart dialog's "Please wait a moment while your Kindle starts up."
+is `shutdown.reboot.message` in `/usr/share/locale/en/LC_MESSAGES/blanket.mo`
+(and `en_GB`). `tools/patch_blanket_mo.py` swaps one msgstr while keeping every
+other byte of the file intact — a needed gift, because boot-time tools cannot
+read NUL-free text if the pools grow:
+
+```
+python3 tools/patch_blanket_mo.py blanket.mo --msgid shutdown.reboot.message --to "Please wait a moment while your device starts up."
+```
+
+The patched `en` catalog is installed on the Kindle (backed up to
+`/mnt/us/boot-splash-backup/locale/`); `en_GB` was left stock, and the change
+shows at the next reboot.
+
 ---
 
 ## When it goes wrong

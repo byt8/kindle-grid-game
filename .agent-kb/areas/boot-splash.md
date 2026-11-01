@@ -29,6 +29,13 @@ updated: 2026-11-01
 - `python3 tools/make_splash.py --logo LOGO.png --out kindle-splash.png` writes the greyscale PNG (600x800, 8-bit, md5 `4a669252…`).
 - Installed on `.63` over BOTH tree files, `mntroot rw` round-trip, rebooted, boot-shot captured → our picture confirmed on glass. Backups in `/mnt/us/boot-splash-backup/`. One-off boot-capture upstart job (`/etc/upstart/bootcap.conf`) and `/mnt/us/bootshots*` captures deleted after verification.
 - Five 600x800 8-bit greyscale screens built 2026-11-01 by `tools/make_boot_screens.py` (each verified colour type 0, content present): `screens/boot.png` (fouloud art), `restart-low.png` (danirolli art → `reboot.png`), `restart-shutdown.png` (langdd art → blanket `shutdown/bg_xsmall_reboot.png`), `repair-update.png` (bilbilsu art → `repair.png` / update trio), `misc.png` (melira art → critbatt/shipping_mode/cust_service/langpicker/usb/ota). Rebuild is byte-identical (md5-checked). NOT yet installed on a device — `.63` was offline ("No route to host") at commit time.
+- `mntroot` is NOT on PATH over non-interactive ssh — use the full path `/usr/sbin/mntroot rw|ro`.
+
+## Reboot text ("Kindle starts up")
+- The "Please wait a moment while your Kindle starts up." dialog text is the gettext msgstr `shutdown.reboot.message` in `/usr/share/locale/en/LC_MESSAGES/blanket.mo` (+ `en_GB`), read-only root, not the images.
+- `tools/patch_blanket_mo.py` swaps one msgstr while keeping every other byte intact (rebuilds header/index/hash/pools; original pools are NUL-separated, entries are len+1 bytes). Verify pass is inside the tool: msgids identical, only target msgstr changed, strict byte-diff outside the window.
+- [installed 2026-11-01 .63] patched `en` catalog over the stock one (md5 8c3a08ce… vs c3b94fe7…), backup at `/mnt/us/boot-splash-backup/locale/blanket-en.mo`, root back `ro`. `en_GB` left stock. Change shows at next reboot.
+- Keys must be bytes in the replacements dict (`{msgid.encode(): to}`), or the lookup silently no-ops.
 
 ## Decisions
 - Replace both tree files, not one. The splash module names `defaultbg`. An older note said a reboot changed after `splash.png` was swapped. This session did not reboot, so both copies stay in the install step.
