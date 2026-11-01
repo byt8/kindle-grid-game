@@ -182,33 +182,42 @@ sh /mnt/us/chess-wifi.sh join SSID PSK   # joins and remembers
 sh /mnt/us/chess-wifi.sh auto            # rejoin what was remembered
 ```
 
-### Boot picture
+### Boot and device pictures
 
-Installed on `192.168.0.63` (Kindle 5.3.7.3) and verified on the glass after a
-reboot. The root disk is read-only (`/usr/sbin/mntroot rw` unlocks it).
-
-The splash program opens `/usr/share/blanket/bg_xsmall_defaultbg.png`. A second
-copy of the same picture is `/opt/amazon/low_level_screens/600x800/splash.png`
-(the link under `/var/local/blanket` only points there). Replace both. The file
-must be 600x800, 8-bit, no alpha. The bar that fills along the bottom is drawn
-by code, so a new picture still gets the bar.
+Every full-screen picture the Kindle shows is a 600x800 8-bit greyscale PNG
+(colour type 0, no alpha) on the read-only root disk
+(`/usr/sbin/mntroot rw` unlocks it). Five art screens are built from the
+workspace's AI art:
 
 ```
-python3 tools/make_splash.py --logo LOGO.png --out kindle-splash.png
+python3 tools/make_boot_screens.py   # rebuilds all five into screens/
 ```
 
-Then on the Kindle:
+The AI art is dense ink (77–96% black), which would swallow the code-drawn
+progress bar / labels, so each piece is inverted to a white panel with dark
+etching (`tools/make_boot_screens.py` does this). The mapping:
+
+| screen file | device paths it replaces |
+|---|---|
+| `screens/boot.png` | `/usr/share/blanket/bg_xsmall_defaultbg.png` **and** `/opt/amazon/low_level_screens/600x800/splash.png` (both must match; the `/var/local/blanket` link only points at the latter) |
+| `screens/restart-low.png` | `/opt/amazon/low_level_screens/600x800/reboot.png` — the low-battery reboot screen |
+| `screens/restart-shutdown.png` | `/usr/share/blanket/shutdown/bg_xsmall_reboot.png` — the restart dialog screen |
+| `screens/repair-update.png` | `/opt/amazon/low_level_screens/600x800/repair.png` (repair mode) — also a candidate for the `update_*.png` trio |
+| `screens/misc.png` | any leftover: `critbatt`, `shipping_mode`, `cust_service`, langpicker, usb, ota |
+
+Install any of them the same way (example: boot pair):
 
 ```
 mntroot rw
-cp kindle-splash.png /usr/share/blanket/bg_xsmall_defaultbg.png
-cp kindle-splash.png /opt/amazon/low_level_screens/600x800/splash.png
+cp screens/boot.png /usr/share/blanket/bg_xsmall_defaultbg.png
+cp screens/boot.png /opt/amazon/low_level_screens/600x800/splash.png
 mntroot ro
 ```
 
-Reboot to see it. Installed files on `.63` are md5 `4a669252…`; the stock
-pictures are backed up at `/mnt/us/boot-splash-backup/` — copy them back over
-the same two paths to revert. A firmware update also puts the tree back.
+Reboot to see it. The bar that fills along the bottom of the boot screen is
+drawn by code, so a new picture still gets the bar. Stock pictures are backed
+up at `/mnt/us/boot-splash-backup/` — copy them back over the same paths to
+revert. A firmware update also puts the tree back.
 
 To skip the picture, take `splash` out of the two lines in `/etc/upstart/x.conf`.
 Not tried yet. Do not `killall blanket` — the Kindle reboots into repair mode.

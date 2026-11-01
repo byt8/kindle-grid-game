@@ -8,6 +8,7 @@ updated: 2026-11-01
 # Kindle boot picture
 
 ## Map
+- `tools/make_boot_screens.py` — rebuilds all five art screens into `screens/` (invert dense ink art -> `make_splash`). Does not install.
 - `tools/make_splash.py` — builds the 600x800 greyscale PNG. Does not install it.
 - `/usr/share/blanket/bg_xsmall_defaultbg.png` on the Kindle — file the splash module opens.
 - `/opt/amazon/low_level_screens/600x800/splash.png` — second copy of the same picture. `/var/local/blanket/low_level_screens/images/splash.png` is a symlink to it.
@@ -27,6 +28,7 @@ updated: 2026-11-01
 ## Built
 - `python3 tools/make_splash.py --logo LOGO.png --out kindle-splash.png` writes the greyscale PNG (600x800, 8-bit, md5 `4a669252…`).
 - Installed on `.63` over BOTH tree files, `mntroot rw` round-trip, rebooted, boot-shot captured → our picture confirmed on glass. Backups in `/mnt/us/boot-splash-backup/`. One-off boot-capture upstart job (`/etc/upstart/bootcap.conf`) and `/mnt/us/bootshots*` captures deleted after verification.
+- Five 600x800 8-bit greyscale screens built 2026-11-01 by `tools/make_boot_screens.py` (each verified colour type 0, content present): `screens/boot.png` (fouloud art), `restart-low.png` (danirolli art → `reboot.png`), `restart-shutdown.png` (langdd art → blanket `shutdown/bg_xsmall_reboot.png`), `repair-update.png` (bilbilsu art → `repair.png` / update trio), `misc.png` (melira art → critbatt/shipping_mode/cust_service/langpicker/usb/ota). Rebuild is byte-identical (md5-checked). NOT yet installed on a device — `.63` was offline ("No route to host") at commit time.
 
 ## Decisions
 - Replace both tree files, not one. The splash module names `defaultbg`. An older note said a reboot changed after `splash.png` was swapped. This session did not reboot, so both copies stay in the install step.

@@ -2,6 +2,8 @@
 
 Newest first. One line per task. Current truth is in `areas/`, not here.
 
+- 2026-11-01 — boot-splash — **Five art screens built from AI art** (`tools/make_boot_screens.py`, rebuild byte-identical): `screens/{boot,restart-low,restart-shutdown,repair-update,misc}.png`, 600x800 8-bit greyscale, dense ink art inverted to white-with-etching. Mapping recorded in README. **Not installed** — `.63` was offline ("No route to host").
+
 - 2026-11-01 — boot-splash — Boot tree is two rootfs PNGs; bar is code. `.63` still stock.
 
 - 2026-10-31 — tetris — **Fixed the device build flashing and closing instantly ("it starts then closes").** The real-Kindle loop is `while (running && !stop_req)` but `static int running;` had no initializer and was only ever set to `0` (QUIT), so the loop was skipped entirely: the game took over the screen, `ek_close()` ran, the launcher restored the reader — all within ~15 s. Fixed with `running = 1;` in `reset_game()`. **`make tetris-test` cannot catch this** — the host build compiles the `#ifdef EK_HOST` pipe/interactive path, never the `#else` device event loop, so a device-loop bug is invisible to every host check. Pushed and held the screen on 192.168.0.66 (PID 10595).
