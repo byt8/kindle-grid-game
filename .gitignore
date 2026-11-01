@@ -15,6 +15,7 @@
 /tetris-host
 /menu-host
 /sudoku-host
+/rockman-host
 *:Zone.Identifier
 *.pgm
 /tetris-open.png

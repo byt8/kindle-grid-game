@@ -3,7 +3,7 @@
 Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk, tap an alien to shoot, wipe them out.
 Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack blocks and clear lines.
 And Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
-**Rockman** (in progress): the 1984 VIC-20 cave digger — rules in `docs/ROCKMAN_SPEC.md`, all data + pixel art machine-extracted into `src/rockman_data.h`; the Kindle port is not written yet.
+**Rockman** (in progress): the 1984 VIC-20 cave digger — rules in `docs/ROCKMAN_SPEC.md`, all data + pixel art machine-extracted into `src/rockman_data.h`, build plan in `docs/ROCKMAN_PLAN.md`; the port itself is not written yet.
 
 ---
 
@@ -226,18 +226,27 @@ really stack.
 
 ## Rockman: status
 
-Port not started. The full ruleset and data of the 1984 VIC-20 *Rockman` (22 room maps,
-diamond positions, exits, monster AI, rock physics, timer, tune) are extracted from the
-commented disassembly into `docs/ROCKMAN_SPEC.md`; the raw source lives in `scratch/`.
+Rules and data are fully extracted; the port is not written yet. Read the two docs in
+this order before touching `src/rockman.c`:
+
+1. `docs/ROCKMAN_SPEC.md` — rules + every data table, verbatim from the disassembly.
+2. `docs/ROCKMAN_PLAN.md` — the reviewed build plan: spec corrections (map bit 1 =
+   **rock**, not wall; `CELL_*` = screen offsets), the 27x40 cell layout for 600x800,
+   tick timings (16 ms pass, 14/16/9 action ticks, 9 x 120 x 6 timer passes),
+   function-by-function build order, tests, and the handful of asm spots still to
+   verify line by line.
 
 The data tables and 8x16 pixel art are regenerated straight from the asm, not hand-typed:
 
 ```bash
 make rockman-data   # tools/extract_rockman.py --check -> rewrites src/rockman_data.h
+python3 scratch/show_tiles.py   # every tile as ASCII: check 1-bit legibility
 ```
 
 `src/rockman_data.h` is generated — any room/tile change goes in `scratch/Rockman.asm`
-first, then `make rockman-data`.
+first, then `make rockman-data`. Once the port exists it joins the others:
+`make rockman-host && make rockman-test` on the PC, `make rockman-kindle` +
+`./run-rockman-on-kindle.sh <ip>` on the device.
 
 ---
 
