@@ -2,6 +2,8 @@
 
 Newest first. One line per task. Current truth is in `areas/`, not here.
 
+- 2026-11-01 — xcom — **Sprite supply contract written down** (README "The sprites are drawn bold on purpose" + `areas/xcom.md`): four sheets in `bold/` = 13 cells (players/enemies/objects 2x2, drone 1x1), 512 px per cell, black-on-white, grey >= 120 is paper, players bake hollow and the rest solid, blank or <15% ink aborts the bake. Terrain is never supplied (`PATTERNS` owns the seven) and stats come from `tactical_sprite_map_with_descriptions.json`, so new art changes no rules. `make preview` re-verified green (20 sprites). Ready for the user to drop in replacement art.
+
 - 2026-11-01 — rockman — `tools/extract_rockman.py` now emits `src/rockman_data.h` (rooms, exits, diamonds, tune, tick limits, 8x16 charset) with `--check` self-tests.
 
 - 2026-11-01 — sudoku — **Fourth game: `src/sudoku.c`.** 9x9 board on the 600x800 panel, generated puzzles with a verified-unique-solution carve (EASY/MED/HARD = 33/29/25 clues), hints, ERASE/NEW/QUIT, tap-only with a 140ms button flash, WIN card. Full host test: `make sudoku-test` (selftest asserts + check_pgm walk). Menu rc 4 wired in `menu-boot.sh`/installer (already present from the handoff); committed ARM binary `sudoku`; `make sudoku-kindle` builds clean. Not yet played on-device (Kindles offline) — `./run-sudoku-on-kindle.sh 192.168.0.66` next session. Committed c636914.

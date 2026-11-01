@@ -2,7 +2,7 @@
 area: xcom
 title: Kindle XCOM mission
 aliases: [kindle-xcom, first-contact]
-updated: 2026-10-31
+updated: 2026-11-01
 ---
 
 # Kindle XCOM mission
@@ -47,6 +47,7 @@ updated: 2026-10-31
 
 ## Built
 - One mission, FIRST CONTACT: 4 soldiers, 5 aliens, fog, cover, walk or run, shoot, overwatch, hunker, medic heal. Entry is `main` in `src/xcom.c`.
+- [verified 2026-11-01 `make preview`] Sprite **supply contract** lives in README.md under "The sprites are drawn bold on purpose": four sheets in `bold/` (players/enemies/objects 2x2, drone 1x1) = 13 cells, 512 px per cell, black-on-white, grey >= 120 is paper, players bake hollow and the rest solid, blank or <15% ink aborts. Terrain is never supplied -- `PATTERNS` owns all seven. Stats come from `tactical_sprite_map_with_descriptions.json`, so new art changes no rules. A new filename or grid means editing `bold_sprite_sources.json` too.
 - Device: `./run-on-kindle.sh [ip]`, then QUIT and SURE. That calls `ek_close`, which gives the book screen back. `make grabtest` builds the touch probe it pushes.
 - PC: `./xcom-host --selftest` and `--dump`. Pipe `tap X Y` lines before `--dump` to play a picture.
 - **Manual:** `MANUAL.md` is the full game rules in plain-spoken prose. `make manual` bakes `manual.wav` via the local TTS service (same one the game's sound clips use).

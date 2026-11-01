@@ -124,8 +124,34 @@ turns into speckle, and a soldier stops looking different from a crate. So:
 - **Terrain is a pattern, not a picture**: dots = grass, trunks = forest, waves =
   water, dashes = road, windows = city, pluses = rubble, peaks = mountains.
 
-To redo the art: generate new sheets into `bold/`, point
-`bold_sprite_sources.json` at them, then `make preview && make test`.
+To redo the art, drop four sheets into `bold/` — 13 cells total, no code changes:
+
+| file | grid | cells, left-to-right top-to-bottom |
+|---|---|---|
+| `bold/players.png` | 2x2 | soldier, sniper, heavy, medic |
+| `bold/enemies.png` | 2x2 | sectoid, sniper, mutant, assault |
+| `bold/objects.png` | 2x2 | rocks, tree, crates, bush |
+| `bold/drone.png` | 1x1 | drone |
+
+Terrain (**grass / forest / city / road / water / rubble / mountains**) is **not** yours to
+supply — those seven come from `PATTERNS` in the baker.
+
+Rules the baker enforces, so the art has to be drawn to them:
+
+- **512x512 per cell** (1024x1024 sheets). Below ~200 px the hard threshold eats every
+  interior line. Any size divides as long as it splits evenly into the grid.
+- **Black line art on white.** Grey >= 120 becomes paper, so shading is invisible. The file
+  is sniffed by content, not extension — WebP named `.png` is fine.
+- `players.png` bakes **hollow**: your outline is kept, the inside turns white. Give every
+  figure a heavy closed outline or the bake dies with *"hollow outline disappeared at 40 px"*.
+- `enemies` / `objects` / `drone` bake **solid**: the silhouette becomes black. Interior
+  detail is discarded, so the outline alone has to be recognisable.
+- A cell with no ink, or under 15% ink once fitted to 40x40, **aborts the bake** rather than
+  shipping a blank tile. Nothing is substituted.
+
+Then `make preview && make test`. Unit stats (HP, aim, damage) come from
+`tactical_sprite_map_with_descriptions.json`, not the art, so new pictures change no rules.
+Different filenames or grids mean editing `bold_sprite_sources.json` too.
 
 The Kindle keeps the last binary you pushed, so new art needs **both** steps:
 
