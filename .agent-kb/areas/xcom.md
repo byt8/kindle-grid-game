@@ -22,7 +22,7 @@ updated: 2026-11-01
 - `run-on-kindle.sh` — copy `xcom`, `grabtest`, `tools/kindle-run.sh` and `sound/` (as one tar stream) over SSH and run the game. Takes an optional Kindle IP.
 - `tools/kindle-run.sh` — on-device wrapper: kill leftover game, stop `kfbterm`, hard-kill `kfb`, grab-test, run with `--sound /mnt/us/xcom-sound`, then restore the UI. Extra arguments go to the game.
 - `tools/grabtest.c` — `EVIOCGRAB` probe for `/dev/input/event3`.
-- `jailbreak-kindle/kindle-tools/fbdaemon/engine/eink.h` — the screen. Not this repo. Do not edit it for this game.
+- `jailbreak-kindle/kindle-tools/fbdaemon/engine/eink.c|.h` — the screen. **Not this repo**: it is a symlink to `~/jailbreak-kindle`, a shared constituent (own git repo) that also draws chess/tetris/sudoku/the menu. **Editable, but ask the user first** and say what changes for the other games before writing there; keep this repo's own game out of it (one-way rule).
 
 ## Facts
 - [verified 2026-10-30 jailbreak-kindle/.agent-kb/areas/kindle-fb-daemon.md] The panel is 600x800, 8 bpp, stride 608. The engine draws 1-bit and pushes dirty tiles. Touch is `/dev/input/event3`.
@@ -44,6 +44,8 @@ updated: 2026-11-01
 - [ran 2026-10-31 make test] `src/sprites.h` rebuilt from scratch (20 sprites) and the whole suite passed: three PGMs ok, pictures differ, 91 words + 7 effects present.
 - [ran 2026-10-31] Only 20 sprite ids are ever drawn. `src/sprites.h` now holds exactly those; the other 71 (vehicles, misc, ui, quirky) were dead weight. A future lookup of a dropped id fails loudly: `sp_find` returns -1 and `load_pictures`/`spawn` print `missing sprite X` and exit.
 - [ran 2026-10-31] Baked ink coverage: hollow friendlies 33-45% of the body, solid aliens 73-95%. Anything under 15% aborts the bake.
+- [verified 2026-11-01 eink.c:131,137,876 + src/xcom.c:1499] The panel is forced to 1-bit by two code choices, not hardware: `expand_lut` stretches each canvas bit to exactly 0 or 255 (`eink.c:876`), and `ek_mono(1)` at `src/xcom.c:1499` sets `EPDC_FLAG_FORCE_MONOCHROME`. The framebuffer is already 8 bpp and the engine already accepts GL16/GC16, so true grey needs no hardware or panel change.
+- [verified 2026-11-01 grep ek_grey] No `ek_grey`/grey blit exists anywhere in the engine or `src/` — greyscale has to be written, not found.
 
 ## Built
 - One mission, FIRST CONTACT: 4 soldiers, 5 aliens, fog, cover, walk or run, shoot, overwatch, hunker, medic heal. Entry is `main` in `src/xcom.c`.
@@ -62,9 +64,12 @@ updated: 2026-11-01
 - Stationary aim is +20. The sheet says "a bonus" and does not give the number. Range numbers live in `tune` because the sheet has none.
 - Every frame forces the GC16 waveform and waits. A turn-based picture should be readable, not a fast DU ghost.
   *Revised 2026-10-31:* that was a full-panel clean per flush, and the engine already tiles. Now `ek_waveform(0)` + `ek_policy(180, 6, 35)` + `ek_ghost(4, 30)` lets the engine pick GL16_FAST for a tap, and GC16 is kept only for big frames and the pre-refresh clean.
+- **Greyscale = option B, approved by the user 2026-11-01 (chat `d02032d8-70ea-48e3-b0cb-0398f9770ff3`, "Sprite Replacement Requirements").** The user rejected dithered black/white ("thats still balck and white and not greyscale") — do **not** fall back to it because the engine is shared. Ship real grey levels.
+- **How to touch the shared engine without breaking the others:** an opt-in `ek_grey()` mode in `eink.c`, leaving the existing 1-bit path byte-identical for chess/tetris/sudoku/menu, and dropping `ek_mono(1)` only on this game's side. Canvas 60KB -> 480KB and an 8x larger dirty-tile diff are the known costs. A `demo-dump` PGM showing mid-grey values (not just 0/255) is the proof.
+- **Persevere, but ask before writing in `jailbreak-kindle`.** The engine may be changed — "it is a shared constituent" is not a refusal, it is a *warn-first* rule: state the plan, get the go-ahead (already given for option B), then edit. Never rewrite the shared engine's default behaviour.
 
 ## Do not redo
-- Do not hunt for a grey path in `eink.h`. It refuses greys on purpose.
+- Do not hunt for a grey path in `eink.h` — none exists (verified 2026-11-01), so re-searching is wasted; the answer is to build the opt-in `ek_grey()` path in Decisions, after asking the user.
 - Do not feed the sprite baker a small source and expect detail: below ~200 px per sprite the threshold eats every interior line. Generate at 512 px per cell (a 2x2 sheet).
 - Do not add a terrain id without a pattern in `PATTERNS`; the baker exits naming the missing id rather than baking a blank tile.
 - Do not use `eips` for on-panel text. The jailbreak KB already measured that it paints nothing on this firmware.
@@ -90,6 +95,7 @@ updated: 2026-11-01
 - Second Kindle is `192.168.0.66`, same root ssh key as `.63`. `./run-on-kindle.sh 192.168.0.66` pushes, grabs touch, runs and restores.
 
 ## Open
+- **True greyscale (option B) is approved but not implemented.** Chat `d02032d8` stopped right after the user's "b" with this plan still pending: (1) read engine flush/diff/expand + xcom draw paths, (2) add opt-in 4-bit grey to shared `eink.c`, (3) wire terrain/sprites and drop `ek_mono(1)`, (4) rebuild + demo dump, verify real grey in the PGM, (5) KB + commit. Ask the user before the first write into `jailbreak-kindle`.
 - Nothing blocking. The game needs only a LAN, not the internet.
 - Nobody has listened to a full mission yet. The device log proves the clips load, the mixers are set and `aplay` accepts every frame; only an ear can confirm the volume suits the room.
 
