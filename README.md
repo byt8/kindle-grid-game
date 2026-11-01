@@ -3,6 +3,7 @@
 Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk, tap an alien to shoot, wipe them out.
 Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack blocks and clear lines.
 And Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
+**Rockman** (in progress): the 1984 VIC-20 cave digger, rules extracted — see `docs/ROCKMAN_SPEC.md`; the Kindle port is not written yet.
 
 ---
 
@@ -171,6 +172,14 @@ One file, `src/tetris.c`: rules, drawing, the auto-player and a PC self-test. A 
 piece shows a ghost where it will land. `make tetris-test` runs the self-test plus three
 screens (open, one tap, 24 auto pieces) and checks the well frame is drawn and the blocks
 really stack.
+
+---
+
+## Rockman: status
+
+Port not started. The full ruleset and data of the 1984 VIC-20 *Rockman* (22 room maps,
+diamond positions, exits, monster AI, rock physics, timer, tune) are extracted from the
+commented disassembly into `docs/ROCKMAN_SPEC.md`; the raw source lives in `scratch/`.
 
 ---
 
