@@ -243,14 +243,22 @@ new picture still gets the bar. Stock PNG backups are at
 `/mnt/us/boot-splash-backup/`. A firmware update puts those trees back.
 
 The screen **before** that one is not one of these files. The kernel paints it
-from a picture baked into the kernel, before Linux opens any PNG. It is the
-boy under the tree plus the line "Please wait a moment while your Kindle
-starts up." The boot captures missed it because they start after this frame.
-Both kernel copies on the raw disk carry it (main kernel at offset `0x41000`,
-second at `0xE41000`). The pictures are small gzip blobs: the plain logo
-(2668 bytes) and the logo with the sentence (4660 bytes). A new picture has
-to gzip down to that size or it spills into the kernel and the Kindle will
-not boot. The kernel checksums have to be rewritten too. Not done.
+from a picture baked into the kernel, before Linux opens any PNG. Both kernel
+copies on the raw disk carry it (main at `0x41000`, second at `0xE41000`);
+gzip members at `0xC92C0` (plain logo, 2672 B) and `0xC9D30` (logo with
+"Please wait a moment while your Kindle starts up." text, 4664 B), duplicated
+at `0xEC7104` / `0xEC7B74`. Payload is a 12-byte LE header (`600,800,2`) plus
+2-bit pixels at 4 px/byte (0=black, 3=white). Dense art never fits: even a
+1-bit full screen is ~10 KB. The working render is the boot art
+GaussianBlur(15), resized to 320x427, centred on pure black (the art's own
+corners are black, so no border) — that gzips to 2470 bytes and fits the
+plain slot, so one blob fits all four. The patch builds in
+`scratch/patch_kernel_build.py` (stock blobs + old CRCs saved to
+`scratch/kernel-logo-rollback.json`; output `scratch/mmcblk0-first32m-patched.bin`),
+and `scratch/flash-kernel-logo.sh KINDLE_IP` verifies the device is still
+stock, writes only the changed bytes, re-verifies, and does not auto-reboot.
+The uImage data CRC (`dcrc` at +24) and header CRC (`hcrc` at +4) both have to
+be recomputed, which the builder does.
 
 To skip the picture, take `splash` out of the two lines in `/etc/upstart/x.conf`.
 Not tried yet. Do not `killall blanket` — the Kindle reboots into repair mode.

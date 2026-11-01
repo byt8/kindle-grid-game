@@ -63,6 +63,16 @@ updated: 2026-11-01
 ## Do not redo
 - SSH to `.63` and `strings` on `splash.so` / `libblanket.so`. Asset name is `defaultbg`. Low-level dir strings are `/opt/amazon/low_level_screens/%dx%d` and `/var/local/blanket/low_level_screens/images`.
 
+## Kernel logo patch (the frame BEFORE the boot PNG)
+- The kernel boots from `/dev/mmcblk0` raw: main uImage at `0x41000` (uncompressed, size at header), second at `0xE41000`. Each contains (at identical relative offsets) three little gzip members: plain logo `0xC92C0` (2672B), logo-with-text `0xC9D30` (4664B), repair page `0xCAF68` (4088B); second kernel `0xEC7104` / `0xEC7B74`. **Slot sizes are the gaps to the next gzip magic** (2672 / 4664 / 4088) — verified 2026-11-01 from a fresh 32MiB dd dump while the device was online.
+- Payload format: 12-byte LE header `w,h,bpp=600,800,2`, then 120,000 bytes, **4 pixels/byte, MSB-first pairs, values 0=black, 3=white**. `struct.pack('<III',600,800,2)`.
+- uImage header: 64B big-endian; `hcrc` at +4 (CRC32 over bytes 0..64 with that field zeroed), `dcrc` at +24 (CRC32 over the data after the header). Changing a blob inside the kernel means recomputing BOTH `dcrc` (data) and `hcrc` (header, since the header holds dcrc). Verified matches stock.
+- The plain logo and the text logo are DIFFERENT pictures, not one picture plus text: diff 13,560 px spanning the full frame. The text one ("Please wait a moment…") is the one users see first.
+- **Art fitting**: dense AI art does NOT fit even at 1-bit (10,111B full-bleed vs 2672/4664 slots). The fit that works: GaussianBlur(15) on the art, resize 320x427, centre on pure black (level 0, matches the art's own black corners) → gzip9 = **2470 bytes**, fits the 2672 plain slot, so it fits all 4 slots. 360x480=2780 (wait-only). Blur without black surround can't reach 2672. A white surround is wrong on this display (bordered).
+- Built 2026-11-01 in `scratch/patch_kernel_build.py`: builds blob, checks stock md5s (plain `2b9f3a83`, wait `ebfb4f3f`, identical in both kernels), patches 4 slots + zero-pads only within each slot, recomputes all 4 CRCs, verifies streams end exactly at slot edges and the next members (repair page) stay intact. Outputs `scratch/mmcblk0-first32m-patched.bin` (32MiB, ready to dd) + `scratch/kernel-logo-rollback.json` (stock blobs hex + old CRCs for reversal). All local checks pass.
+- **Not yet flashed** (device `.63` offline when the image was ready): `bash scratch/flash-kernel-logo.sh KINDLE_IP` re-dumps the device, checks the on-disk offsets are still stock, uploads with md5, writes only the two kernel windows + 4 header CRC words via dd conv=notrunc, re-dumps and byte-verifies, and does NOT auto-reboot. Rollback = write the stock blob hex from `kernel-logo-rollback.json` over the same offsets and restore the old CRCs.
+- The blob lives in the raw disk, so no mntroot or firmware file to edit; a firmware update rewrites kernels.
+
 ## Open
-- Kernel logo not replaced. Need a 2-bit 600x800 gzip that fits in 2668 and 4660 bytes, then recompute both uImage CRCs, on both kernels.
+- Flash the patched kernels when the Kindle is back online, then reboot and capture the first frame to confirm.
 - Taking `splash` out of `/etc/upstart/x.conf` (the way to drop the later poster and the bar) is not tried. That would not remove the kernel frame.
