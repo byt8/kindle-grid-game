@@ -1,7 +1,8 @@
-# Three games on a Kindle
+# Four games on a Kindle
 
 Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk, tap an alien to shoot, wipe them out.
-Chess against DeepSeek, which talks trash after every move. And Tetris: tap to stack blocks and clear lines.
+Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack blocks and clear lines.
+And Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
 
 ---
 
@@ -14,6 +15,7 @@ Docker image `kfb-build` (ARM cross-compiler), and `python3`.
 make kindle                      # XCOM  -> ./xcom      (ARM binary)
 make chess-kindle                # Chess -> ./chess     (needs chess.conf first)
 make tetris-kindle               # Tetris -> ./tetris   (no key needed)
+make sudoku-kindle               # Sudoku -> ./sudoku  (no key needed)
 ```
 
 ```bash
@@ -47,15 +49,26 @@ Tap a piece, tap a square. **QUIT** then **SURE** gives the screen back.
 
 Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down, **QUIT** then **SURE** to exit.
 
+**Play Sudoku on the Kindle:**
+
+```bash
+./run-sudoku-on-kindle.sh 192.168.0.66   # pass the IP
+```
+
+Tap a cell, then a digit **1–9** to write it. **ERASE** clears the cell, **HINT** writes the answer.
+The three chips up top (**EASY / MED / HARD**) start a fresh puzzle; **NEW** restarts, **QUIT** then **SURE** exits.
+A wrong digit gets a box, and a completed, conflict-free board is the win.
+Pass `--seed N` to the runner to play the same puzzle again.
+
 **Boot straight into the launcher menu** (instead of the Amazon UI):
 
 ```bash
 ./install-menu-on-kindle.sh [IP]
 ```
 
-Builds the menu + all three games, pushes them, installs `/etc/upstart/menu.conf`
-(replacing the old direct-to-chess boot job), and shows the menu now. Five
-buttons: **XCOM / CHESS / TETRIS / WIFI / KINDLE**. Play a game; when you quit
+Builds the menu + all four games, pushes them, installs `/etc/upstart/menu.conf`
+(replacing the old direct-to-chess boot job), and shows the menu now. Six
+buttons: **XCOM / CHESS / TETRIS / SUDOKU / WIFI / KINDLE**. Play a game; when you quit
 you land back on the menu. **WIFI** reuses chess's wi-fi screens (join a
 network, it remembers it). **KINDLE** hands the screen back to the Amazon
 reader. Undo (stock boot again):
@@ -72,6 +85,7 @@ make                                    # builds ./xcom-host
 make preview                            # every 40x40 sprite, side by side -> bold-preview.png
 make test                               # plays a pretend game, checks pictures + clips
 make tetris-host && make tetris-test    # self-test + three screens the checker reads
+make sudoku-host && make sudoku-test    # self-test + three screens the checker reads
 make menu-host && make menu-test        # menu: draw + tap every button on the PC
 ```
 
@@ -136,6 +150,18 @@ something else. No internet needed at runtime.
 Painting uses the e-ink engine in
 `jailbreak-kindle/kindle-tools/fbdaemon/engine`; that folder is shared and never
 modified from here.
+
+---
+
+## Sudoku: how it fits together
+
+One file, `src/sudoku.c`: the generator, the solver proof, drawing, touch and a PC self-test.
+Every puzzle is **generated on the device** (seeded) and is proven to have exactly one
+solution before it is shown: `solve_count() == 1` decides which cells may stay blank.
+`make sudoku-test` checks rows/columns/boxes, unique solvability, error marking, hints and
+wins on the PC, then draws three screens (open, one typed digit, a few auto hints) for the
+picture checker. The menu's SUDOKU button and the boot dispatcher (`tools/menu-boot.sh`
+case 4) launch the same runner as the other games.
 
 ---
 

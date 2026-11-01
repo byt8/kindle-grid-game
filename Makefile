@@ -8,7 +8,8 @@ PY     ?= python3
 HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 
 .PHONY: all test kindle sound manual grabtest preview preview-old bold chess chess-test chess-kindle \
-        tetris tetris-host tetris-test tetris-kindle menu-host menu-kindle menu-test clean
+        tetris tetris-host tetris-test tetris-kindle sudoku sudoku-host sudoku-test sudoku-kindle \
+        menu-host menu-kindle menu-test clean
 
 # ---- tetris: 10x20 well, on-screen buttons, no keyboard ------------------
 
@@ -16,6 +17,35 @@ tetris-host: src/tetris.c $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
 	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/tetris.c $(ENGINE)/eink.c -lm
 
 tetris: tetris-kindle
+
+# ---- sudoku: one 9x9 board, generated with a proof it has one solution. ----
+# Tap a cell, tap a digit; ERASE / HINT / NEW / QUIT along the bottom.
+
+sudoku-host: src/sudoku.c $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/sudoku.c $(ENGINE)/eink.c -lm
+
+sudoku-kindle: src/sudoku.c $(ENGINE)/eink.c $(ENGINE)/eink.h
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" \
+	  -v /home/brendan/jailbreak-kindle:/jb \
+	  -w /src kfb-build \
+	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -ffunction-sections -fdata-sections \
+	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
+	    -o sudoku src/sudoku.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -static -no-pie -Wl,--gc-sections -lm \
+	    && arm-linux-musleabi-strip sudoku'
+
+sudoku: sudoku-kindle
+
+# Rules first, then the picture: the opening, a cell tap + a digit, and a few
+# --auto hints. The three dumps must differ from each other.
+sudoku-test: sudoku-host
+	./sudoku-host --selftest --no-takeover --seed 7
+	./sudoku-host --no-takeover --seed 7 --dump /tmp/sudoku-open.pgm
+	printf 'tap 60 200\ntap 20 750\n' | ./sudoku-host --no-takeover --seed 7 --dump /tmp/sudoku-digit.pgm
+	./sudoku-host --auto 3 --no-takeover --seed 7 --dump /tmp/sudoku-hint.pgm
+	$(PY) tools/check_pgm.py /tmp/sudoku-open.pgm /tmp/sudoku-digit.pgm /tmp/sudoku-hint.pgm
 
 # ---- launcher menu: what the Kindle boots into ---------------------------------
 
@@ -43,7 +73,8 @@ menu-test: menu-host
 	printf 'tap 300 170\n'           | ./menu-host --no-takeover; test $$? -eq 1
 	printf 'tap 300 275\n'           | ./menu-host --no-takeover; test $$? -eq 2
 	printf 'tap 300 380\n'           | ./menu-host --no-takeover; test $$? -eq 3
-	printf 'tap 300 627\n'           | ./menu-host --no-takeover; test $$? -eq 4
+	printf 'tap 300 527\n'           | ./menu-host --no-takeover; test $$? -eq 4
+	printf 'tap 300 627\n'           | ./menu-host --no-takeover; test $$? -eq 5
 	printf 'tap 300 687\n'           | ./menu-host --no-takeover; test $$? -eq 0
 	$(PY) -c 'import sys;d=open("/tmp/menu.pgm","rb").read();p=b"P5\n600 800\n255\n";assert d.startswith(p);pix=d[len(p):];assert len(pix)==600*800;assert pix.count(0)>1000 and pix.count(255)>1000;print("menu.pgm ok")'
 
@@ -167,4 +198,4 @@ preview-old:
 	$(PY) tools/slice_sprites.py --preview /tmp/xcom-sprites-old.png
 
 clean:
-	rm -f xcom-host xcom grabtest chess-host chess tetris-host tetris
+	rm -f xcom-host xcom grabtest chess-host chess tetris-host tetris sudoku-host sudoku
