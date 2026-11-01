@@ -184,8 +184,8 @@ sh /mnt/us/chess-wifi.sh auto            # rejoin what was remembered
 
 ### Boot picture
 
-Checked on `192.168.0.63` (Kindle 5.3.7.3). The boy-under-the-tree is still the
-2015 file. The root disk is read-only (`/usr/sbin/mntroot rw` unlocks it).
+Installed on `192.168.0.63` (Kindle 5.3.7.3) and verified on the glass after a
+reboot. The root disk is read-only (`/usr/sbin/mntroot rw` unlocks it).
 
 The splash program opens `/usr/share/blanket/bg_xsmall_defaultbg.png`. A second
 copy of the same picture is `/opt/amazon/low_level_screens/600x800/splash.png`
@@ -197,8 +197,18 @@ by code, so a new picture still gets the bar.
 python3 tools/make_splash.py --logo LOGO.png --out kindle-splash.png
 ```
 
-Then on the Kindle: `mntroot rw`, copy that png over both paths above,
-`mntroot ro`, reboot. A firmware update puts the tree back.
+Then on the Kindle:
+
+```
+mntroot rw
+cp kindle-splash.png /usr/share/blanket/bg_xsmall_defaultbg.png
+cp kindle-splash.png /opt/amazon/low_level_screens/600x800/splash.png
+mntroot ro
+```
+
+Reboot to see it. Installed files on `.63` are md5 `4a669252…`; the stock
+pictures are backed up at `/mnt/us/boot-splash-backup/` — copy them back over
+the same two paths to revert. A firmware update also puts the tree back.
 
 To skip the picture, take `splash` out of the two lines in `/etc/upstart/x.conf`.
 Not tried yet. Do not `killall blanket` — the Kindle reboots into repair mode.
