@@ -88,6 +88,32 @@ make calib
 
 Left square blinks (grey zap, GC16). Right square jumps (plain ink, DU). The milliseconds under each square are how long that zap took. **QUIT** gives the Kindle back. **NEXT** opens the tuner: SPEED, CLEAN, WFM (AUTO / DU / GC16F / GL16F / GC16), WAIT, MONO. Pick **DU** if the right square is the one you want. Two more NEXT screens are the old smear test and the tap test.
 
+**The motion ladder — consistent motion, in numbered steps.** The tuner's gate is
+`GAP ≈ SPEED`: when the measured drop gap stays within ~60 ms of the speed you
+asked for, the panel is really keeping that beat. The **VERDICT** line prints
+`PANEL KEEPS THE BEAT` or `PANEL LAGGING` so you don't have to judge by eye.
+
+1. **WFM → DU** (tap WFM, then `+` until the value row says DU). DU is the 1-bit
+   motion waveform: one black push per step, no grey zap. A grey waveform's zap
+   is a real time cost, not a poison — see step 3.
+2. **SPEED → start at 800** (tetris level 1). Watch the VERDICT line. If it says
+   LAGGING, raise SPEED by 50 until it says KEEPS THE BEAT. That number is your
+   steady cadence — bake it into the game.
+3. **Grey is a trade, not a fix.** If the game needs real grey (XCOM art), the
+   mid-step zap is unavoidable; the FLASH number on the tuner is how many ms each
+   drop costs. Grey motion will *never* look metronome-even — that's physics, not
+   a bug. Use DU for anything that moves and grey only for still art.
+4. **CLEAN → 30, only if you see ghosting.** With DU, old-piece outlines can
+   linger (ghosting). Set CLEAN to 30 (a GC16 clean every 30 drops) if you see
+   trails; drop it to 20/10 if they persist. Start at 30 and only go lower when
+   the smear test (NEXT, NEXT) shows a trail you actually see.
+5. **WAIT stays ON.** WAIT OFF lets the engine queue updates — the GAP number
+   becomes a lie and the panel collapses several steps into one big flash.
+   "Consistent motion" means WAIT ON + GAP ≈ SPEED.
+6. **Lock it in.** Go back to the game and force what the tuner chose. For
+   tetris that is `ek_waveform(DU)` on the falling-piece flush (or trust AUTO,
+   which already picks DU when nothing forces a grey mode).
+
 **Play Sudoku on the Kindle:**
 
 ```bash

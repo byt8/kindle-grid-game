@@ -68,6 +68,43 @@ wait_wifi() {
 
 wait_wifi
 
+# --- diagnostics ----------------------------------------------------------
+# The menu session is the only always-running process once the device boots,
+# so it is the natural place to keep the crash breadcrumbs for everything it
+# launches (KOReader, the games, the wifid helper). The Kindle's koreader
+# crash.log goes silent on a *native* segfault (no Lua traceback), and its
+# amazon kernel only marks `reset=user_reboot` without saying who rebooted;
+# the five silent minutes between the last KOReader log line and the reboot
+# that the user keeps hitting is exactly that: a segfault nobody recorded.
+# The heartbeat pins the crash down to a moment: when KOReader segfaults the
+# heartbeat keeps ticking (the launcher is alive) until the device watchdog
+# reboots ~minutes later, so the gap between the last heartbeat and the
+# koreader-launch.log "exited" timestamp is exactly the hang window. (A core
+# dump would be ideal, but this kernel's hard core limit is 0 -- ulimit -c is
+# a hard error here -- and crash.log is reader.lua's only record.)
+say "booted $(date) -- pid=$$"
+if [ -w /proc/sys/kernel/core_pattern ]; then
+    echo /mnt/us/menu-core.%p > /proc/sys/kernel/core_pattern
+    say "core_pattern now $(cat /proc/sys/kernel/core_pattern)"
+fi
+HB=/mnt/us/menu-heartbeat
+: > "$HB"
+while [ -e "$HB" ]; do
+    echo "hb $$ $(date +%s)" >> "$HB"
+    sleep 15
+done &
+_HB_PID=$!
+
+# The session is leaving; the heartbeat was only for watching it. The loop
+# above never exits on its own, so an EXIT trap is what stops the heartbeat
+# on every exit path (KINDLE button, the two guard exits, an external TERM).
+cleanup() {
+    kill "$_HB_PID" 2>/dev/null
+    rm -f "$HB"
+    say "menu-boot script exiting $(date)"
+}
+trap cleanup EXIT
+
 while :; do
     if ! stop_mirror; then
         say "cannot free the touch device; leaving the Kindle UI up"
@@ -104,15 +141,16 @@ while :; do
             GAME=sudoku sh /mnt/us/sudoku-run.sh >> "$LOG" 2>&1 ;;
         5)  say "launching ROCKMAN"
             GAME=rockman sh /mnt/us/rockman-run.sh >> "$LOG" 2>&1 ;;
-        6)  say "launching KOREADER"
+        6)  say "launching KOREADER at $(date)"
             # Framework is already stopped and the panel is ours; koreader.sh
             # runs without --framework_stop and leaves the UI dead on exit,
             # which is fine -- the launcher re-takes the panel next loop. Log
             # tail is our only record on the device.
-            sh /mnt/us/koreader/koreader.sh >> /mnt/us/koreader-launch.log 2>&1 ;;
+            sh /mnt/us/koreader/koreader.sh >> /mnt/us/koreader-launch.log 2>&1
+            say "KOREADER exited rc=$? at $(date)" ;;
         7)  say "WIFI setup"
             /mnt/us/chess --wifi-only --conf /mnt/us/chess.conf >> "$LOG" 2>&1 ;;
         *)  say "menu exited rc=$rc; showing it again" ;;
     esac
-    say "back to the menu"
+    say "back to the menu $(date)"
 done

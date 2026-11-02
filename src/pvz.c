@@ -1,10 +1,14 @@
 #define _GNU_SOURCE
 /* pvz.c -- Plants vs Zombies, one lawn, for the Kindle Touch.
  *
- * The screen is 600x800, one bit plus an optional greyscale layer, touch
- * only. The engine lives in jailbreak-kindle (ek_open / ek_flush) and this
- * file does not change it. Sprites come from src/pvz_sprites.h, baked from
- * the webp art in pvz/ by tools/bake_pvz_sprites.py.
+ * The engine's frame is 600x800 but the game is played landscape, so the
+ * whole picture is drawn in an 800x600 virtual space and rotated 90 degrees
+ * (clockwise on the panel) when it is pushed to the canvas. Touch taps are
+ * rotated back the same way. The engine in jailbreak-kindle is untouched.
+ *
+ * Sprites come from src/pvz_sprites.h, baked from the webp art in pvz/ by
+ * tools/bake_pvz_sprites.py; the zombie sprites are mirrored at bake time
+ * so they face left, their walk direction.
  *
  * This is a lane tower defence, not the original game:
  *   - five lanes, zombies walk right-to-left down them
@@ -23,6 +27,7 @@
  * --clean forces a full GC16 refresh on every update (slow, but sharper).
  */
 #include "eink.h"
+#include "font8x16.h"
 #include "pvz_sprites.h"
 
 #include <signal.h>
@@ -34,20 +39,27 @@
 #include <unistd.h>
 
 /* ---- machine constants -------------------------------------------------- */
+/* All coordinates below are landscape (800 wide, 600 tall). The rotate()
+ * layer turns them into the engine's portrait 600x800 frame. */
 
-#define LAWN_X   60
-#define LAWN_Y   55
+#define WW        800           /* virtual landscape width */
+#define WH        600           /* virtual landscape height */
+
+#define LAWN_X   50
+#define LAWN_Y   62
 #define COLS     12
 #define ROWS     5
 #define T        40            /* tile size, px */
+#define LAWN_W   (COLS * T)    /* 480 */
+#define LAWN_H   (ROWS * T)    /* 200 */
 
-#define HUD_Y    (LAWN_Y + ROWS * T + 12)     /* 267 */
+#define HUD_Y    (LAWN_Y + ROWS * T + 12)     /* 274 */
 #define CARD_W   58
 #define CARD_H   58
 #define CARD_GAP 62
-#define CARD_X0  92
-#define CARD_Y   (HUD_Y + 6)                  /* 273 */
-#define QUIT_X   528
+#define CARD_X0  70
+#define CARD_Y   (HUD_Y + 6)                  /* 280 */
+#define QUIT_X   (WW - 70)
 #define QUIT_Y   12
 
 #define MAX_PLANTS  (ROWS * COLS)
@@ -151,23 +163,124 @@ static void restart_game(void) {
  * to it round-to-nearest so 0 is paper and 8 is solid ink. */
 static int ink15(int lvl) { return (lvl * 15 + 4) / 8; }
 
+/* ---- landscape layer ------------------------------------------------------ */
+
+/* The panel is 600 wide and 800 tall; the game is played rotated 90 degrees.
+ * Every draw below hands in landscape coordinates and this layer maps them to
+ * the engine's portrait frame, then every engine tap is mapped back. The
+ * mapping is the identity otherwise, so the host dumps (which look at the
+ * engine frame) and the game agree with the device.
+ *
+ * Orientation chosen: reading order on the device (portrait frame) = top of
+ * the landscape. The engine's x grows left-to-right across the top row.
+ *
+ * Portrait (x_p, y_p) = (y_l, WW - 1 - x_l). Landscape back:
+ * x_l = WW - 1 - y_p, y_l = x_p.
+ *
+ * Because ek_blit writes layered low-to-high and rotated rows land in
+ * arbitrary order in the destination byte, each rotated row is written one
+ * pixel at a time through ek_px, which owns its bit and honours the grey
+ * layer. */
+static void rot_px(int x, int y, int ink) {
+    ek_px(y, WW - 1 - x, ink);
+}
+
+static void rot_fill_rect(int x, int y, int w, int h, int ink) {
+    for (int j = 0; j < h; j++)
+        for (int i = 0; i < w; i++)
+            if (ink) ek_px(y + j, WW - 1 - (x + i), EK_INK);
+            else ek_px(y + j, WW - 1 - (x + i), EK_PAPER);
+}
+
+static void rot_rect(int x, int y, int w, int h, int ink) {
+    rot_fill_rect(x, y, w, 1, ink);
+    rot_fill_rect(x, y + h - 1, w, 1, ink);
+    rot_fill_rect(x, y, 1, h, ink);
+    rot_fill_rect(x + w - 1, y, 1, h, ink);
+}
+
+static void rot_line(int x0, int y0, int x1, int y1, int ink) {
+    int dx = x1 - x0, dy = y1 - y0;
+    int sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1;
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    int err = dx - dy;
+    for (;;) {
+        rot_px(x0, y0, ink);
+        if (x0 == x1 && y0 == y1) break;
+        int e2 = err << 1;
+        if (e2 > -dy) { err -= dy; x0 += sx; }
+        if (e2 < dx) { err += dx; y0 += sy; }
+    }
+}
+
+static void rot_grey_rect(int x, int y, int w, int h, int level15) {
+    for (int j = 0; j < h; j++)
+        for (int i = 0; i < w; i++) {
+            int v = level15 < 0 ? 0 : (level15 > 15 ? 15 : level15);
+            ek_grey_rect(y + j, WW - 1 - (x + i), 1, 1, v);
+        }
+}
+
+static void rot_text(int x, int y, const char *s, int ink) {
+    if (!s) return;
+    for (; *s; s++, x += 8) {
+        unsigned ch = (unsigned char)*s;
+        if (ch < 32) ch = '?';
+        const uint8_t *g = ek_font + (size_t)ch * 16;
+        for (int r = 0; r < 16; r++) {
+            uint8_t v = g[r];
+            if (!v) continue;
+            for (int i = 0; i < 8; i++)
+                if (v & (0x80u >> i)) rot_px(x + i, y + r, ink);
+        }
+    }
+}
+
+static void rot_text_scale(int x, int y, const char *s, int ink, int scale) {
+    if (!s) return;
+    if (scale <= 1) { rot_text(x, y, s, ink); return; }
+    int cell = 8 * scale;
+    for (; *s; s++, x += cell) {
+        const uint8_t *g = ek_font + (size_t)(((unsigned char)*s) & 0xff) * 16;
+        for (int r = 0; r < 16; r++) {
+            uint8_t v = g[r];
+            if (!v) continue;
+            for (int i = 0; i < 8; i++)
+                if (v & (0x80u >> i)) rot_fill_rect(x + i * scale, y + r * scale, scale, scale, ink);
+        }
+    }
+}
+
+/* The baked tone is 1..9 (1 = paper fluff, 9 = solid ink). Squeeze it so
+ * sprites read as near-binary silhouettes on the light lawn: light fluff
+ * vanishes, the body goes black, and only a hint of shadow stays grey. */
+static int hi_lvl(int v) {
+    switch (v) {
+        case 1: case 2: case 3: return 0;    /* paper */
+        case 4: case 5: return 6;            /* light shadow */
+        case 6: case 7: return 11;           /* mid shadow */
+        default: return 15;                  /* black */
+    }
+}
+
+static void rot_blit_sprite(int x, int y, int id) {
+    for (int r = 0; r < PVZ_TILE; r++) {
+        for (int c = 0; c < PVZ_TILE; c++) {
+            int v = pz_at(id, c, r);
+            if (v <= 0) continue;
+            rot_grey_rect(x + c, y + r, 1, 1, hi_lvl(v));
+        }
+    }
+}
+
 static int pz_on(int id, int x, int y) {
     if (x < 0 || y < 0 || x >= PVZ_TILE || y >= PVZ_TILE) return 0;
     return pz_at(id, x, y) != 0;
 }
 
 static void blit_sprite(int x, int y, int id) {
-    for (int r = 0; r < PVZ_TILE; r++) {
-        int c = 0;
-        while (c < PVZ_TILE) {
-            int v = pz_at(id, c, r);
-            if (v == 0) { c++; continue; }
-            int len = 1;
-            while (c + len < PVZ_TILE && pz_at(id, c + len, r) == v) len++;
-            ek_grey_rect(x + c, y + r, len, 1, ink15(v - 1));
-            c += len;
-        }
-    }
+    rot_blit_sprite(x, y, id);
 }
 
 /* The sun hovers over the grass, so it gets a paper rim; plants and zombies
@@ -179,7 +292,7 @@ static void blit_sun_sprite(int x, int y) {
             if (pz_on(id, c, r)) continue;
             if (pz_on(id, c - 1, r) || pz_on(id, c + 1, r) ||
                 pz_on(id, c, r - 1) || pz_on(id, c, r + 1))
-                ek_px(x + c, y + r, EK_PAPER);
+                rot_px(x + c, y + r, EK_PAPER);
         }
     blit_sprite(x, y, id);
 }
@@ -240,57 +353,58 @@ static void tile_rect(int x, int y, int *xp, int *yp) {
 }
 
 static void draw_grass(void) {
-    /* The lawn as a whole is the paper, so the plants' grey pops off it.
-     * Every other tile gets a thin grey check to read as mown rows. */
+    /* The lawn stays aluminium-white (the panel's paper) so the plants' grey
+     * pops. Every other tile gets a very light check -- just enough to read
+     * as mown rows, nowhere near competing with the sprites. */
     for (int y = 0; y < ROWS; y++)
         for (int x = 0; x < COLS; x++) {
             if ((x + y) & 1) continue;
             int px, py;
             tile_rect(x, y, &px, &py);
-            ek_grey_rect(px, py, T, T, ink15(6));
+            rot_grey_rect(px, py, T, T, ink15(1));
         }
 }
 
 static void draw_house(void) {
     int top = LAWN_Y + 24, bot = LAWN_Y + ROWS * T - 8;
-    ek_rect(8, top, 44, bot - top, EK_INK);
-    ek_line(4, top, 56, top, EK_INK);           /* roof ridge */
-    ek_line(4, top, 8, top - 16, EK_INK);       /* roof slope */
-    ek_line(56, top, 52, top - 16, EK_INK);
-    ek_fill_rect(22, bot - 22, 12, 22, EK_INK); /* the door the zombies want */
+    rot_rect(8, top, 44, bot - top, EK_INK);
+    rot_line(4, top, 56, top, EK_INK);           /* roof ridge */
+    rot_line(4, top, 8, top - 16, EK_INK);       /* roof slope */
+    rot_line(56, top, 52, top - 16, EK_INK);
+    rot_fill_rect(22, bot - 22, 12, 22, EK_INK); /* the door the zombies want */
 }
 
 static void draw_hud(void) {
     char buf[64];
-    ek_text_scale(10, 6, "PVZ", EK_INK, 2);
+    rot_text_scale(10, 6, "PVZ", EK_INK, 2);
     snprintf(buf, sizeof buf, "SUN %d", g.suns);
-    ek_text(110, 18, buf, EK_INK);
+    rot_text(88, 18, buf, EK_INK);
     snprintf(buf, sizeof buf, "WAVE %d/%d", g.wave, 4);
-    ek_text(240, 18, buf, EK_INK);
+    rot_text(198, 18, buf, EK_INK);
     snprintf(buf, sizeof buf, "BRAINS %d/5", g.brains);
-    ek_text(370, 18, buf, EK_INK);
-    ek_text(QUIT_X + 10, QUIT_Y + 10, quit_armed ? "SURE?" : "QUIT", EK_INK);
+    rot_text(308, 18, buf, EK_INK);
+    rot_text(QUIT_X + 10, QUIT_Y + 10, quit_armed ? "SURE?" : "QUIT", EK_INK);
 }
 
 static void draw_cards(void) {
-    ek_text(12, CARD_Y + 12, "PLANTS", EK_INK);
+    rot_text(6, CARD_Y + 12, "PLANTS", EK_INK);
     for (int i = 0; i < 8; i++) {
         plant_type t = (plant_type)(i + 1);   /* skip NONE */
         int x = CARD_X0 + i * CARD_GAP;
         char buf[8];
-        ek_rect(x, CARD_Y, CARD_W, CARD_H, EK_INK);
+        rot_rect(x, CARD_Y, CARD_W, CARD_H, EK_INK);
         if (pending == t) {
             /* a thick selection frame, drawn before the sprite */
-            ek_rect(x - 2, CARD_Y - 2, CARD_W + 4, CARD_H + 4, EK_INK);
-            ek_rect(x - 4, CARD_Y - 4, CARD_W + 8, CARD_H + 8, EK_INK);
+            rot_rect(x - 2, CARD_Y - 2, CARD_W + 4, CARD_H + 4, EK_INK);
+            rot_rect(x - 4, CARD_Y - 4, CARD_W + 8, CARD_H + 8, EK_INK);
         }
         int id = sprite_for(t);
         if (id >= 0) blit_sprite(x + 9, CARD_Y + 2, id);
         snprintf(buf, sizeof buf, "%d", plant_cost(t));
-        ek_text(x + 8, CARD_Y + CARD_H - 12, buf, EK_INK);
+        rot_text(x + 8, CARD_Y + CARD_H - 12, buf, EK_INK);
     }
-    ek_text(24, 352, "tap a SEED, then a LAWN tile. tap sun to bank it.",
-            EK_INK);
+    rot_text(18, 352, "tap a SEED, then a LAWN tile. tap sun to bank it.",
+             EK_INK);
 }
 
 static void draw_plant(const plant *p) {
@@ -303,8 +417,8 @@ static void draw_plant(const plant *p) {
     if (p->hp < p->max_hp) {
         int bw = T - 12;
         int filled = p->max_hp ? bw * p->hp / p->max_hp : 0;
-        ek_fill_rect(px + 6, py + T - 6, bw, 3, EK_PAPER);
-        ek_fill_rect(px + 6, py + T - 6, filled, 3, EK_INK);
+        rot_fill_rect(px + 6, py + T - 6, bw, 3, EK_PAPER);
+        rot_fill_rect(px + 6, py + T - 6, filled, 3, EK_INK);
     }
 }
 
@@ -321,10 +435,10 @@ static void draw_bullets(void) {
         bullet *b = &g.b[i];
         int y = LAWN_Y + b->lane * T + 18;
         if (b->slow) {
-            ek_fill_rect(b->x, y, 8, 4, ink15(10));
-            ek_rect(b->x, y, 8, 4, EK_INK);
+            rot_fill_rect(b->x, y, 8, 4, ink15(10));
+            rot_rect(b->x, y, 8, 4, EK_INK);
         } else {
-            ek_fill_rect(b->x + 2, y, 8, 4, EK_INK);
+            rot_fill_rect(b->x + 2, y, 8, 4, EK_INK);
         }
     }
 }
@@ -337,15 +451,15 @@ static void draw_suns(void) {
 static void draw_overlay(void) {
     if (!g.over) return;
     if (g.won) {
-        ek_text_scale(140, 320, "LAWN CLEARED!", EK_INK, 3);
-        ek_text(170, 430, "the horde is gone. tap RESTART", EK_INK);
+        rot_text_scale(260, 300, "LAWN CLEARED!", EK_INK, 3);
+        rot_text(240, 395, "the horde is gone. tap RESTART", EK_INK);
     } else {
-        ek_text_scale(130, 300, "THE ZOMBIES ATE", EK_INK, 3);
-        ek_text_scale(170, 380, "YOUR BRAINS", EK_INK, 3);
-        ek_text(210, 500, "tap RESTART to try again", EK_INK);
+        rot_text_scale(218, 290, "THE ZOMBIES ATE", EK_INK, 3);
+        rot_text_scale(278, 360, "YOUR BRAINS", EK_INK, 3);
+        rot_text(216, 470, "tap RESTART to try again", EK_INK);
     }
-    ek_rect(220, 540, 160, 60, EK_INK);
-    ek_text(260, 560, "RESTART", EK_INK);
+    rot_rect(315, 520, 170, 60, EK_INK);
+    rot_text(360, 540, "RESTART", EK_INK);
 }
 
 static void present(void) {
@@ -354,6 +468,17 @@ static void present(void) {
     if (stats_on)
         fprintf(stderr, "pvz: flush wfm=%d rects=%d tiles=%d px=%ld full=%d us=%u\n",
                 st.wfm, st.rects, st.tiles, st.px, st.full, st.us);
+}
+
+static void dump_pgm(const char *path) {
+    /* The engine's ek_dump_pgm is portrait-correct (it reads the canvas the
+     * way the panel does), so the definitive picture is just its bytes --
+     * no rotation needed on the way out. */
+    if (ek_dump_pgm(path, 1) != 0) {
+        fprintf(stderr, "pvz: could not write %s\n", path);
+        ek_close();
+        exit(1);
+    }
 }
 
 static void draw_all(void) {
@@ -639,6 +764,15 @@ static void handle_tap(int x, int y) {
     }
 }
 
+#ifndef EK_HOST
+/* The engine reports panel pixels (portrait 600x800); the game thinks in
+ * landscape, so undo the same rotation as drawing:
+ * (x_l, y_l) = (WW - 1 - y_p, x_p). */
+static void tap_from_panel(int raw_x, int raw_y) {
+    handle_tap(WW - 1 - raw_y, raw_x);
+}
+#endif
+
 /* ---- self-test ----------------------------------------------------------- */
 
 static int failures = 0;
@@ -907,7 +1041,7 @@ int main(int argc, char **argv) {
                 ek_close();
                 return 2;
             }
-            handle_tap(x, y);
+            handle_tap(x, y); /* stdin is already in landscape coords */
             if (stop_req) break;
             draw_all();
         }
@@ -920,7 +1054,7 @@ int main(int argc, char **argv) {
             int got = 0;
             while (ek_poll(&ev)) {
                 if (ev.type == EK_DOWN) {
-                    handle_tap(ev.x, ev.y);
+                    tap_from_panel(ev.x, ev.y);
                     got = 1;
                 }
             }
@@ -936,13 +1070,7 @@ int main(int argc, char **argv) {
     }
 #endif
 
-    if (dump_path) {
-        if (ek_dump_pgm(dump_path, 1) != 0) {
-            fprintf(stderr, "pvz: could not write %s\n", dump_path);
-            ek_close();
-            return 1;
-        }
-    }
+    if (dump_path) dump_pgm(dump_path);
 
     ek_close();
     return rc;

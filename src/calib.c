@@ -118,6 +118,13 @@ static int taplag_next_row;
 static uint32_t taplag_at;
 static long tap_reaction_us = -1;   /* TAPLAG: last measured reaction, -1 none */
 
+/* VERDICT ring: the last N measured drop gaps (screen 1). With WAIT ON the
+ * gap is the panel's REAL beat, so a gap that keeps running past SPEED is
+ * proof the cadence is unholdable -- no eye required. */
+#define GAP_RING 16
+static int gap_ring[GAP_RING];
+static int gap_n = 0, gap_i = 0;
+
 /* ---- button hit ---------------------------------------------------------- */
 
 /* TUNER buttons: two rows of three, same bboxes as the games' bottom row. */
@@ -217,7 +224,7 @@ static void paint_chips(void) {
 
 static void paint_tuner_rows(void) {
     /* value area only -- clear of the reference well (x>=250) */
-    ek_fill_rect(20, 224, 230, 260, EK_PAPER);
+    ek_fill_rect(20, 224, 230, 300, EK_PAPER);
     char buf[72];
     snprintf(buf, sizeof buf, "%s SPEED %d ms", sel == 0 ? ">" : " ", knob_speed);
     ek_text_scale(32, 240, buf, EK_INK, 2);
@@ -228,12 +235,40 @@ static void paint_tuner_rows(void) {
     /* st.us is an ek_ms() delta, so it is already milliseconds. */
     snprintf(buf, sizeof buf, "GAP %d ms FLASH %d ms", knob_gap, knob_flash_us);
     ek_text_scale(32, 430, buf, EK_INK, 2);
+
+    /* VERDICT: numbers, not vibes. When the measured gap keeps running past
+     * SPEED the panel cannot hold the beat -- raise SPEED, or if a grey
+     * waveform is forced, switch to DU first (the zap is the cost). */
+    if (gap_n >= 4) {
+        int m = gap_n < 8 ? gap_n : 8;
+        long sum = 0;
+        for (int k = 0; k < m; k++)
+            sum += gap_ring[(gap_i - m + k + GAP_RING) % GAP_RING];
+        long avg = sum / m;
+        int grey = knob_wfm == 2 || knob_wfm == 3 || knob_wfm == 4;
+        if (avg > knob_speed + 60L) {
+            ek_text_scale(32, 462, "PANEL LAGGING: GAP > SPEED", EK_INK, 1);
+            char v[64];
+            if (grey)
+                snprintf(v, sizeof v, "grey zap is the cost: use DU first");
+            else
+                snprintf(v, sizeof v, "raise SPEED to %ld ms", avg + 50L);
+            ek_text_scale(32, 482, v, EK_INK, 1);
+        } else {
+            ek_text_scale(32, 462, "PANEL KEEPS THE BEAT", EK_INK, 1);
+        }
+    }
 }
 
 static void step_tuner(uint32_t now) {
     (void)now;
     uint32_t t = ek_ms();
-    if (step_at) knob_gap = (int)(t - step_at);   /* includes the last refresh's wait */
+    if (step_at) {
+        knob_gap = (int)(t - step_at);   /* includes the last refresh's wait */
+        gap_ring[gap_i] = knob_gap;
+        gap_i = (gap_i + 1) % GAP_RING;
+        if (gap_n < GAP_RING) gap_n++;
+    }
     step_at = t;
     ek_fill_rect(482, block_y, 44, 44, EK_PAPER);
     block_y += 30;

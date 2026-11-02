@@ -9,10 +9,10 @@
     { "file": "pvz-art/cherrybomb.webp",  "grid": [1, 1], "id": "cherrybomb" },
     { "file": "pvz-art/tallnut.webp",     "grid": [1, 1], "id": "tallnut" },
     { "file": "pvz-art/potato.webp",      "grid": [1, 1], "id": "potato" },
-    { "file": "pvz-art/zombie.webp",      "grid": [1, 1], "id": "zombie" },
-    { "file": "pvz-art/conehead.webp",    "grid": [1, 1], "id": "conehead" },
-    { "file": "pvz-art/buckethead.webp",  "grid": [1, 1], "id": "buckethead" },
-    { "file": "pvz-art/flagzombie.webp",  "grid": [1, 1], "id": "flagzombie" },
+    { "file": "pvz-art/zombie.webp",      "grid": [1, 1], "id": "zombie",      "flip_h": true },
+    { "file": "pvz-art/conehead.webp",    "grid": [1, 1], "id": "conehead",    "flip_h": true },
+    { "file": "pvz-art/buckethead.webp",  "grid": [1, 1], "id": "buckethead",  "flip_h": true },
+    { "file": "pvz-art/flagzombie.webp",  "grid": [1, 1], "id": "flagzombie",  "flip_h": true },
     { "file": "pvz-art/sun.webp",         "grid": [1, 1], "id": "sun" }
   ],
   "order": [

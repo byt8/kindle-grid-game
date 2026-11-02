@@ -267,6 +267,11 @@ def main():
             die(f"{path.name}: PvZ sprites are single images, grid must be [1, 1]")
         sid = sheet["id"]
         tile = image_to_tile(path)
+        if sheet.get("flip_h"):
+            for y in range(TILE):
+                row = bytearray(tile[y * TILE:(y + 1) * TILE])
+                row.reverse()
+                tile[y * TILE:(y + 1) * TILE] = row
         tone = sum(v - PAPER for v in tile if v > PAPER)
         body = sum(1 for v in tile if v != TRANSPARENT)
         pct = 100 * tone // (BAYER_LEVELS * body) if body else 0

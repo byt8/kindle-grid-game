@@ -93,7 +93,15 @@ Reference well `ek_rect(470,48,110,470)` with the block at x 482, stepping +30.
 
 - Dialing SPEED / GC16F / GL16F until the grey zap looks metronome-even. The blink is the waveform. A faster grey mode is a shorter blink, not a steady picture. Retry only for a still image that needs real grey, not for motion.
 
+## The motion ladder (user-facing, in README)
+
+Gate: `GAP ≈ SPEED` (±~60 ms). Steps: 1) WFM=DU, 2) SPEED 800, raise by 50 until
+VERDICT says KEEPS THE BEAT, 3) grey zap = real FLASH cost, not a fix — DU for
+motion, grey only for still art, 4) CLEAN 30 only when ghosting shows (drop 20/10
+if trails persist), 5) WAIT stays ON (OFF makes GAP lie), 6) bake what the tuner
+chose into the game.
+
 ## Open / next
 
-- Kindle was off the LAN (ping 192.168.0.66 lost). Wake it, then `make calib && ./run-calib-on-kindle.sh 192.168.0.66`. Read the two millisecond numbers. If DU is clearly the steady one, leave tetris on auto (it already picks DU). Do not force a grey waveform for falling pieces.
+- [ran 2026-11-02 @192.168.0.66 port 22 open] `make calib && ./run-calib-on-kindle.sh 192.168.0.66` pushed and the app took the panel (fb0 600x800, touch event3). User said **"du seems to work well"** — DU is the right motion waveform. Next: bake DU into the games' motion flushes (tetris already auto-picks DU when nothing forces grey), and read the two RX ms numbers only if the beat still needs tuning.
 - A2 is still unwired. Add it in the shared engine only if DU on this Pearl panel is too slow and the user says to edit jailbreak-kindle.
