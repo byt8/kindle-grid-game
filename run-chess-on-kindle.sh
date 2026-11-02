@@ -84,6 +84,7 @@ echo "run-chess-on-kindle: taking the $ip screen. Tap QUIT, then SURE, to give i
 ssh_run "GAME=chess sh /mnt/us/chess-run.sh --detach --conf /mnt/us/chess.conf $*"
 echo "run-chess-on-kindle: the game is running on $ip; this window only watches."
 seen=0
+settle=0
 while :; do
     sleep 10
     snap=$(ssh_run 'echo "PID $(pidof chess 2>/dev/null)"; echo "LOG"; cat /mnt/us/chess.log 2>/dev/null' 2>/dev/null || true)
@@ -100,8 +101,26 @@ while :; do
             seen=$n
         fi
     fi
+    # Why can a missing pid be a lie? --detach hands control back before the
+    # app even exists (the take-over takes a moment: stop mirror, free the
+    # grab, start). Poll once in that window and the game looks "exited", the
+    # script walks off, and the app grabs the touch device a second later --
+    # every following launch dies with EVIOCGRAB refused (seen 2026-11-02:
+    # leftover brogue on .63 held the grab until killed by hand). So a missing
+    # pid is a candidate, not a verdict: keep polling for a while; an app that
+    # reached the panel stays up, so any pid seen in the window is decisive.
     if [ -z "$pid" ]; then
-        echo "run-chess-on-kindle: the game has exited; the Kindle reader is back"
-        exit 0
+        echo "run-chess-on-kindle: no game pid; waiting to be sure it is gone"
+        if [ "$settle" -ge 10 ]; then
+            if ssh_run 'grep -q ERROR /mnt/us/chess-run.log 2>/dev/null'; then
+                echo "run-chess-on-kindle: the runner reported an error:" >&2
+                ssh_run 'cat /mnt/us/chess-run.log' >&2
+            fi
+            echo "run-chess-on-kindle: the game has exited; the Kindle reader is back"
+            exit 0
+        fi
+        settle=$((settle + 1))
+    else
+        settle=0
     fi
 done

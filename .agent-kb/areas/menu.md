@@ -101,6 +101,43 @@ shows all eight bands (y 170/242/314/386/458/530 games + 600 wifi + 660 kindle,
 ROW_H 72). Host tests pass: `make menu-test` walks all eight buttons and the
 dump is sane.
 
+## 2026-11-02: EVIOCGRAB refused — the menu session would not start (run-menu)
+
+Symptom: `./run-menu-on-kindle.sh 192.168.0.63` failed; `menu-boot.log` had
+`grabtest: EVIOCGRAB refused: Resource busy`, `.menu-stop` present, reader up.
+
+Root causes found, in order:
+
+1. **Misdiagnosed as "stale brogue"** — actually a LIVE `xcom` (launched by the
+   menu job earlier) held `/dev/input/event3`. Killing it with a single TERM
+   then *starting the menu ~1 s later* is a race: the game's EXIT trap (saving,
+   `restore-kindle.sh` → starts Xorg) runs after SIGTERM and keeps the grab
+   until it exits (~4-5 s). The menu's grabtest ran inside that window and
+   failed EBUSY **even though no game would be there a second later**.
+2. **`run-menu` killed before it pushed** — the push `cat ./xcom` into a
+   running binary is `Text file busy`. Fixed by ordering: **free leftovers
+   (and WAIT for each to be gone, TERM then KILL) BEFORE the build push**.
+3. **`menu-boot.sh``stop_mirror()` only handled kfbterm/kfb, not Xorg.** The
+   xcom restore path starts Xorg (not kfbterm), and Xorg has event3 *open*
+   — open is harmless, only EVIOCGRAB conflicts, so Xorg is never a kill
+   candidate (it's the reader's display server).
+
+Fixes deployed (repo + pushed to .63, verified menu up):
+- `tools/menu-boot.sh` — new `grab_free()`: bounded grabtest retry (~20 s)
+  that re-kills any leftover game between attempts, so a freshly-killed
+  game's slow restore can't strand the menu. Loop uses it; on final failure
+  it names the event3 holder in the log.
+- `run-menu-on-kindle.sh` — reordered (free → verify event3 → push → start),
+  waits for each leftover to really die (TERM-then-KILL, up to 15 s), prints
+  event3 holders, extends the confirm to 45 s, and prints `menu-boot.log` on
+  a refused start.
+- **All seven game watchers** (`run-{chess,tetris,sudoku,pvz,brogue,calib,koreader}-on-kindle.sh`
+  + rockman) — "no pid" was an immediate false "game exited" exit. A `--detach`
+  hand-back races the app's first pid (take-over takes a moment), so a missing
+  pid is a candidate, not a verdict: they now poll a ~110 s settle window
+  before declaring exit, and print the runner log if it recorded an ERROR.
+  This is what stranded .63's stale brogue in the first place.
+
 ## Device state 2026-11-29 (the file-browser crash hunt)
 
 - User reported: file browser (KOReader) crashes, restarting the Kindle. Reboot

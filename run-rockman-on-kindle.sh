@@ -61,6 +61,7 @@ echo "run-rockman-on-kindle: taking the $ip screen. Tap QUIT, then SURE, to give
 ssh_run "GAME=rockman sh /mnt/us/rockman-run.sh --detach $*"
 echo "run-rockman-on-kindle: the game is running on $ip; this window only watches."
 seen=0
+settle=0
 while :; do
     sleep 10
     snap=$(ssh_run 'echo "PID $(pidof rockman 2>/dev/null)"; echo "LOG"; cat /mnt/us/rockman.log 2>/dev/null' 2>/dev/null || true)
@@ -78,18 +79,31 @@ while :; do
         fi
     fi
     if [ -z "$pid" ]; then
-        # rockman.log is the game's own log: empty means it never started, and
-        # then the runner's log says why (touch device refused, ...). Reporting
-        # "the game has exited" about a game that never ran is a lie -- that is
-        # what this printed while the launcher still held the touch grab.
-        rlog=$(ssh_run 'cat /mnt/us/rockman-run.log 2>/dev/null' 2>/dev/null || true)
-        if printf '%s\n' "$rlog" | grep -q 'ERROR'; then
-            echo "run-rockman-on-kindle: the game never started. The runner said:"
-            printf '%s\n' "$rlog" | sed 's/^/    /'
-            echo "run-rockman-on-kindle: the device was put back as it was"
-            exit 1
+        # Why can a missing pid be a lie? --detach hands control back before
+        # the game even exists (the take-over takes a moment: stop mirror,
+        # free the grab, start). Poll once in that window and the game looks
+        # "exited", the script walks off, and the game grabs the touch device
+        # a second later -- every following launch dies with EVIOCGRAB refused
+        # (seen 2026-11-02: leftover brogue on .63). So a missing pid is a
+        # candidate, not a verdict: keep polling for a while; a game that
+        # reached the panel stays up, so any pid seen in the window is
+        # decisive. When it really is gone, rockman.log is the game's own log:
+        # empty means it never started, and then the runner's log says why
+        # (touch device refused, ...).
+        echo "run-rockman-on-kindle: no game pid; waiting to be sure it is gone"
+        if [ "$settle" -ge 10 ]; then
+            rlog=$(ssh_run 'cat /mnt/us/rockman-run.log 2>/dev/null' 2>/dev/null || true)
+            if printf '%s\n' "$rlog" | grep -q 'ERROR'; then
+                echo "run-rockman-on-kindle: the game never started. The runner said:" >&2
+                printf '%s\n' "$rlog" | sed 's/^/    /' >&2
+                echo "run-rockman-on-kindle: the device was put back as it was" >&2
+                exit 1
+            fi
+            echo "run-rockman-on-kindle: the game has exited; the device is back as it was"
+            exit 0
         fi
-        echo "run-rockman-on-kindle: the game has exited; the device is back as it was"
-        exit 0
+        settle=$((settle + 1))
+    else
+        settle=0
     fi
 done

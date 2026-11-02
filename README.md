@@ -182,9 +182,12 @@ text with `python3 tools/show_png_ascii.py out.png` — no image viewer needed.
 `install-menu-on-kindle.sh` builds the menu + all five games, pushes them,
 installs `/etc/upstart/menu.conf`
 (replacing the old direct-to-chess boot job), and shows the menu now.
-`run-menu-on-kindle.sh` is the lightweight iteration path: it pushes a fresh
-`menu` + `menu-boot.sh` + `grabtest` and restarts the launcher session without
-touching the boot job — use it when a new button or a menu-boot.sh edit needs
+`run-menu-on-kindle.sh` is the iteration path: it frees the touch device of
+any leftover game (waits for each to die, so a live game's binary is not
+"Text file busy" to overwrite), pushes the full launcher set — `menu`,
+`menu-boot.sh`, `grabtest`, every game binary + runner, the wifi helper,
+`chess.conf` — and restarts the launcher session without touching the boot
+job. Use it when a new button or a menu-boot.sh edit needs
 to land on the device. Eight
 buttons: **XCOM / CHESS / TETRIS / SUDOKU / ROCKMAN / KOREADER / WIFI / KINDLE**. Play a game; when you quit
 you land back on the menu. **KOREADER** launches the KOReader reader

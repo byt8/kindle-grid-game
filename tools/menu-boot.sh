@@ -29,6 +29,11 @@ say() { echo "menu-boot: $*" >> "$LOG"; }
 # kfbterm EVIOCGRABs /dev/input/event3 on `started lab126_gui`; if it is up
 # when the menu runs, the grab fails (EBUSY) and the menu draws but ignores
 # every tap. Same fight the game runners solve, solved here before the menu.
+# The xcom RESTORE path (tools/kindle-run.sh) only starts Xorg, not kfbterm,
+# so Xorg has event3 open but not grabbed -- open is harmless, only EVIOCGRAB
+# conflicts. Xorg is the reader's display server though: killing it would drop
+# the framework, so it is never a candidate here; only kfbterm/kfb actually
+# GRAB the device.
 stop_mirror() {
     if /sbin/initctl list 2>/dev/null | grep -q '^kfbterm start'; then
         say "stopping the screen mirror (kfbterm)"
@@ -47,6 +52,32 @@ stop_mirror() {
         return 1
     fi
     return 0
+}
+
+# --- absorb a game that is still dying ------------------------------------
+# A game launched from this very session (or left over from a PC session) that
+# was just killed is not yet out of the way: its EXIT trap saves progress and
+# restores the reader, and the touch grab stays held until the process is
+# actually gone. Starting into that window fails grabtest with EBUSY even
+# though no game will be here a second later. So grabtest gets a bounded
+# retry: fail once, make sure the known games are really gone, try again.
+# (seen 2026-11-02: run-menu killed the PC's xcom and the new menu session's
+# grabtest ran ~4s into the dying game's ~5s restore, failed once and exited.)
+grab_free() {
+    i=0
+    while [ $i -lt 10 ]; do
+        if /mnt/us/grabtest >> "$LOG" 2>&1; then
+            return 0
+        fi
+        say "grabtest failed (attempt $((i + 1))); waiting out the dying game"
+        for g in xcom rockman tetris chess sudoku calib pvz brogue-kindle-app menu; do
+            p=$(pidof "$g" 2>/dev/null || true)
+            [ -n "$p" ] && killall -q "$g" 2>/dev/null || true
+        done
+        i=$((i + 1))
+        sleep 2
+    done
+    return 1
 }
 
 # --- give wifid a moment to finish associating ---------------------------
@@ -115,8 +146,13 @@ while :; do
         : > /mnt/us/.menu-stop
         exit 1
     fi
-    if [ -x /mnt/us/grabtest ] && ! /mnt/us/grabtest >> "$LOG" 2>&1; then
-        say "touch device still grabbed (grabtest failed); reader stays up"
+    if [ -x /mnt/us/grabtest ] && ! grab_free; then
+        say "touch device still grabbed after 20s; reader stays up"
+        for p in /proc/[0-9]*; do
+            if ls -l "$p/fd" 2>/dev/null | grep -q event3; then
+                say "  event3 is held by: $(cat "$p/cmdline" 2>/dev/null | tr '\0' ' ')"
+            fi
+        done
         : > /mnt/us/.menu-stop
         exit 1
     fi

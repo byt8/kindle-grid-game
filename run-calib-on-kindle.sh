@@ -56,6 +56,7 @@ echo "run-calib-on-kindle: taking the $ip screen. Tap QUIT to give it back."
 ssh_run "GAME=calib sh /mnt/us/calib-run.sh --detach $*"
 echo "run-calib-on-kindle: calib is running on $ip; this window only watches."
 seen=0
+settle=0
 while :; do
     sleep 10
     snap=$(ssh_run 'echo "PID $(pidof calib 2>/dev/null)"; echo "LOG"; cat /mnt/us/calib.log 2>/dev/null' 2>/dev/null || true)
@@ -73,7 +74,17 @@ while :; do
         fi
     fi
     if [ -z "$pid" ]; then
-        echo "run-calib-on-kindle: calib has exited; the Kindle reader is back"
-        exit 0
+        echo "run-calib-on-kindle: no app pid; waiting to be sure it is gone"
+        if [ "$settle" -ge 10 ]; then
+            if ssh_run 'grep -q ERROR /mnt/us/calib-run.log 2>/dev/null'; then
+                echo "run-calib-on-kindle: the runner reported an error:" >&2
+                ssh_run 'cat /mnt/us/calib-run.log' >&2
+            fi
+            echo "run-calib-on-kindle: calib has exited; the Kindle reader is back"
+            exit 0
+        fi
+        settle=$((settle + 1))
+    else
+        settle=0
     fi
 done

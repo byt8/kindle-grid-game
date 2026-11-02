@@ -55,6 +55,7 @@ echo "run-brogue-on-kindle: taking the $ip screen. Tap QUIT, then SURE, to give 
 ssh_run "GAME=brogue-kindle-app sh /mnt/us/brogue-run.sh --detach $*"
 echo "run-brogue-on-kindle: the game is running on $ip; this window only watches."
 seen=0
+settle=0
 while :; do
     sleep 10
     snap=$(ssh_run 'echo "PID $(pidof brogue-kindle-app 2>/dev/null)"; echo "LOG"; cat /mnt/us/brogue-kindle-app.log 2>/dev/null' 2>/dev/null || true)
@@ -72,7 +73,17 @@ while :; do
         fi
     fi
     if [ -z "$pid" ]; then
-        echo "run-brogue-on-kindle: the game has exited; the Kindle reader is back"
-        exit 0
+        echo "run-brogue-on-kindle: no game pid; waiting to be sure it is gone"
+        if [ "$settle" -ge 10 ]; then
+            if ssh_run 'grep -q ERROR /mnt/us/brogue-run.log 2>/dev/null'; then
+                echo "run-brogue-on-kindle: the runner reported an error:" >&2
+                ssh_run 'cat /mnt/us/brogue-run.log' >&2
+            fi
+            echo "run-brogue-on-kindle: the game has exited; the Kindle reader is back"
+            exit 0
+        fi
+        settle=$((settle + 1))
+    else
+        settle=0
     fi
 done

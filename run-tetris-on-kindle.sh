@@ -61,6 +61,7 @@ echo "run-tetris-on-kindle: taking the $ip screen. Tap QUIT, then SURE, to give 
 ssh_run "GAME=tetris sh /mnt/us/tetris-run.sh --detach $*"
 echo "run-tetris-on-kindle: the game is running on $ip; this window only watches."
 seen=0
+settle=0
 while :; do
     sleep 10
     snap=$(ssh_run 'echo "PID $(pidof tetris 2>/dev/null)"; echo "LOG"; cat /mnt/us/tetris.log 2>/dev/null' 2>/dev/null || true)
@@ -78,7 +79,17 @@ while :; do
         fi
     fi
     if [ -z "$pid" ]; then
-        echo "run-tetris-on-kindle: the game has exited; the Kindle reader is back"
-        exit 0
+        echo "run-tetris-on-kindle: no game pid; waiting to be sure it is gone"
+        if [ "$settle" -ge 10 ]; then
+            if ssh_run 'grep -q ERROR /mnt/us/tetris-run.log 2>/dev/null'; then
+                echo "run-tetris-on-kindle: the runner reported an error:" >&2
+                ssh_run 'cat /mnt/us/tetris-run.log' >&2
+            fi
+            echo "run-tetris-on-kindle: the game has exited; the Kindle reader is back"
+            exit 0
+        fi
+        settle=$((settle + 1))
+    else
+        settle=0
     fi
 done

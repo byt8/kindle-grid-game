@@ -61,6 +61,7 @@ echo "run-pvz-on-kindle: taking the $ip screen. Tap QUIT, then SURE, to give it 
 ssh_run "GAME=pvz sh /mnt/us/pvz-run.sh --detach $*"
 echo "run-pvz-on-kindle: the game is running on $ip; this window only watches."
 seen=0
+settle=0
 while :; do
     sleep 10
     snap=$(ssh_run 'echo "PID $(pidof pvz 2>/dev/null)"; echo "LOG"; cat /mnt/us/pvz.log 2>/dev/null' 2>/dev/null || true)
@@ -78,7 +79,17 @@ while :; do
         fi
     fi
     if [ -z "$pid" ]; then
-        echo "run-pvz-on-kindle: the game has exited; the Kindle reader is back"
-        exit 0
+        echo "run-pvz-on-kindle: no game pid; waiting to be sure it is gone"
+        if [ "$settle" -ge 10 ]; then
+            if ssh_run 'grep -q ERROR /mnt/us/pvz-run.log 2>/dev/null'; then
+                echo "run-pvz-on-kindle: the runner reported an error:" >&2
+                ssh_run 'cat /mnt/us/pvz-run.log' >&2
+            fi
+            echo "run-pvz-on-kindle: the game has exited; the Kindle reader is back"
+            exit 0
+        fi
+        settle=$((settle + 1))
+    else
+        settle=0
     fi
 done
