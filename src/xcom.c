@@ -31,7 +31,11 @@
 
 enum { ST_PLAY, ST_FIRE, ST_HEAL, ST_QUIT };
 
-static const char MAP[ROWS][COLS + 1] = {
+/* Four missions, one board each. MAP points at the board in play, so every
+ * rule, path and picture below reads the mission you are on. */
+#define N_MISSIONS 4
+
+static const char M1[ROWS][COLS + 1] = {
     "##.FF..R..F#",
     "#..F..r....#",
     "..R..C...T..",
@@ -46,6 +50,69 @@ static const char MAP[ROWS][COLS + 1] = {
     ".r.......FF.",
     "............",
 };
+
+/* Mission 2: a river across the map, crossed at the two shallow squares. */
+static const char M2[ROWS][COLS + 1] = {
+    "FF...R...F.#",
+    "#..F.....C..",
+    "..R..F...T..",
+    ".C..r......F",
+    "F....r..F...",
+    "~~~rr~~~~~~~",
+    "~~~rr~~~~~~~",
+    "..F..C...r..",
+    "#...F.......",
+    "..R...F..C..",
+    "....F..r....",
+    "F.....C...F.",
+    "............",
+};
+
+/* Mission 3: a city block split by one open road. */
+static const char M3[ROWS][COLS + 1] = {
+    "#.C...#...F#",
+    "#....C.....#",
+    ".F.R....R...",
+    "...C..F....F",
+    "#....R....C.",
+    "============",
+    "============",
+    "C....R....F.",
+    ".R..F...C...",
+    "...F....R...",
+    "#...C...F...",
+    ".F....R....C",
+    "............",
+};
+
+/* Mission 4: a mountain crown in the north, the high ground to take. */
+static const char M4[ROWS][COLS + 1] = {
+    ".RR.MMMM.RR.",
+    "..R.MMMM.R..",
+    ".F..MMMM..F.",
+    "...RMMMR....",
+    "..F..RR..F..",
+    "F....FF....F",
+    ".R..C..C..R.",
+    "...F....F...",
+    "..R...F...R.",
+    ".F...C.C...F",
+    "...R...R....",
+    ".F...C...F..",
+    "............",
+};
+
+static const char (*const BOARDS[N_MISSIONS])[COLS + 1] = {M1, M2, M3, M4};
+static const char (*MAP)[COLS + 1];
+
+static const struct { const char *msg; } MISSIONS[N_MISSIONS] = {
+    {"FIRST CONTACT. wipe them out."},
+    {"THE FORD. cross at the shallows."},
+    {"THE LONG ROAD. stay in cover."},
+    {"THE CROWN. take the high ground."},
+};
+
+static int level;   /* which mission MAP points at */
 
 enum { TEAM_YOU, TEAM_THEM, MAX_YOU = 4, MAX_THEM = 5 };
 
@@ -633,12 +700,15 @@ static const struct { const char *id; int x, y; } SQUAD[] = {
     {"player_units/heavy", 7, 12},
     {"player_units/medic", 10, 12},
 };
-static const struct { const char *id; int x, y; } ALIENS[] = {
-    {"enemies/sectoid", 3, 1},
-    {"enemies/sniper", 4, 0},
-    {"enemies/mutant", 1, 2},
-    {"enemies/assault", 10, 5},
-    {"enemies/drone", 10, 2},
+static const struct { const char *id; int x, y; } ALIENS[N_MISSIONS][5] = {
+    {{"enemies/sectoid", 3, 1}, {"enemies/sniper", 4, 0}, {"enemies/mutant", 1, 2},
+     {"enemies/assault", 10, 5}, {"enemies/drone", 10, 2}},
+    {{"enemies/sectoid", 3, 1}, {"enemies/sniper", 6, 0}, {"enemies/mutant", 1, 2},
+     {"enemies/assault", 9, 4}, {"enemies/drone", 10, 3}},
+    {{"enemies/sectoid", 3, 1}, {"enemies/sniper", 8, 0}, {"enemies/mutant", 1, 2},
+     {"enemies/assault", 9, 4}, {"enemies/drone", 4, 0}},
+    {{"enemies/sectoid", 3, 1}, {"enemies/sniper", 8, 0}, {"enemies/mutant", 1, 2},
+     {"enemies/assault", 9, 4}, {"enemies/drone", 8, 4}},
 };
 
 static void spawn(unit *u, const char *id, int x, int y, int team) {
@@ -692,6 +762,11 @@ static void init_game(uint32_t seed) {
         fprintf(stderr, "xcom: seed 0 is not allowed\n");
         exit(1);
     }
+    if (level < 0 || level >= N_MISSIONS) {
+        fprintf(stderr, "xcom: mission %d does not exist\n", level + 1);
+        exit(1);
+    }
+    MAP = BOARDS[level];
     rng_state = seed;
     game_seed = seed;
     nlog = 0;
@@ -705,8 +780,8 @@ static void init_game(uint32_t seed) {
     memset(reach, 0, sizeof reach);
     load_pictures();
     for (int y = 0; y < ROWS; y++) {
-        if (MAP[y][COLS] != 0) {
-            fprintf(stderr, "xcom: map row %d is not %d wide\n", y, COLS);
+        if (strlen(MAP[y]) != COLS) {
+            fprintf(stderr, "xcom: mission %d row %d is not %d wide\n", level + 1, y, COLS);
             exit(1);
         }
         for (int x = 0; x < COLS; x++) {
@@ -716,7 +791,7 @@ static void init_game(uint32_t seed) {
         }
     }
     n_you = (int)(sizeof SQUAD / sizeof SQUAD[0]);
-    n_them = (int)(sizeof ALIENS / sizeof ALIENS[0]);
+    n_them = (int)(sizeof ALIENS[0] / sizeof ALIENS[0][0]);
     if (n_you > MAX_YOU || n_them > MAX_THEM) {
         fprintf(stderr, "xcom: too many units\n");
         exit(1);
@@ -724,7 +799,8 @@ static void init_game(uint32_t seed) {
     for (int i = 0; i < n_you; i++)
         spawn(&you[i], SQUAD[i].id, SQUAD[i].x, SQUAD[i].y, TEAM_YOU);
     for (int i = 0; i < n_them; i++)
-        spawn(&them[i], ALIENS[i].id, ALIENS[i].x, ALIENS[i].y, TEAM_THEM);
+        spawn(&them[i], ALIENS[level][i].id, ALIENS[level][i].x, ALIENS[level][i].y,
+              TEAM_THEM);
     int n = n_you + n_them;
     for (int i = 0; i < n; i++) {
         unit *a = unit_index(i);
@@ -738,8 +814,18 @@ static void init_game(uint32_t seed) {
     }
     recompute_vision();
     clean_next = 1;
-    say("FIRST CONTACT. wipe them out.");
-    fprintf(stderr, "xcom: seed %u\n", seed);
+    say("%s", MISSIONS[level].msg);
+    fprintf(stderr, "xcom: mission %d/%d seed %u\n", level + 1, N_MISSIONS, seed);
+}
+
+/* Wiping a mission opens the next one. The last mission ends the campaign. */
+static int advance_mission(void) {
+    if (level + 1 >= N_MISSIONS) return 0;
+    level++;
+    uint32_t s = game_seed * 2654435761u + (uint32_t)level;
+    if (s == 0) s = 1;
+    init_game(s);
+    return 1;
 }
 
 static void rebuild_reach(void) {
@@ -868,7 +954,7 @@ static void draw_badge(int ox, int oy, int team) {
 static void draw(void) {
     ek_clear(EK_PAPER);
     char line[96];
-    snprintf(line, sizeof line, "XCOM   TURN %d", turn_no);
+    snprintf(line, sizeof line, "XCOM  M%d/%d  TURN %d", level + 1, N_MISSIONS, turn_no);
     ek_text(8, 2, line, EK_INK);
     const char *phase = "YOUR TURN";
     if (battle == 1) phase = "YOU WIN";
@@ -975,8 +1061,13 @@ static void draw(void) {
     const char *hint = "tap one of your soldiers.";
     const char *hint2 = "a thick box is a long run. you cannot shoot after it.";
     if (battle == 1) {
-        hint = "you win. tap QUIT, then SURE, to leave.";
-        hint2 = "";
+        if (level + 1 < N_MISSIONS) {
+            hint = "mission clear. tap anywhere to take the next one.";
+            hint2 = "tap QUIT, then SURE, when you are done.";
+        } else {
+            hint = "you win. tap QUIT, then SURE, to leave.";
+            hint2 = "";
+        }
     } else if (battle == 2) {
         hint = "your squad is lost. tap QUIT, then SURE.";
         hint2 = "";
@@ -1083,7 +1174,11 @@ static void tap(int x, int y) {
         mode = ST_PLAY;
         return;
     }
-    if (battle) return;
+    if (battle) {
+        /* A won mission stands until the player taps to take the next one. */
+        if (battle == 1) advance_mission();
+        return;
+    }
 
     if (mode == ST_FIRE) {
         if (in_box(x, y, 8, BTN_Y, 288, BTN_H)) {
@@ -1290,6 +1385,7 @@ static void expect_bounds(void) {
 
 static int selftest(void) {
     failures = 0;
+    level = 0;
     init_game(1);
     expect(n_you == 4 && n_them == 5, "squad size");
     expect(you[1].range == 11 && you[1].steady_bonus == 20, "sniper");
@@ -1365,6 +1461,27 @@ static int selftest(void) {
     check_end();
     expect(battle == 2, "a dead squad is a loss");
 
+    /* Every mission must load: right squad, nobody on a wall, nobody stacked. */
+    for (int l = 0; l < N_MISSIONS; l++) {
+        level = l;
+        init_game(1);
+        expect(n_you == 4 && n_them == 5, "mission squad size");
+        expect_bounds();
+    }
+
+    /* Wiping a mission opens the next; the last one ends the campaign. */
+    level = 0;
+    init_game(1);
+    for (int i = 0; i < n_them; i++) them[i].alive = 0;
+    check_end();
+    expect(battle == 1, "wipe is a win on any mission");
+    expect(advance_mission() && level == 1 && battle == 0, "mission two opens");
+    expect(advance_mission() && level == 2, "mission three opens");
+    expect(advance_mission() && level == 3, "mission four opens");
+    expect(!advance_mission() && level == 3, "the last mission stays won");
+    level = 0;
+    init_game(1);
+
     if (failures) {
         fprintf(stderr, "xcom: %d checks failed\n", failures);
         return failures;
@@ -1394,8 +1511,8 @@ static int sound_default_mode(void) {
 
 static void usage(void) {
     fprintf(stderr,
-            "usage: xcom [--seed N] [--dump file.pgm] [--auto N] [--selftest]\n"
-            "            [--no-takeover] [--no-wait] [--stats] [--clean]\n"
+            "usage: xcom [--seed N] [--mission N] [--dump file.pgm] [--auto N]\n"
+            "            [--selftest] [--no-takeover] [--no-wait] [--stats] [--clean]\n"
             "            [--mute] [--sound DIR] [--soundcheck]\n"
             "\n"
             "  On the Kindle the screen is taken until you tap QUIT, then SURE.\n"
@@ -1403,13 +1520,14 @@ static void usage(void) {
             "  --auto N     play N turns by itself, then exit\n"
             "  --dump FILE  write the picture (PGM) and exit\n"
             "  --seed N     same seed, same dice\n"
+            "  --mission N  start at mission N (1..%d)\n"
             "  --stats      print what each screen update cost\n"
             "  --clean      refresh the whole picture on every update (slow)\n"
             "  --mute       no sound\n"
             "  --sound DIR  clips live in DIR (default %s)\n"
             "  --soundcheck print the words that would be spoken, and any\n"
             "               clip DIR is missing, then exit\n",
-            sound_default());
+            N_MISSIONS, sound_default());
 }
 
 int main(int argc, char **argv) {
@@ -1445,6 +1563,14 @@ int main(int argc, char **argv) {
                 usage();
                 return 2;
             }
+        } else if (!strcmp(argv[i], "--mission") && i + 1 < argc) {
+            char *end = NULL;
+            long v = strtol(argv[++i], &end, 10);
+            if (!end || *end || v < 1 || v > N_MISSIONS) {
+                usage();
+                return 2;
+            }
+            level = (int)(v - 1);
         } else if (!strcmp(argv[i], "--selftest")) do_test = 1;
         else if (!strcmp(argv[i], "--stats")) stats_on = 1;
         else if (!strcmp(argv[i], "--clean")) force_clean = 1;

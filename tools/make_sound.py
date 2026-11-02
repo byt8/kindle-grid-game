@@ -34,6 +34,9 @@ VOICE = "Samantha"
 WORDS = [
     # what the log says
     "first", "contact", "wipe", "them", "out",
+    # the mission opening lines (MISSIONS table in src/xcom.c)
+    "ford", "cross", "shallows", "long", "road", "stay", "cover",
+    "crown", "take", "high", "ground",
     "is", "down", "missed", "soaked", "crit", "hit", "for", "panics",
     "pinned", "freezes", "something", "in", "the", "way", "cannot", "go",
     "there", "too", "far", "that", "shot", "gone", "heal", "not", "a",

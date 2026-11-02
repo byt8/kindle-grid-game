@@ -2,6 +2,7 @@
 
 Newest first. One line per task. Current truth is in `areas/`, not here.
 
+- 2026-11-02 — xcom — **Four-mission campaign**: `M1..M4` boards + `MISSIONS[]`/`ALIENS[][]` tables, header `M1/4..M4/4`, `advance_level()` on win, `campaign won` + exit 0 after M4, `--mission N` host flag; terrain `b` bush (walk, no cover) + `M` mountain (blocks move+ sight, no cover); `check_sound.py` reads `MISSIONS`, 11 new words baked (102 total); snipers pulled to row 0 (no turn-1 shot); `make test` green, README/MANUAL/KB updated.
 - 2026-11-01 — rockman — Kindle build fixed: `tap_at` is host-pipe-only, so it is now `#ifdef EK_HOST`; `make rockman-kindle` produces `./rockman` (74 KB). Push still pending, SSH to 192.168.0.66 timed out.
 - 2026-11-01 — rockman — Playable port; menu ROCKMAN is exit 5, WIFI is 6.
 - 2026-11-01 — xcom — greyscale option B: shared engine editable after asking; build opt-in ek_grey, dither rejected

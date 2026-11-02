@@ -33,7 +33,9 @@ cp chess.conf.example chess.conf # chess only: paste your key, key = sk-...
 
 It copies the game and its voice clips over, frees the touch screen, runs it, and
 puts the Kindle back to normal when you quit. **Tap a soldier**, tap a boxed square
-to walk, tap an alien then **FIRE**. **QUIT** then **SURE** exits.
+to walk, tap an alien then **FIRE**. **QUIT** then **SURE** exits. The fight is a
+**campaign of four boards** — the header counts M1/4 … M4/4, wiping a board out
+advances you to the next one.
 
 **Play chess on the Kindle:**
 
@@ -129,6 +131,32 @@ screen, so a bug is replayable: same `--seed`, same dice.
 | `sound/` | the baked clips, pushed to `/mnt/us/xcom-sound` |
 | `tools/grabtest.c` | "is the touch device free right now?" probe |
 | `MANUAL.md` | plain-prose game manual for TTS |
+
+### The campaign: four boards
+
+Four missions back to back, each with its own map, opening line and alien group —
+all four live in `src/xcom.c` as the `M1`…`M4` literals, `MISSIONS[]` and
+`ALIENS[][]`. The header counts `M1/4` … `M4/4`; clearing a board speaks its
+log line and loads the next one; after M4 it prints `CAMPAIGN WON` and quits.
+Losing the squad anywhere ends the run.
+
+| # | spoken opening | board |
+|---|---|---|
+| 1 | FIRST CONTACT. wipe them out. | ruins, river, road |
+| 2 | THE FORD. cross at the shallows. | forest, shallow ford |
+| 3 | THE LONG ROAD. stay in cover. | long road, side cover |
+| 4 | THE CROWN. take the high ground. | mountain ring, forest floor |
+
+Terrain is the old char set plus `M` (mountains: block movement **and** sight,
+no cover) and walkable `b` (bush: no cover). On the PC: `./xcom-host --mission 3`
+opens any board, `--mission N --auto K --dump f.pgm` plays it out. `make test`
+loads every board, proves all nine spawns are walkable and distinct, and speaks
+every opening line; `tools/check_sound.py` now reads the `MISSIONS` table, so a
+new spoken word fails the build until `tools/make_sound.py` bakes it (`make sound`).
+
+![mission 2 opening](xcom-mission2-preview.png)
+
+![mission 4 opening](xcom-mission4-preview.png)
 
 ### The panel shows real grey, so the art keeps its tone
 
@@ -480,6 +508,7 @@ A `sound: no clip words/x.pcm` line means the game said a word with no file: run
 
 ```bash
 ./xcom-host --selftest                           # check the rules
+./xcom-host --mission 2 --seed 5 --dump /tmp/m2.pgm   # open board 2 of the campaign
 ./xcom-host --auto 2 --no-takeover               # let the computer play 2 turns
 printf 'tap 120 536\n' | ./xcom-host --seed 1 --dump /tmp/picked.pgm
 ./xcom-host --soundcheck --auto 1                 # print the words it would say

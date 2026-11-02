@@ -4,7 +4,7 @@ This manual is written to be heard, not read. It is all plain sentences, and eve
 
 What the game is
 
-You have four soldiers on a small island map. Somewhere on that map are five aliens, most of them hidden in the fog. You take turns. On your turn each of your soldiers may walk and then shoot, or walk instead of shooting, or dig in and wait. When you are finished, the aliens move and shoot back. The fight ends when every alien is down, or when every soldier is down.
+You have four soldiers and there are four maps to fight over, one after the other. Each map holds five aliens, most of them hidden in the fog. You take turns. On your turn each of your soldiers may walk and then shoot, or walk instead of shooting, or dig in and wait. When you are finished, the aliens move and shoot back. When every alien on a map is down you move on to the next map. Clear the fourth map and you have won the campaign. Lose every soldier on any map and the whole run is over.
 
 Getting it onto the Kindle
 
@@ -14,9 +14,9 @@ The script copies the game and its voice clips across, it takes the touch screen
 
 What you see
 
-The top of the screen shows the turn number and the word your turn. Next to that is a count of how many aliens you can currently see, and the random seed for this game, which is only useful when something has gone wrong.
+The top of the screen shows the turn number and the word your turn. Next to that is which mission you are on, from M1 of 4 to M4 of 4, then a count of how many aliens you can currently see, and the random seed for this game, which is only useful when something has gone wrong.
 
-Then comes the map, twelve squares wide and thirteen squares tall. Pale squares are grass, and long smooth squares are road. Darker squares are trees, and those slow you down. Black shapes with hard edges are city walls, and you cannot walk through those. You will also see rocks, trees, crates, and water, and none of those can be crossed either. Any square you have never seen is covered by a flat dark grey wash, which is fog.
+Then comes the map, twelve squares wide and thirteen squares tall. Pale squares are grass, and long smooth squares are road. Darker squares are trees, and those slow you down. Black shapes with hard edges are city walls, and you cannot walk through those. You will also see rocks, crates, and water, and none of those can be crossed either. Low bushes are walkable and cost one point like grass, but they give you no cover. Tall mountains block walking and sight both ways, and give no cover either. Any square you have never seen is covered by a flat dark grey wash, which is fog.
 
 Every soldier and every alien stands in a square with a small bar underneath showing how much health is left. Your people carry a badge with a black ring, and the aliens carry a badge with a white ring inside a black square.
 
@@ -68,9 +68,23 @@ The heavy is the tough one. Eight health, armour of two, aim of sixty-five, dama
 
 The medic is the support. Six health, aim of seventy, damage of two to three, a range of seven, and a pair of heals that give back three health each.
 
+The campaign
+
+The four maps are played in order, and the header tells you which one you are on. Each map opens with a spoken line before the fighting starts.
+
+Mission one is FIRST CONTACT, wipe them out. It is the old island map: ruins in the corners, a river across the middle, and a road crossing it.
+
+Mission two is THE FORD, cross at the shallows. Forest on both banks, and a wide river you can only cross where two shallows run down it, because everywhere else the water is too deep.
+
+Mission three is THE LONG ROAD, stay in cover. A straight road runs across the middle of the map from edge to edge, so both sides have to come to it. Trees, rocks and ruins stand off to the sides.
+
+Mission four is THE CROWN, take the high ground. A ring of mountains fills the upper middle of the map with a forest floor around it. The mountains block walking and sight, so you go around them, not over them.
+
+You start every mission along the bottom edge, in the same order: soldier, sniper, heavy, medic. Each mission has its own five aliens, and the alien sniper on every map is placed far enough away that it cannot reach you on the first turn.
+
 The aliens
 
-You are facing five of them.
+You are facing five of them on each map.
 
 The sectoid is the small one. Five health, aim of sixty-five, damage of two to four. When a sectoid hits you, there is a one in five chance your soldier panics and freezes completely for their next turn.
 
@@ -90,7 +104,7 @@ If the sound folder is missing on the Kindle, the game says so and runs silently
 
 How to win
 
-Wipe out all five aliens and you win. Lose all four soldiers and you lose. There is no timer and no score, so patience is free.
+Wipe out all five aliens on a map and you move to the next one. Clear the fourth map and you have won the campaign. Lose all four soldiers on any map and the run is over. There is no timer and no score, so patience is free.
 
 A few things that make it much easier
 

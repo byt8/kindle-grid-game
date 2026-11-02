@@ -5,6 +5,7 @@ This is the guard that keeps tools/make_sound.py honest. It reads the sources,
 not the sound folder, so it catches a new log line the moment it is written:
 
   * every string literal passed to say(...) in src/xcom.c
+  * the mission opening line of every entry in the MISSIONS table
   * the name of every unit the SQUAD and ALIENS tables put on the map
 
 and it turns them into words with the rules in src/audio.c: lower case, letters
@@ -93,6 +94,14 @@ def say_literals(src):
             yield lit
 
 
+def mission_messages(src):
+    """The opening line of each mission, spoken via say("%s", MISSIONS[i].msg)."""
+    m = re.search(r"MISSIONS\[N_MISSIONS\] = \{(.*?)\n\};", src, re.S)
+    if not m:
+        sys.exit("check_sound: cannot find the MISSIONS table in src/xcom.c")
+    return re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1))
+
+
 def unit_names():
     """The names the units on the map are given, via name_from(sp_label[sp])."""
     sprites = open(os.path.join(HERE, "src", "sprites.h")).read()
@@ -119,6 +128,10 @@ def wanted_words():
     words = set()
     numbers = False
     for lit in say_literals(game):
+        found, need = words_in(lit)
+        words.update(found)
+        numbers = numbers or need
+    for lit in mission_messages(game):
         found, need = words_in(lit)
         words.update(found)
         numbers = numbers or need
