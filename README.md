@@ -146,11 +146,22 @@ python3 -m http.server 8765 --directory poc
 # open http://localhost:8765/view.html  (or see poc/screen_600x800_grey.png directly)
 ```
 
-`poc/render_poc.py` draws a 600x800 e-ink screen: header, 20x14 map (classic
-tileset from SimHacker/MicropolisCore), toolbars with 4-bit grey. Contrast note
-baked into the file: the classic palette is pastel, so tiles are stretched
-**per tile** to the full grey band — straight luma conversion makes every tile
-mid-grey and unreadable.
+`poc/render_poc.py` draws the whole 600x800 e-ink frame: black header band with
+paper-white text, a 20x21 grid of 30px tiles (classic tileset from
+SimHacker/MicropolisCore), status strip, 8-tool toolbar, 1px grid lines.
+
+Two rules baked into the file, both learned the hard way:
+
+- **Ink polarity**: engine grey level 0 = paper (byte 255), level 15 = ink (0).
+  Convert luma the other way round and text/header invert (invisible text, black
+  "paper" band).
+- **Per-tile-type tone targets, never a contrast stretch.** The classic palette is
+  pastel and separates water/grass by *hue*, which greyscale throws away. Each tile
+  type gets its own darkness band (`TONE` dict: grass light, water mid-dark, road
+  near-black) and the tile's texture is remapped *into* that band; a nearly-flat
+  tile fills one clean tone. Stretching each tile over the full band instead
+  amplifies its noise into speckle — that first mock was unreadable (water speckle
+  measured 11%, now ~1%).
 
 ---
 

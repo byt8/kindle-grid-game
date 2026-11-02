@@ -9,7 +9,8 @@ HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 
 .PHONY: all test kindle sound manual grabtest preview preview-old bold chess chess-test chess-kindle \
         tetris tetris-host tetris-test tetris-kindle sudoku sudoku-host sudoku-test sudoku-kindle \
-        menu-host menu-kindle menu-test rockman-data rockman-host rockman-test rockman-kindle rockman clean
+        menu-host menu-kindle menu-test rockman-data rockman-host rockman-test rockman-kindle rockman \
+        pvz-host pvz pvz-test clean
 
 # ---- rockman data: regenerate from the commented VIC-20 disassembly --------
 
@@ -234,14 +235,45 @@ preview: src/sprites.h
 preview-old:
 	$(PY) tools/slice_sprites.py --preview /tmp/xcom-sprites-old.png
 
+# ---- pvz: five-lane plant defence. Sprites baked from the webp art. ----
+
+pvz-host: src/pvz.c src/pvz_sprites.h $(ENGINE)/eink.c $(ENGINE)/eink.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/pvz.c $(ENGINE)/eink.c -lm
+
+pvz-kindle: src/pvz.c src/pvz_sprites.h $(ENGINE)/eink.c $(ENGINE)/eink.h
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" \
+	  -v /home/brendan/jailbreak-kindle:/jb \
+	  -w /src kfb-build \
+	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -ffunction-sections -fdata-sections \
+	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
+	    -o pvz src/pvz.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -static -no-pie -Wl,--gc-sections -lm \
+	    && arm-linux-musleabi-strip pvz'
+
+pvz: pvz-kindle
+
+src/pvz_sprites.h: tools/bake_pvz_sprites.py pvz_sprite_sources.json pvz/*.webp
+	$(PY) tools/bake_pvz_sprites.py
+
+# Rules first, then the picture: the opening, a planting tap, and a wave or
+# two played by --auto. The dumps must differ from each other.
+pvz-test: pvz-host
+	./pvz-host --selftest --no-takeover --seed 1
+	./pvz-host --no-takeover --seed 1 --dump /tmp/pvz-open.pgm
+	printf 'tap 131 297\ntap 260 120\n' | ./pvz-host --no-takeover --seed 1 --dump /tmp/pvz-plant.pgm
+	./pvz-host --auto 120 --no-takeover --seed 1 --dump /tmp/pvz-play.pgm
+	$(PY) tools/check_pgm.py /tmp/pvz-open.pgm /tmp/pvz-plant.pgm /tmp/pvz-play.pgm
+
 clean:
 	rm -f xcom-host xcom grabtest chess-host chess tetris-host tetris sudoku-host sudoku \
-	      rockman-host rockman
+	      rockman-host rockman pvz-host pvz
 
 # --- SimCity POC (600x800 screen mock) -------------------------------------
-poc: poc/screen_600x800_grey.png poc/screen_600x800_ink.png
+poc: poc/screen_600x800_grey.png
 
-poc/screen_600x800_grey.png poc/screen_600x800_ink.png: poc/render_poc.py poc/src_*.png | upstream/tiles.bmp
+poc/screen_600x800_grey.png: poc/render_poc.py poc/src_*.png | upstream/tiles.bmp
 	python3 poc/render_poc.py
 
 upstream/tiles.bmp:

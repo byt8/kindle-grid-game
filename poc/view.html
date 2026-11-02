@@ -6,19 +6,21 @@
 <style>
   body { background:#333; color:#ddd; font:14px sans-serif; margin:0; }
   h1 { margin:1rem 2rem; font-size:20px; }
-  p  { margin:0 2rem 1rem; color:#aaa; }
-  .row { display:flex; flex-wrap:wrap; gap:2rem; padding:0 2rem 2rem; }
-  .card { text-align:center; }
-  .card img { background:#fff; border:1px solid #666; }
+  p  { margin:0 2rem 1rem; color:#aaa; max-width:60rem; }
+  .row { display:flex; flex-wrap:wrap; gap:2rem; padding:0 2rem 2rem; align-items:flex-start; }
+  .card img { background:#fff; border:1px solid #666; image-rendering:pixelated; }
   .card h2 { font-size:15px; margin:0.4rem 0; }
 </style>
 </head>
 <body>
   <h1>SimCity on Kindle — 600x800 POC</h1>
-  <p>Left: greyscale, exactly what the eink 4-bit panel shows. Right: toolbar + icons as true on/off ink (the 2-bit path). Same tiles, same layout.</p>
+  <p>Exact 600x800 e-ink frame: black header band with paper-white text, 20x21 grid of
+     30px tiles (tone-targeted per tile type — water sits dark, grass light, roads
+     near-black with light dashes), status strip, 8-tool toolbar. Real classic
+     Micropolis tiles, rebaked for greyscale.</p>
   <div class="row">
-    <div class="card"><h2>Greyscale</h2><img src="screen_600x800_grey.png" width="300" height="400" alt="greyscale POC"></div>
-    <div class="card"><h2>True-ink toolbar</h2><img src="screen_600x800_ink.png" width="300" height="400" alt="ink POC"></div>
+    <div class="card"><h2>Full screen 600x800</h2><img src="screen_600x800_grey.png" width="600" height="800" alt="POC full screen"></div>
+    <div class="card"><h2>Half size (as a page looks)</h2><img src="screen_600x800_grey.png" width="300" height="400" alt="POC half size"></div>
   </div>
 </body>
 </html>
