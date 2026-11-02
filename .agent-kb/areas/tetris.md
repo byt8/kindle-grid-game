@@ -69,6 +69,19 @@ make tetris-kindle         # static ARM musl, docker kfb-build
   *fell* into it, not that the cleared row "stays put"), and the I turns to rot 2
   from rot 1 (check flatness `SH[0][cur_rot].h == 1`, not `cur_rot == 0`).
 
+- **Drop timing was anchored to the flush, so drops drifted.** The device loop
+  set `drop_at = now + drop_ms()` right after `step_down()`, but `present()`
+  blocks for the panel's real refresh time (~250-330 ms, more on a GC16 clean),
+  and with `now` captured before that block, every refresh that ran long pushed
+  the *next* deadline late — the piece visibly stuttered/skipped after taps and
+  cleans. Now it's `drop_at += drop_ms()`: drops fire on a fixed wall-clock
+  beat, exactly `drop_ms()` apart, and because the step is drawn by the
+  `present()` that follows (which waits for completion, `ek_wait_updates(1)` is
+  the default), the piece moves once per settled refresh. Level-speed scaling
+  (`drop_ms()`) unchanged, per request. In the `#else` device loop only; the
+  host `EK_HOST` path is tap-driven and never exercises it. Deployed to
+  192.168.0.66 (PID verified running).
+
 ## Layout (keep `check_tetris.py` in step with `src/tetris.c`)
 
 `COLS 10, ROWS 20, CELL 30`; `WELL_X 152, WELL_Y 44`; buttons `BTN_W 186` at

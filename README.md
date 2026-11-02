@@ -54,6 +54,7 @@ Tap a piece, tap a square. **QUIT** then **SURE** gives the screen back.
 ```
 
 Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down, **QUIT** then **SURE** to exit.
+Pieces fall on a fixed wall-clock beat: each drop is scheduled from the previous deadline (not the last flush), so the panel's refresh time (~250–330 ms) can no longer push drops late.
 
 **Play Sudoku on the Kindle:**
 

@@ -883,7 +883,17 @@ int main(int argc, char **argv) {
             uint32_t now = ek_ms();
             if ((int32_t)(now - drop_at) >= 0) {
                 step_down();
-                drop_at = now + (uint32_t)drop_ms();
+                /* Anchor the beat to the old deadline, not to `now`. present()
+                 * below blocks for the panel's real refresh time (~250-330 ms,
+                 * more on a clean), so `now + drop_ms()` let every knob of
+                 * that variability push the next deadline: drops drifted late
+                 * whenever a refresh ran long, and the piece could stutter
+                 * after a GC16 clean. Advancing the *deadline* keeps the drops
+                 * exactly drop_ms() apart in wall time, and since the step is
+                 * drawn by the present() that follows it (which waits for
+                 * completion), the piece moves once per settled refresh -- not
+                 * on a timer racing the panel. */
+                drop_at += (uint32_t)drop_ms();
                 got = 1;
             }
         }

@@ -1,3 +1,4 @@
+- 2026-11-02 — tetris — **Drop timing fixed: pieces fall on a fixed beat, not flush-jittered.** `drop_at = now + drop_ms()` moved the deadline by however long the previous `present()` blocked (~250-330 ms full refresh), so drops drifted late after taps and GC16 cleans. Now `drop_at += drop_ms()` in the device loop — drops exactly `drop_ms()` apart, step drawn by the completing present, one move per settled refresh. Level scaling untouched. `make tetris-test` green, ARM rebuilt, deployed to 192.168.0.66 and running.
 # Changelog
 
 Newest first. One line per task. Current truth is in `areas/`, not here.
