@@ -22,6 +22,8 @@
 /tetris-play.png
 # Board dumps pulled from the device for a look; regenerate any time.
 /chess-live.*
+# Panel shot pulled by fb-shot.sh; regenerate any time.
+/kindle-now.png
 
 # The file with the real API key in it. The example is tracked instead.
 /chess.conf

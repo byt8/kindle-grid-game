@@ -70,6 +70,15 @@ Pass `--seed N` to the runner to play the same puzzle again.
 
 **LEFT / UP / RIGHT / DOWN** dig and walk. **PUSH** shoves a rock sideways. Get all 8 diamonds and the exits open. **QUIT** then **SURE** exits.
 
+If the launcher menu is showing, the runner stops it first — the menu holds the
+touch device — and hands the panel back to it when you quit, so this works from
+the PC whatever is on screen. A run that never starts prints the runner's own
+error (touch device refused, …) instead of claiming the game exited.
+
+To see what the Kindle is showing: `jailbreak-kindle/kindle-tools/fb-shot.sh
+out.png` (it wants `KINDLE_IP`, e.g. `KINDLE_IP=192.168.0.66`), then read it as
+text with `python3 tools/show_png_ascii.py out.png` — no image viewer needed.
+
 **Boot straight into the launcher menu** (instead of the Amazon UI):
 
 ```bash

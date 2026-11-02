@@ -42,6 +42,11 @@ if /sbin/initctl list 2>/dev/null | grep -q '^kfbterm start'; then
     mirror_was=1
 fi
 
+# Was the launcher session (tools/menu-boot.sh) showing its menu when we
+# arrived? Decides whether to start it again. Defined before the trap below so
+# an early exit still gives the launcher back.
+menu_was=0
+
 restore() {
     # The game stops powerd so the power key belongs to it (chess sleeps and
     # wakes the Kindle itself). Give the stock button behaviour back.
@@ -54,6 +59,29 @@ restore() {
         fi
     fi
     rm -f /mnt/us/DONT_START_FRAMEWORK
+
+    if [ "$menu_was" = 1 ]; then
+        # This device boots into the launcher session, so the state to hand back
+        # is that session and not the stock reader: the menu job stops the
+        # mirror, takes the panel and keeps the Amazon UI hidden -- exactly how
+        # we found it. The reader restore below would fight it, so it runs only
+        # if upstart refuses to start the launcher, in which case the panel must
+        # not be left dead.
+        say "giving the panel back to the launcher session (menu)"
+        /sbin/initctl start menu >/dev/null 2>&1
+        i=0
+        while ! /sbin/initctl status menu 2>/dev/null | grep -q 'start/running' && [ $i -lt 5 ]; do
+            i=$((i + 1))
+            sleep 1
+        done
+        if /sbin/initctl status menu 2>/dev/null | grep -q 'start/running'; then
+            return 0
+        fi
+        say "ERROR: the launcher (menu job) would not restart; falling back to"
+        say "       restoring the stock reader so the panel is not left dead"
+        menu_was=0
+    fi
+
     if [ -x /mnt/us/fbdaemon/restore-kindle.sh ]; then
         # Two goes at it. The first has been seen to bring X back and then leave
         # the reader down, right after a wake, so ask again rather than hand the
@@ -124,6 +152,41 @@ if [ -n "$(pidof kfb 2>/dev/null || true)" ]; then
         say "ERROR: the screen mirror (pid $(pidof kfb)) will not exit, so touch"
         say "       would stay locked. Stop it with: initctl stop kfbterm"
         exit 1
+    fi
+fi
+
+# 2b. The launcher session draws its menu with the touch grab held, so a game
+#     started from a PC while that session is at its menu phase is refused here
+#     exactly like the mirror: grabtest reports EBUSY and the run dies before
+#     drawing anything. The menu process is only alive in that phase -- when the
+#     session launches a game itself the menu exits first (that is the handover,
+#     see tools/menu-boot.sh) -- so a live `menu` here is always someone else's
+#     session holding the panel, never our own parent, and stopping the job is
+#     what gives it back. restore() above puts it back on the way out.
+if [ -n "$(pidof menu 2>/dev/null || true)" ]; then
+    say "stopping the launcher session (menu) so it lets go of the touch device"
+    menu_was=1
+    /sbin/initctl stop menu >/dev/null 2>&1
+    i=0
+    while [ -n "$(pidof menu 2>/dev/null || true)" ] && [ $i -lt 10 ]; do
+        i=$((i + 1))
+        sleep 1
+    done
+    # Stopping the job can leave the menu process behind (upstart signals the
+    # job's main script first); it releases the grab only when it exits.
+    if [ -n "$(pidof menu 2>/dev/null || true)" ]; then
+        say "the launcher menu survived the stop (pid $(pidof menu)); asking it to exit"
+        kill -TERM $(pidof menu) 2>/dev/null
+        i=0
+        while [ -n "$(pidof menu 2>/dev/null || true)" ] && [ $i -lt 5 ]; do
+            i=$((i + 1))
+            sleep 1
+        done
+        if [ -n "$(pidof menu 2>/dev/null || true)" ]; then
+            say "ERROR: the launcher menu (pid $(pidof menu)) will not exit, so touch"
+            say "       would stay locked. Stop it with: initctl stop menu"
+            exit 1
+        fi
     fi
 fi
 

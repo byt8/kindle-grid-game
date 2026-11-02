@@ -78,7 +78,18 @@ while :; do
         fi
     fi
     if [ -z "$pid" ]; then
-        echo "run-rockman-on-kindle: the game has exited; the Kindle reader is back"
+        # rockman.log is the game's own log: empty means it never started, and
+        # then the runner's log says why (touch device refused, ...). Reporting
+        # "the game has exited" about a game that never ran is a lie -- that is
+        # what this printed while the launcher still held the touch grab.
+        rlog=$(ssh_run 'cat /mnt/us/rockman-run.log 2>/dev/null' 2>/dev/null || true)
+        if printf '%s\n' "$rlog" | grep -q 'ERROR'; then
+            echo "run-rockman-on-kindle: the game never started. The runner said:"
+            printf '%s\n' "$rlog" | sed 's/^/    /'
+            echo "run-rockman-on-kindle: the device was put back as it was"
+            exit 1
+        fi
+        echo "run-rockman-on-kindle: the game has exited; the device is back as it was"
         exit 0
     fi
 done

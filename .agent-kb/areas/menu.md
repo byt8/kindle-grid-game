@@ -31,6 +31,20 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
   runs; the grab dies with the process.
 - `kfbterm` owns `/dev/input/event3` (EVIOCGRAB) on `started lab126_gui`;
   menu-boot.sh stops it first, and re-checks with `grabtest`.
+- **The standalone runners used to collide with this session.** `./run-*-on-kindle.sh`
+  from a PC while the launcher was showing its menu got `grabtest: EVIOCGRAB
+  refused: Resource busy` (the `menu` process holds the grab), died before
+  drawing, and the host watcher still printed "the game has exited; the Kindle
+  reader is back" — a false success, and the "needs a reboot" line from the
+  restore was noise because the reader is *meant* to be down here. Fixed in
+  `tools/kindle-run.sh` (used by all five games): before the grab check, a live
+  `pidof menu` means someone else's session holds the panel → `initctl stop menu`
+  (plus a TERM to the menu process if the job's stop leaves it), and `restore()`
+  then does `initctl start menu` instead of the stock-reader restore. A live
+  `menu` process can only be the menu phase: when the session launches a game
+  itself the menu has already exited, so the stop never kills our own parent.
+  `run-rockman-on-kindle.sh` now prints the runner's log and exits 1 when the
+  game never started.
 - WIFI button reuses chess's proven wi-fi screens: `chess --wifi-only`
   (added for the menu; same screens, no board, hands the panel back).
 - `ek_close()` → `release_ui()` → `initctl start framework`, so after WIFI or
@@ -39,5 +53,8 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
 
 ## Status
 
-Not yet installed on a real Kindle (installed + reboot-tested on next session).
-Host tests pass: `make menu-test` walks all seven buttons and the dump is sane.
+Installed and running: 192.168.0.66 boots into the launcher (the `menu` job is
+`start/running`, framework stopped, `pidof menu` alive), and the standalone
+Rockman runner now stops and restarts that session correctly — verified on the
+panel 2026-11-02 (grabtest free, game reached its title screen). Host tests
+pass: `make menu-test` walks all seven buttons and the dump is sane.
