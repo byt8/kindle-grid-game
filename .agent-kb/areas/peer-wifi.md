@@ -23,6 +23,7 @@ Direct kindle-to-kindle link, no router, for games and messaging. One success so
 - Switching wlan0 off the LAN severs ssh from the PC mid-command: the `up` returns, then the *next* ssh to `.63` hangs (no way back over the LAN path while on the ad-hoc link; USB net 192.168.15.244 also unreachable from this PC). The link is real, but remote administration of that unit dies until you can get physical/other access — restore by `peer-wifi.sh down` from the device, or reboot.
 - busybox `timeout` on this firmware is `timeout -t` — a plain `timeout 45 cmd` fails with "can't execute '45'". Peer-wifi.sh self-limits at 30 s instead.
 - Device stops answering ssh for long stretches when it drops off the LAN (a known quirk, seen on `.66`).
+- **When ssh times out (checked 2026-11-02): check ping from Windows first. Both Kindles asleep = both gone from the LAN (no ARP answer, port 22 dead), and the kfb tunnel dies too because kforward dials the *same* LAN (kfb.aijly.com -> 502, unit retrying "wake the Kindle if it slept"). There is no other path in — wake the device (tap the screen or plug power/USB) and it reappears on its own. Diagnose any "can't connect" as a sleeping device before touching config.
 
 ## Blocker
 
