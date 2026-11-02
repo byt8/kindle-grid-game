@@ -8,10 +8,13 @@
  *
  * Three screens, each one driven by what you see, not by what a log says:
  *
- *   CLOCK   -- a big digit ticks once per second on the panel, its real
- *              tk_ms interval printed LARGE. Tap NEXT when the tick cadence
- *              looks even; tap AGAIN when it looks uneven/bunched.
- *              Logs every tick's wall-time gap and each flush's cost.
+ *   TUNER   -- the fixer, not the asker. A block drops at a tunable speed
+ *              and every knob is a REAL engine setting the games use: drop
+ *              interval, waveform (DU / GC16F / GL16F / GC16), how often a
+ *              GC16 clean fires, and whether updates block until settled.
+ *              The measured on-glass drop gap and last refresh flash cost
+ *              are printed LIVE, so you tune until it *looks* even and the
+ *              settings you end on are the settings tetris should use.
  *   GHOST   -- two squares fall: one erases its previous cell cleanly, the
  *              other leaves its old position inked (a smear). You tap
  *              "TRAIL" if you actually see a smear, "CLEAN" if not.
@@ -73,16 +76,28 @@ static const char *B_LABEL[5] = {
 
 /* ---- state --------------------------------------------------------------- */
 
-static int screen = 1;          /* 1=CLOCK 2=GHOST 3=TAPLAG */
+static int screen = 1;          /* 1=TUNER 2=GHOST 3=TAPLAG */
 static int running = 1;
 static int stats_on = 0;
 static int probe = 0;
-static int summary = 0;         /* CLOCK: did the user say even?             */
 static int trace_on = 1;        /* GHOST: is the second square leaving trace? */
-static int clock_ms = 1000;    /* CLOCK tick interval                         */
-static uint32_t clock_at;       /* next CLOCK tick deadline, anchored to a beat */
-static int clock_val;
 static int ghost_x, ghost_y;    /* squares fall down the well */
+
+/* TUNER knobs: every one maps to a real engine setting the games use. */
+#define WFM_N 4
+static struct { int id; const char *name; } wfm[WFM_N]; /* 0=AUTO .. 3=GC16 */
+static int knob_speed = 800;    /* ms between drops (tetris level-1 default)  */
+static int knob_clean = 30;     /* GC16 clean every N drops, 0 = never        */
+static int knob_wfm = 0;        /* index into wfm[] (0 = auto)                */
+static int knob_wait = 1;       /* ek_wait_updates: block until settled       */
+static int knob_mono = 1;       /* ek_mono                                    */
+static int sel = 0;             /* 0=SPEED 1=CLEAN 2=WFM: what -/+ adjusts     */
+static uint32_t drop_at;        /* next drop deadline, anchored like tetris   */
+static int block_y = 60;        /* the falling block's row                     */
+static int step_n = 0;          /* drop counter (drives the CLEAN cadence)     */
+static uint32_t step_at;        /* wall time the last drop fired               */
+static int knob_gap = 0;        /* measured ms between drops, on the glass     */
+static int knob_flash_us = 0;   /* last flush cost = the grey flash duration   */
 static int ghost2_on = 0;
 static int ghost2_y;
 static uint32_t ghost_at;
@@ -91,6 +106,24 @@ static uint32_t taplag_at;
 static long tap_reaction_us = -1;   /* TAPLAG: last measured reaction, -1 none */
 
 /* ---- button hit ---------------------------------------------------------- */
+
+/* TUNER buttons: two rows of three, same bboxes as the games' bottom row. */
+enum { T_MINUS = 0, T_QUIT, T_PLUS, T_SPEED, T_CLEAN, T_WFM };
+#define CHIP_Y 30
+#define CHIP_H 46
+static int chip_wait(int x, int y) { return x >= 20 && x < 210 && y >= CHIP_Y && y < CHIP_Y + CHIP_H; }
+static int chip_mono(int x, int y) { return x >= 230 && x < 400 && y >= CHIP_Y && y < CHIP_Y + CHIP_H; }
+
+static int hit_tuner(int x, int y) {
+    int col = -1;
+    if (x >= BTN_X1 && x < BTN_X1 + BTN_W) col = 0;
+    else if (x >= BTN_X2 && x < BTN_X2 + BTN_W) col = 1;
+    else if (x >= BTN_X3 && x < BTN_X3 + BTN_W) col = 2;
+    if (col < 0) return -1;
+    if (y >= BTN_Y1 && y < BTN_Y1 + BTN_H) return col;           /* - QUIT + */
+    if (y >= BTN_Y2 && y < BTN_Y2 + BTN_H) return 3 + col;        /* S C W    */
+    return -1;
+}
 
 static int hit(int x, int y) {
     for (int i = 0; i < 5; i++)
@@ -109,47 +142,73 @@ static void draw_btn(int i, int ink) {
 
 static int host_stdin = 0;   /* --host-stdin: read 'tap X Y' lines like the games (host only) */
 
-static void draw_clock(void);
+static void draw_tuner(void);
 static void draw_ghost(void);
 static void draw_taplag(void);
 
 static void draw_screen(int s) {
     switch (s) {
-    case 1: draw_clock(); break;
+    case 1: draw_tuner(); break;
     case 2: draw_ghost(); break;
     case 3: draw_taplag(); break;
     }
 }
 
-static void draw_clock(void) {
+static void paint_chips(void);   /* prototype for tap_tuner */
+static void paint_tuner_rows(void);
+static void draw_tuner(void) {
     ek_clear(EK_PAPER);
-    ek_text_scale(20, 220, "PERCEPTION CLOCK", EK_INK, 2);
-    ek_text_scale(20, 300, "Tap NEXT when the tick", EK_INK, 1);
-    ek_text_scale(20, 330, "cadence looks EVEN.", EK_INK, 1);
-    ek_text_scale(20, 380, "The number below ticks", EK_INK, 1);
-    ek_text_scale(20, 410, "once per second on glass.", EK_INK, 1);
-    for (int i = 0; i < 5; i++) draw_btn(i, EK_INK);
-    /* big number, centered in the well */
-    char buf[16];
-    snprintf(buf, sizeof buf, "%d", clock_val);
-    ek_text_scale(WELL_X + (WELL_W - 8 * (int)strlen(buf) * 4) / 2,
-                  WELL_Y + WELL_H / 2 - 32, buf, EK_INK, 4);
-    /* measured interval on glass */
-    ek_printf(20, 120, EK_INK, "tk_ms: %d", clock_ms);
+    paint_chips();
+    ek_text_scale(20, 92, "TUNER: make it look EVEN", EK_INK, 2);
+    ek_text_scale(20, 134, "Pick SPEED/CLEAN/WFM, then -", EK_INK, 1);
+    ek_text_scale(20, 158, "and +. Watch the block drop.", EK_INK, 1);
+    paint_tuner_rows();
+    /* reference frame + the falling block, far right so the value rows
+     * (which run to ~x=448 at scale 2) never touch it */
+    ek_rect(470, 48, 110, 470, EK_INK);
+    ek_fill_rect(482, block_y, 44, 44, EK_INK);
+    /* buttons */
+    static const char *tl[6] = {"-", "QUIT", "+", "SPEED", "CLEAN", "WFM"};
+    for (int i = 0; i < 6; i++) {
+        int x = i % 3 == 0 ? BTN_X1 : i % 3 == 1 ? BTN_X2 : BTN_X3;
+        int y = i < 3 ? BTN_Y1 : BTN_Y2;
+        ek_rect(x, y, BTN_W, BTN_H, EK_INK);
+        ek_text_scale(x + 12, y + (BTN_H - 16) / 2, tl[i], EK_INK, 1);
+    }
 }
 
-static void step_clock_tick(int now_ms) {
-    (void)now_ms;
-    int was = clock_val++;
-    if (clock_val >= 10) clock_val = 0;
-    /* repaint just the digit: erase old, draw new */
-    char buf[16];
-    snprintf(buf, sizeof buf, "%d", was);
-    int w = 8 * (int)strlen(buf) * 4;
-    ek_fill_rect(WELL_X + (WELL_W - w) / 2, WELL_Y + WELL_H / 2 - 32, w, 64, EK_PAPER);
-    snprintf(buf, sizeof buf, "%d", clock_val);
-    w = 8 * (int)strlen(buf) * 4;
-    ek_text_scale(WELL_X + (WELL_W - w) / 2, WELL_Y + WELL_H / 2 - 32, buf, EK_INK, 4);
+static void paint_chips(void) {
+    ek_fill_rect(20, CHIP_Y, 380, CHIP_H, EK_PAPER);
+    ek_rect(20, CHIP_Y, 190, CHIP_H, EK_INK);
+    ek_printf(32, CHIP_Y + 14, EK_INK, "WAIT %s", knob_wait ? "ON " : "OFF");
+    ek_rect(230, CHIP_Y, 170, CHIP_H, EK_INK);
+    ek_printf(242, CHIP_Y + 14, EK_INK, "MONO %s", knob_mono ? "ON " : "OFF");
+}
+
+static void paint_tuner_rows(void) {
+    /* value area only -- clear of the reference well (x>=250) */
+    ek_fill_rect(20, 224, 230, 260, EK_PAPER);
+    char buf[72];
+    snprintf(buf, sizeof buf, "%s SPEED %d ms", sel == 0 ? ">" : " ", knob_speed);
+    ek_text_scale(32, 240, buf, EK_INK, 2);
+    snprintf(buf, sizeof buf, "%s CLEAN %d", sel == 1 ? ">" : " ", knob_clean);
+    ek_text_scale(32, 300, buf, EK_INK, 2);
+    snprintf(buf, sizeof buf, "%s WFM %s", sel == 2 ? ">" : " ", wfm[knob_wfm].name);
+    ek_text_scale(32, 360, buf, EK_INK, 2);
+    snprintf(buf, sizeof buf, "GAP %d ms FLASH %d ms", knob_gap, knob_flash_us / 1000);
+    ek_text_scale(32, 430, buf, EK_INK, 2);
+}
+
+static void step_tuner(uint32_t now) {
+    (void)now;
+    uint32_t t = ek_ms();
+    if (step_at) knob_gap = (int)(t - step_at);   /* includes the last refresh's wait */
+    step_at = t;
+    ek_fill_rect(482, block_y, 44, 44, EK_PAPER);
+    block_y += 30;
+    if (block_y >= 440) block_y = 60;
+    ek_fill_rect(482, block_y, 44, 44, EK_INK);
+    step_n++;
 }
 
 static void draw_ghost(void) {
@@ -207,7 +266,37 @@ static void step_taplag(void) {
 
 /* ---- per-tap actions ------------------------------------------------------ */
 
+static void tap_tuner(int x, int y) {
+    /* the two chips above the well apply engine settings immediately */
+    if (chip_wait(x, y)) { knob_wait = !knob_wait; ek_wait_updates(knob_wait); paint_chips(); return; }
+    if (chip_mono(x, y)) { knob_mono = !knob_mono; ek_mono(knob_mono); paint_chips(); return; }
+    int b = hit_tuner(x, y);
+    if (b < 0) return;
+    switch (b) {
+    case T_QUIT:
+        running = 0;
+        return;
+    case T_MINUS:
+        if (sel == 0) { if (knob_speed > 200) knob_speed -= 50; }
+        else if (sel == 1) { if (knob_clean > 0) knob_clean -= 10; }
+        else knob_wfm = (knob_wfm + WFM_N - 1) % WFM_N;
+        break;
+    case T_PLUS:
+        if (sel == 0) { if (knob_speed < 2000) knob_speed += 50; }
+        else if (sel == 1) { if (knob_clean < 90) knob_clean += 10; }
+        else knob_wfm = (knob_wfm + 1) % WFM_N;
+        break;
+    case T_SPEED: sel = 0; break;
+    case T_CLEAN: sel = 1; break;
+    case T_WFM:   sel = 2; break;
+    default: return;
+    }
+    drop_at = ek_ms() + (uint32_t)knob_speed;  /* re-anchor after a change */
+    paint_tuner_rows();
+}
+
 static void tap_screen(int x, int y) {
+    if (screen == 1) { tap_tuner(x, y); return; }
     int b = hit(x, y);
     if (b < 0) return;
     switch (b) {
@@ -220,22 +309,19 @@ static void tap_screen(int x, int y) {
          * from the QUIT button. */
         return;
     case CT_BTN_SUM:
-        /* CLOCK: user says the cadence looks even. */
-        if (screen == 1) { summary = 1; draw_btn(b, EK_PAPER); }
-        else if (screen == 2) {
-            /* GHOST: user says "CLEAN" -- i.e. no smear seen. */
-            probe = 0;
-        }
+        /* screen 2: user says "CLEAN" -- i.e. no smear seen. */
+        if (screen == 2) probe = 0;
         return;
     case CT_BTN_TRACE:
-        /* CLOCK: cadence uneven. GHOST: flip whether the right square
-         * leaves its old cell behind (what the eye must catch). */
+        /* screen 2: flip whether the right square leaves its old cell
+         * behind (what the eye must catch). */
         if (screen == 2) trace_on = !trace_on;
         return;
     case CT_NEXT:
         if (screen == 1) screen = 2;
         else if (screen == 2) screen = 3;
         else if (screen == 3) screen = 1;
+        step_n = 0;   /* reset the clean cadence when entering TUNER */
         draw_screen(screen);
         return;
     }
@@ -246,7 +332,18 @@ static void tap_screen(int x, int y) {
 static void on_signal(int s) { (void)s; running = 0; }
 
 static void present(void) {
-    ek_stats st = ek_flush();
+    ek_stats st;
+    if (screen == 1) {
+        /* TUNER: the CLEAN knob fires a real GC16 clean every N drops, like
+         * the game's clean frames; the WFM knob forces a waveform otherwise. */
+        int clean = knob_clean > 0 && (step_n % knob_clean == 0);
+        ek_waveform(clean ? wfm[3].id : (knob_wfm ? wfm[knob_wfm].id : 0));
+        st = ek_flush();
+        ek_waveform(0);
+        knob_flash_us = (int)st.us;
+    } else {
+        st = ek_flush();
+    }
     if (probe)
         fprintf(stderr, "calib: flush wfm=%d rects=%d tiles=%d px=%ld full=%d us=%u\n",
                 st.wfm, st.rects, st.tiles, st.px, st.full, st.us);
@@ -254,7 +351,6 @@ static void present(void) {
 
 int main(int argc, char **argv) {
     unsigned flags = EK_TAKEOVER;
-    int wait = 1;
     int do_test = 0;
     const char *dump_path = NULL;
 
@@ -262,10 +358,9 @@ int main(int argc, char **argv) {
         if (!strcmp(argv[i], "--stats")) stats_on = 1;
         else if (!strcmp(argv[i], "--probe")) probe = 1;
         else if (!strcmp(argv[i], "--no-takeover")) flags &= ~EK_TAKEOVER;
-        else if (!strcmp(argv[i], "--no-wait")) wait = 0;
         else if (!strcmp(argv[i], "--selftest")) do_test = 1;
         else if (!strcmp(argv[i], "--dump") && i + 1 < argc) dump_path = argv[++i];
-        else if (!strcmp(argv[i], "--clock") && i + 1 < argc) clock_ms = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--speed") && i + 1 < argc) knob_speed = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--screen") && i + 1 < argc) {
             screen = atoi(argv[++i]);
             if (screen < 1 || screen > 3) { fprintf(stderr, "calib: screen must be 1..3\n"); return 2; }
@@ -274,10 +369,17 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--host-stdin")) host_stdin = 1;
 #endif
         else {
-            fprintf(stderr, "usage: calib [--probe] [--no-takeover] [--clock N]\n");
+            fprintf(stderr, "usage: calib [--probe] [--no-takeover] [--speed N]\n");
             return 2;
         }
     }
+
+    /* waveform choices for the WFM knob: AUTO(engine pick) + the three the
+     * games actually use. GC16 is the slow clean; GC16F/GL16F the fast ones. */
+    wfm[0].id = 0;              wfm[0].name = "AUTO";
+    wfm[1].id = ek_waveform_by_name("GC16F"); wfm[1].name = "GC16F";
+    wfm[2].id = ek_waveform_by_name("GL16F"); wfm[2].name = "GL16F";
+    wfm[3].id = ek_waveform_by_name("GC16");  wfm[3].name = "GC16";
 
     struct sigaction sa;
     memset(&sa, 0, sizeof sa);
@@ -291,8 +393,8 @@ int main(int argc, char **argv) {
         ek_restore_ui();
         return 1;
     }
-    ek_mono(1);
-    ek_wait_updates(wait);
+    ek_mono(knob_mono);
+    ek_wait_updates(knob_wait);
     /* same policy shape as tetris: partials with a periodic clean */
     ek_ghost(6, 30);
     ek_policy(60, 4, 30);
@@ -300,7 +402,7 @@ int main(int argc, char **argv) {
     int rc = 0;
     if (do_test) {
         /* host-only smoke: draw each screen once (clock when dumped) */
-        draw_clock(); present();
+        draw_tuner(); present();
         if (dump_path) { if (ek_dump_pgm(dump_path, 1) != 0) { rc = 1; goto out; } }
         step_ghost(); present();
         step_taplag(); present();
@@ -310,11 +412,10 @@ int main(int argc, char **argv) {
     /* seed the three loops */
     uint32_t now;
     now = ek_ms();
-    clock_at = now + (uint32_t)clock_ms;
+    drop_at = now + (uint32_t)knob_speed;
     ghost_at = now + 400;
     taplag_at = now + 1500;
     draw_screen(screen); present();
-    clock_val = 0;
 
     if (dump_path && !host_stdin) {   /* one-frame snapshot, like tetris --dump */
         if (ek_dump_pgm(dump_path, 1) != 0) rc = 1;
@@ -361,12 +462,12 @@ int main(int argc, char **argv) {
 
         switch (screen) {
         case 1:
-            if ((int32_t)(t - clock_at) >= 0) {
-                step_clock_tick(t);
+            if ((int32_t)(t - drop_at) >= 0) {
+                step_tuner(t);
                 if (probe)
-                    fprintf(stderr, "calib: tick at %u (due %u, ms %d)\n",
-                            (unsigned)t, (unsigned)clock_at, clock_ms);
-                clock_at += (uint32_t)clock_ms;
+                    fprintf(stderr, "calib: drop at %u (due %u, ms %d)\n",
+                            (unsigned)t, (unsigned)drop_at, knob_speed);
+                drop_at += (uint32_t)knob_speed;   /* anchor like tetris */
                 got = 1;
             }
             break;

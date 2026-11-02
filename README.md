@@ -5,7 +5,7 @@ Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack
 Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
 Rockman: dig dirt, grab diamonds, don't let the rocks fall on you.
 Plants vs Pixels: five-lane plant defence — grow sunflowers, shoot peas, hold the lawn.
-**Calib:** a tap-driven calibration app for the panel — a 1 Hz on-glass tick, a smear test, and a tap-reaction stopwatch (answers by tapping what `--probe` logs cannot).
+**Calib:** a live on-glass tuner for the panel — a block drops at a tuneable speed and every knob (drop interval, waveform, clean cadence, wait/mono) is a real engine setting, with the measured on-glass gap printed underneath. Dial it until it *looks* even; those are the settings the games should use.
 **SimCity port (in progress):** OpenSimCity/Micropolis core on the 600x800 e-ink panel.
 **Peer link:** two Kindles talk to each other directly over ad-hoc wifi — no router, no internet. Games and messaging over the same link later.
 
@@ -68,14 +68,25 @@ Tap a piece, tap a square. **QUIT** then **SURE** gives the screen back.
 Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down, **QUIT** then **SURE** to exit.
 Pieces fall on a fixed wall-clock beat: each drop is scheduled from the previous deadline (not the last flush), so the panel's refresh time (~250–330 ms) can no longer push drops late. Verified on-device (probe log): drops land exactly 800 ms apart, and a new game after game-over starts on a fresh, even beat. The screen is e-ink — motion looks like a rapid ladder of greys, which is the panel updating, not the game lagging.
 
-**Run the panel calibration (answers "is the game moving the way I see it?"):**
+**Run the panel calibration / tuner (fixes “it looks uneven — what can I do?”):**
 
 ```bash
 make calib                       # -> ./calib (ARM binary)
 ./run-calib-on-kindle.sh 192.168.0.66 [--probe]   # pass the IP
 ```
 
-Three screens you answer by tapping: **CLOCK** (a 1 Hz digit on the glass with its measured `tk_ms` printed — tap **NEXT** when the ticks look even), **GHOST** (two falling squares, one leaves an inked smear — tap **CLEAN** if you see no smear), **TAPLAG** (a spot jumps; tap the instant you see it — your reaction `last: N us` appears on the glass). **QUIT** gives the screen back.
+Screen 1 **TUNER** is the fixer, not the asker: a block drops at a tuneable speed,
+and every knob maps to a real engine setting the games use.
+
+- **SPEED / CLEAN / WFM** (bottom row) pick which knob `-`/`+` adjusts; the `>` marks it.
+  - **SPEED** — ms between drops (tetris level-1 default 800, 200–2000).
+  - **CLEAN** — a real GC16 clean fires every N drops (10–90, 0 = never), like tetris's clean frames.
+  - **WFM** — waveform: AUTO / GC16F / GL16F / GC16 (what the engine actually submits).
+- **WAIT / MONO** chips (top row) toggle `ek_wait_updates` (block until the panel settles) and the mono flag live.
+- The **GAP / FLASH** line shows honest numbers on the glass: the wall-time between the last two drops (including the wait for the panel to settle) and the last refresh's cost — the grey flash you're seeing.
+- Dropping is deadline-anchored exactly like tetris, so what you tune here is what the game does.
+
+Screens 2–3 are the old diagnostics you answer by tapping: **GHOST** (two falling squares, one leaves an inked smear — tap **CLEAN** if you see no smear), **TAPLAG** (a spot jumps; tap the instant you see it — your reaction `last: N us` appears). **QUIT** gives the screen back.
 
 **Play Sudoku on the Kindle:**
 
