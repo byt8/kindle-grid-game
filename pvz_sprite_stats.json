@@ -1,0 +1,15 @@
+{
+  "sunflower":  { "desc": "Sunflower plant" },
+  "peashooter": { "desc": "Peashooter plant" },
+  "repeater":   { "desc": "Repeater plant" },
+  "snowpea":    { "desc": "Snow pea plant" },
+  "wallnut":    { "desc": "Wall-nut plant" },
+  "cherrybomb": { "desc": "Cherry bomb plant" },
+  "tallnut":    { "desc": "Tall-nut plant" },
+  "potato":     { "desc": "Potato mine plant" },
+  "zombie":     { "desc": "Basic zombie" },
+  "conehead":   { "desc": "Conehead zombie" },
+  "buckethead": { "desc": "Buckethead zombie" },
+  "flagzombie": { "desc": "Flag zombie" },
+  "sun":        { "desc": "Sun pickups" }
+}

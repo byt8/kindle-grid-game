@@ -4,6 +4,7 @@ Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk, tap an al
 Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack blocks and clear lines.
 Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
 Rockman: dig dirt, grab diamonds, don't let the rocks fall on you.
+Plants vs Pixels: five-lane plant defence — grow sunflowers, shoot peas, hold the lawn.
 **SimCity port (in progress):** OpenSimCity/Micropolis core on the 600x800 e-ink panel.
 
 ---
@@ -19,6 +20,7 @@ make chess-kindle                # Chess -> ./chess     (needs chess.conf first)
 make tetris-kindle               # Tetris -> ./tetris   (no key needed)
 make sudoku-kindle               # Sudoku -> ./sudoku  (no key needed)
 make rockman-kindle              # Rockman -> ./rockman (no key needed)
+make pvz-kindle                   # PvZ -> ./pvz      (no key needed)
 ```
 
 ```bash
@@ -76,6 +78,19 @@ Pass `--seed N` to the runner to play the same puzzle again.
 
 **LEFT / UP / RIGHT / DOWN** dig and walk. **PUSH** shoves a rock sideways. Get all 8 diamonds and the exits open. **QUIT** then **SURE** exits.
 
+**Play Plants vs Pixels on the Kindle:**
+
+```bash
+./run-pvz-on-kindle.sh 192.168.0.66   # pass the IP
+```
+
+Tap a seed card (Sunflower, Peashooter, Repeater, Snow Pea, Wall-nut, Tall-nut,
+Cherry Bomb, Potato Mine), then tap a lawn square to plant it. Tap falling sun to
+collect it — it is the only currency. Snow peas slow, cherry bombs and mines
+blast a patch. Five zombies (fog, bucket) reach the house to win; lose five brains
+and it is over. **QUIT** then **SURE** gives the screen back; tap the game-over
+box to start a new lawn.
+
 If the launcher menu is showing, the runner stops it first — the menu holds the
 touch device — and hands the panel back to it when you quit, so this works from
 the PC whatever is on screen. A run that never starts prints the runner's own
@@ -132,6 +147,7 @@ make test                               # plays a pretend game, checks pictures 
 make tetris-host && make tetris-test    # self-test + three screens the checker reads
 make sudoku-host && make sudoku-test    # self-test + three screens the checker reads
 make rockman-host && make rockman-test  # self-test + title, room 1, and a short dig
+make pvz-host && make pvz-test          # self-test + opening, planted, a wave
 make menu-host && make menu-test        # menu: draw + tap every button on the PC
 ```
 
@@ -342,6 +358,17 @@ Do not edit that header by hand.
 On the Kindle: `make rockman-kindle`, then `./run-rockman-on-kindle.sh <ip>`.
 The menu's ROCKMAN button is exit code 5; KOREADER is 6 (launches
 `/mnt/us/koreader/koreader.sh`), WIFI is 7. No sound.
+
+---
+
+## Plants vs Pixels: how it fits together
+
+One file, `src/pvz.c`: rules, drawing, touch and a PC self-test; sprites come
+from `src/pvz_sprites.h`, baked by `tools/bake_pvz_sprites.py` from the
+`pvz-art/` art. `make pvz-test` checks the rules (planting, sun cost, zombies
+eating plants, brains, cherry bomb, waves) and then draws three screens for
+the picture checker. On the Kindle: `make pvz-kindle`, then
+`./run-pvz-on-kindle.sh <ip>`.
 
 ---
 

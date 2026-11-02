@@ -254,7 +254,7 @@ pvz-kindle: src/pvz.c src/pvz_sprites.h $(ENGINE)/eink.c $(ENGINE)/eink.h
 
 pvz: pvz-kindle
 
-src/pvz_sprites.h: tools/bake_pvz_sprites.py pvz_sprite_sources.json pvz/*.webp
+src/pvz_sprites.h: tools/bake_pvz_sprites.py pvz_sprite_sources.json pvz-art/*.webp
 	$(PY) tools/bake_pvz_sprites.py
 
 # Rules first, then the picture: the opening, a planting tap, and a wave or

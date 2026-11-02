@@ -1,0 +1,26 @@
+{
+  "comment": "PvZ sprite manifest. Each webp is one full-bleed sprite (1024x1024). The baker bakes every entry and aborts if any is missing or has no ink. All plants are defence; zombies advance leftward.",
+  "sheets": [
+    { "file": "pvz-art/sunflower.webp",   "grid": [1, 1], "id": "sunflower" },
+    { "file": "pvz-art/peashooter.webp",  "grid": [1, 1], "id": "peashooter" },
+    { "file": "pvz-art/repeater.webp",    "grid": [1, 1], "id": "repeater" },
+    { "file": "pvz-art/snowpea.webp",     "grid": [1, 1], "id": "snowpea" },
+    { "file": "pvz-art/wallnut.webp",     "grid": [1, 1], "id": "wallnut" },
+    { "file": "pvz-art/cherrybomb.webp",  "grid": [1, 1], "id": "cherrybomb" },
+    { "file": "pvz-art/tallnut.webp",     "grid": [1, 1], "id": "tallnut" },
+    { "file": "pvz-art/potato.webp",      "grid": [1, 1], "id": "potato" },
+    { "file": "pvz-art/zombie.webp",      "grid": [1, 1], "id": "zombie" },
+    { "file": "pvz-art/conehead.webp",    "grid": [1, 1], "id": "conehead" },
+    { "file": "pvz-art/buckethead.webp",  "grid": [1, 1], "id": "buckethead" },
+    { "file": "pvz-art/flagzombie.webp",  "grid": [1, 1], "id": "flagzombie" },
+    { "file": "pvz-art/sun.webp",         "grid": [1, 1], "id": "sun" }
+  ],
+  "order": [
+    "sunflower", "peashooter", "repeater", "snowpea", "wallnut", "cherrybomb",
+    "tallnut", "potato", "zombie", "conehead", "buckethead", "flagzombie", "sun"
+  ],
+  "required": [
+    "sunflower", "peashooter", "repeater", "snowpea", "wallnut", "cherrybomb",
+    "tallnut", "potato", "zombie", "conehead", "buckethead", "flagzombie", "sun"
+  ]
+}

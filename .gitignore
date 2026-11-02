@@ -34,3 +34,5 @@ __pycache__/
 
 # Generated audio (baked by make manual / make_manual_audio.py)
 *.wav
+/pvz-host
+/pvz
