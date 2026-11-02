@@ -24,6 +24,15 @@ make tetris-kindle               # Tetris -> ./tetris   (no key needed)
 make sudoku-kindle               # Sudoku -> ./sudoku  (no key needed)
 make rockman-kindle              # Rockman -> ./rockman (no key needed)
 make pvz-kindle                   # PvZ -> ./pvz      (no key needed)
+make brogue-kindle                # Brogue -> ./brogue-kindle-app
+make calib                        # Calib tuner -> ./calib
+```
+
+**Play Brogue or run the calib tuner on the Kindle** (same push-and-run pattern):
+
+```bash
+./run-brogue-on-kindle.sh [IP]    # roguelike; tap QUIT then SURE to give the screen back
+./run-calib-on-kindle.sh [IP]     # perception tuner; tap QUIT to give the screen back
 ```
 
 ```bash
@@ -634,8 +643,11 @@ the last push. `make kindle`, then push again; rebuilding on this PC alone chang
 nothing on the panel.
 
 **`EVIOCGRAB refused: Resource busy`** — something still holds
-`/dev/input/event3`. The launcher handles the two usual culprits; if not, on the
-Kindle: `initctl stop kfbterm; kill -9 $(pidof kfb)`.
+`/dev/input/event3`. The launcher handles the usual culprits; if not, on the
+Kindle: `initctl stop kfbterm; kill -9 $(pidof kfb)`. A leftover calibration
+app (`calib`) is a third culprit — the runner kills it by name now, but a dead
+session before that fix can leave it holding the panel: `kill $(pidof calib)`
+and let it finish restoring.
 
 **Screen draws but taps do nothing** — the screen mirror grabbed touch. A reboot
 does not fix it (the mirror starts with the reader UI). `initctl stop kfbterm`.

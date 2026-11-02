@@ -138,7 +138,7 @@ kill_leftover() {
         exit 1
     fi
 }
-for g in xcom rockman tetris chess sudoku; do
+for g in xcom rockman tetris chess sudoku calib pvz brogue-kindle-app; do
     kill_leftover "$g"
 done
 
