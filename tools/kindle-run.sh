@@ -104,32 +104,43 @@ trap restore EXIT
 trap 'exit 1' HUP INT TERM
 
 # 1. A game left behind by a killed ssh session still holds the touch grab.
-leftover=$(pidof "$GAME" 2>/dev/null || true)
-if [ -n "$leftover" ]; then
-    say "killing leftover game pid $leftover"
-    killall "$GAME" 2>/dev/null
+#    The leftover is not necessarily $GAME: the session that died may have
+#    been running rockman, tetris or any other game (seen 2026-11-02: an
+#    orphaned rockman made every xcom deploy fail with EBUSY), so every
+#    known game is cleared, one by one. The launcher menu is NOT here --
+#    killing it would respawn it; step 2's stop of the menu job is what
+#    takes the grab away from it.
+kill_leftover() {
+    g=$1
+    leftover=$(pidof "$g" 2>/dev/null || true)
+    [ -n "$leftover" ] || return 0
+    say "killing leftover game $g pid $leftover"
+    killall "$g" 2>/dev/null
     i=0
-    while [ -n "$(pidof "$GAME" 2>/dev/null || true)" ] && [ $i -lt 10 ]; do
+    while [ -n "$(pidof "$g" 2>/dev/null || true)" ] && [ $i -lt 10 ]; do
         i=$((i + 1))
         sleep 1
     done
-    if [ -n "$(pidof "$GAME" 2>/dev/null || true)" ]; then
+    if [ -n "$(pidof "$g" 2>/dev/null || true)" ]; then
         # A game stuck inside a blocking call never reaches its SIGTERM
         # handler; without this it holds the touch grab and every launch
         # after it fails here.
-        say "the leftover game (pid $(pidof "$GAME")) ignored the term; sending KILL"
-        kill -9 $(pidof "$GAME") 2>/dev/null
+        say "the leftover game $g (pid $(pidof "$g")) ignored the term; sending KILL"
+        kill -9 $(pidof "$g") 2>/dev/null
         i=0
-        while [ -n "$(pidof "$GAME" 2>/dev/null || true)" ] && [ $i -lt 5 ]; do
+        while [ -n "$(pidof "$g" 2>/dev/null || true)" ] && [ $i -lt 5 ]; do
             i=$((i + 1))
             sleep 1
         done
     fi
-    if [ -n "$(pidof "$GAME" 2>/dev/null || true)" ]; then
-        say "ERROR: the leftover game (pid $(pidof "$GAME")) will not exit"
+    if [ -n "$(pidof "$g" 2>/dev/null || true)" ]; then
+        say "ERROR: the leftover game $g (pid $(pidof "$g")) will not exit"
         exit 1
     fi
-fi
+}
+for g in xcom rockman tetris chess sudoku; do
+    kill_leftover "$g"
+done
 
 # 2. The mirror owns the touch device. Stop its job first so nothing respawns
 #    it, then kill the daemon. Straight to SIGKILL on purpose: kfb's SIGTERM
