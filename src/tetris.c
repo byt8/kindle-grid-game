@@ -157,9 +157,12 @@ static uint32_t rng_state = 1;
 static unsigned char bag[7];
 static int bag_left;
 
-static int stats_on, force_clean, clean_next;
+static int stats_on, force_clean, clean_next, probe;
 static int wfm_clean;
 static volatile sig_atomic_t stop_req;
+#ifndef EK_HOST
+static uint32_t drop_at; /* next auto-drop deadline, anchored on a fixed beat */
+#endif
 
 static int failures;
 static void expect(int cond, const char *msg) {
@@ -485,6 +488,14 @@ static void reset_game(uint32_t seed) {
     next_pt = pick_piece();
     spawn();
     redraw_all = 1;
+#ifndef EK_HOST
+    /* A new game starts on a fresh beat: after a game-over stall the old
+     * deadline is far in the past, and resuming from it would fire the first
+     * drop instantly (then the += anchor keeps that early burst), which reads
+     * as jitter. Anchor to now+one interval so the first drop comes after a
+     * full, even wait. */
+    drop_at = ek_ms() + (uint32_t)drop_ms();
+#endif
 }
 
 /* ---- the computer playing, for --auto ----------------------------------- */
@@ -586,6 +597,9 @@ static void present(void) {
         fprintf(stderr,
                 "tetris: flush wfm=%d rects=%d tiles=%d px=%ld full=%d folded=%d us=%u\n",
                 st.wfm, st.rects, st.tiles, st.px, st.full, st.folded, st.us);
+    if (probe)
+        fprintf(stderr, "probe: flush wfm=%d rects=%d tiles=%d px=%ld full=%d us=%u\n",
+                st.wfm, st.rects, st.tiles, st.px, st.full, st.us);
 }
 
 /* ---- input -------------------------------------------------------------- */
@@ -750,7 +764,8 @@ static void usage(void) {
             "  --dump FILE  write the picture (PGM) and exit\n"
             "  --seed N     same seed, same bag\n"
             "  --stats      print what each screen update cost\n"
-            "  --clean      refresh the whole picture on every update (slow)\n");
+            "  --clean      refresh the whole picture on every update (slow)\n"
+            "  --probe      log every drop and flush for timing (debug)\n");
 }
 
 static void on_signal(int sig) {
@@ -785,6 +800,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--clean")) force_clean = 1;
         else if (!strcmp(argv[i], "--no-takeover")) flags &= ~EK_TAKEOVER;
         else if (!strcmp(argv[i], "--no-wait")) wait = 0;
+        else if (!strcmp(argv[i], "--probe")) probe = 1;
         else if (!strcmp(argv[i], "--help")) { usage(); return 0; }
         else { usage(); return 2; }
     }
@@ -862,7 +878,7 @@ int main(int argc, char **argv) {
         }
     }
 #else
-    uint32_t drop_at = ek_ms() + (uint32_t)drop_ms();
+    drop_at = ek_ms() + (uint32_t)drop_ms();
     while (running && !stop_req) {
         ek_event ev;
         int got = 0;
@@ -882,6 +898,9 @@ int main(int argc, char **argv) {
         if (!over) {
             uint32_t now = ek_ms();
             if ((int32_t)(now - drop_at) >= 0) {
+                if (probe) fprintf(stderr, "probe: drop at %u (due %u, ms %d) dir=%d\n",
+                                   (unsigned)now, (unsigned)drop_at, drop_ms(),
+                                   (int)(now - drop_at));
                 step_down();
                 /* Anchor the beat to the old deadline, not to `now`. present()
                  * below blocks for the panel's real refresh time (~250-330 ms,

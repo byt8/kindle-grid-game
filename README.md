@@ -54,7 +54,7 @@ Tap a piece, tap a square. **QUIT** then **SURE** gives the screen back.
 ```
 
 Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down, **QUIT** then **SURE** to exit.
-Pieces fall on a fixed wall-clock beat: each drop is scheduled from the previous deadline (not the last flush), so the panel's refresh time (~250–330 ms) can no longer push drops late.
+Pieces fall on a fixed wall-clock beat: each drop is scheduled from the previous deadline (not the last flush), so the panel's refresh time (~250–330 ms) can no longer push drops late. Verified on-device (probe log): drops land exactly 800 ms apart, and a new game after game-over starts on a fresh, even beat. The screen is e-ink — motion looks like a rapid ladder of greys, which is the panel updating, not the game lagging.
 
 **Play Sudoku on the Kindle:**
 

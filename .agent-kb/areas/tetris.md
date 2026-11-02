@@ -82,6 +82,26 @@ make tetris-kindle         # static ARM musl, docker kfb-build
   host `EK_HOST` path is tap-driven and never exercises it. Deployed to
   192.168.0.66 (PID verified running).
 
+- **The remaining "jitter" was the game-over restart burst, not the timer.**
+  Probe logs on-device showed drops exactly 800 ms apart during play
+  (`3266632 → 3267419 → 3268224`), so the `+=` fix was verified. The erratic
+  cadence (7 s gap then a 270 ms burst) came from the well filling after ~40 s
+  of unsupervised play: with `over = 1` the loop stops calling `step_down()`
+  and `drop_at` freezes, and when a tap dismisses the game-over card,
+  `reset_game()` didn't touch `drop_at` — the stale deadline from before the
+  stall fired the first drop instantly, then `+=` kept that early burst. Fixed:
+  `reset_game()` re-anchors `drop_at = ek_ms() + drop_ms()` (guarded
+  `#ifndef EK_HOST`, so the host build never sees it), giving every new game a
+  full even wait before the first drop. Verified on-device: after restart the
+  drops resume exactly 800 ms apart.
+
+- **fb0 is a shadow buffer, not the live panel.** Capturing `/dev/fb0` (even at
+  20 ms cadence) shows byte-identical frames while the game demonstrably
+  drops and flushes: the e-ink panel's visible content lives in the EPDC's own
+  waveform memory, fed by the small rects the engine pushes via ioctl — fb0 is
+  only composited from. So you cannot verify on-glass motion by reading fb0;
+  the engine's own rect/flush log (`--probe`) is the ground truth.
+
 ## Layout (keep `check_tetris.py` in step with `src/tetris.c`)
 
 `COLS 10, ROWS 20, CELL 30`; `WELL_X 152, WELL_Y 44`; buttons `BTN_W 186` at
