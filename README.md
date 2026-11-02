@@ -7,6 +7,7 @@ Rockman: dig dirt, grab diamonds, don't let the rocks fall on you.
 Plants vs Pixels: five-lane plant defence — grow sunflowers, shoot peas, hold the lawn.
 **Calib:** opens on two black squares that step together. The left one is the grey zap (it blinks). The right one is plain ink (it jumps). The time each zap took is printed underneath. That is the choice. NEXT opens the tuner.
 **SimCity port (in progress):** OpenSimCity/Micropolis core on the 600x800 e-ink panel.
+**Brogue (in progress):** the classic roguelike from BrogueCE on the 600x800 e-ink panel — 100x34 text grid on the bottom 408 px, permanent 12-button bar on top.
 **Peer link:** two Kindles talk to each other directly over ad-hoc wifi — no router, no internet. Games and messaging over the same link later.
 
 ---
@@ -177,6 +178,7 @@ make sudoku-host && make sudoku-test    # self-test + three screens the checker 
 make rockman-host && make rockman-test  # self-test + title, room 1, and a short dig
 make pvz-host && make pvz-test          # self-test + opening, planted, a wave
 make menu-host && make menu-test        # menu: draw + tap every button on the PC
+make brogue-host && make brogue-test    # Brogue: text-mode screens -> 600x800 preview frames + layout check
 ```
 
 Both host programs take `tap X Y` lines on stdin and `--dump FILE` writes the
@@ -206,6 +208,22 @@ Two rules baked into the file, both learned the hard way:
   tile fills one clean tone. Stretching each tile over the full band instead
   amplifies its noise into speckle — that first mock was unreadable (water speckle
   measured 11%, now ~1%).
+
+---
+
+## Brogue: how it fits together
+
+A port of **BrogueCE** (`brogue/` — the Community Edition source tree) through
+its swappable console backend (`struct brogueConsole`). The game core plots a
+100x34 grid of 6x12 px glyph cells (600x408 px game window on the bottom), and
+`brogue/src/platform/kfb-platform.c` renders it into the e-ink buffer; the
+permanent 12-button control bar occupies the top 392 px (`kfb-bar.h`).
+Text-mode only, no tileset — the classic Brogue legend (`#` wall, `.` floor,
+`@` player, …). `make brogue-host` runs a scripted game and dumps 600x800 PGM
+frames into `/tmp/kfb-frames` for the layout checker; `make brogue-kindle`
+cross-compiles the static ARM binary `brogue-kindle-app`, and
+`./run-brogue-on-kindle.sh [IP]` pushes + runs it. Touch mapping (two-tap
+travel) and first on-device run are the next steps.
 
 ---
 

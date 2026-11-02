@@ -10,7 +10,8 @@ HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 .PHONY: all test kindle sound manual grabtest preview preview-old bold chess chess-test chess-kindle \
         tetris tetris-host tetris-test tetris-kindle sudoku sudoku-host sudoku-test sudoku-kindle \
         menu-host menu-kindle menu-test rockman-data rockman-host rockman-test rockman-kindle rockman \
-        pvz-host pvz pvz-test calib calib-host calib-kindle calib-test clean
+        pvz-host pvz pvz-test calib calib-host calib-kindle calib-test \
+        brogue-host brogue brogue-test brogue-kindle clean
 
 # ---- rockman data: regenerate from the commented VIC-20 disassembly --------
 
@@ -305,9 +306,70 @@ calib-test: calib-host
 	$(PY) tools/check_pgm.py /tmp/calib-clock.pgm /tmp/calib-ghost.pgm /tmp/calib-taplag.pgm /tmp/calib-rx.pgm
 	$(PY) -c 'import sys;d=open("/tmp/calib-clock.pgm","rb").read();p=b"P5\n600 800\n255\n";assert d.startswith(p);pix=d[len(p):];assert len(pix)==600*800;print("calib: clock/ghost/taplag/rx pgm ok")'
 
+# --- BrogueCE for the Kindle Touch ----------------------------------------
+
+BROGUE_DIR := brogue
+_brogue_src := $(wildcard $(BROGUE_DIR)/src/brogue/*.c) \
+               $(BROGUE_DIR)/src/variants/GlobalsBrogue.c \
+               $(BROGUE_DIR)/src/variants/GlobalsRapidBrogue.c \
+               $(BROGUE_DIR)/src/variants/GlobalsBulletBrogue.c \
+               $(BROGUE_DIR)/src/platform/kfb-platform.c \
+               $(BROGUE_DIR)/src/platform/kfb-device.c \
+               $(BROGUE_DIR)/src/platform/platformdependent.c \
+               $(BROGUE_DIR)/src/platform/null-platform.c \
+               $(BROGUE_DIR)/src/platform/main.c \
+               $(BROGUE_DIR)/external/cJSON/cJSON.c
+_brogue_obj := $(_brogue_src:%.c=build/brogue/%.o)
+BROGUE_FLAGS := -std=c99 -O2 -Wno-parentheses -Wno-unused-result \
+                -Wno-format -Wno-format-security -Wno-format-overflow \
+                -I$(BROGUE_DIR)/src/brogue -I$(BROGUE_DIR)/src/platform \
+                -I$(BROGUE_DIR)/src/variants -I$(ENGINE) \
+                -DDATADIR='"$(CURDIR)/$(BROGUE_DIR)/compiled"'
+
+brogue-host: $(_brogue_obj)
+	$(HOSTCC) $(BROGUE_FLAGS) -o $@ $^ $(ENGINE)/eink.c -lm
+
+build/brogue/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(BROGUE_FLAGS) -DBROGUE_KFB -DEK_HOST \
+	  -DBROGUE_EXTRA_VERSION='"-kfb"' -c $< -o $@
+
+brogue-kindle:
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" \
+	  -v /home/brendan/jailbreak-kindle:/jb \
+	  -w /src kfb-build \
+	  sh -c 'set -e; mkdir -p build/brogue-kindle; \
+	    cd brogue; \
+	    for f in src/brogue/*.c src/variants/GlobalsBrogue.c src/variants/GlobalsRapidBrogue.c src/variants/GlobalsBulletBrogue.c external/cJSON/cJSON.c; do \
+	      arm-linux-musleabi-gcc -std=c99 -Os -ffunction-sections -fdata-sections \
+	        -Wno-parentheses -Wno-unused-result -Wno-format -Wno-format-security -Wno-format-overflow \
+	        -Isrc/brogue -Isrc/platform -Isrc/variants -I/jb/kindle-tools/fbdaemon/engine \
+	        -DBROGUE_KFB -DBROGUE_EXTRA_VERSION=\"-kfb\" -DDATADIR=\"/mnt/us/brogue\" \
+	        -c $$f -o ../build/brogue-kindle/$$(basename $$f .c).o; \
+	    done; \
+	    arm-linux-musleabi-gcc -std=c99 -Os -ffunction-sections -fdata-sections \
+	      -Wno-parentheses -Wno-unused-result -Wno-format -Wno-format-security -Wno-format-overflow \
+	      -Isrc/brogue -Isrc/platform -Isrc/variants -I/jb/kindle-tools/fbdaemon/engine \
+	      -DBROGUE_KFB -DBROGUE_EXTRA_VERSION=\"-kfb\" -DDATADIR=\"/mnt/us/brogue\" \
+	      -o ../brogue-kindle-app ../build/brogue-kindle/*.o src/platform/kfb-platform.c src/platform/kfb-device.c src/platform/null-platform.c src/platform/platformdependent.c src/platform/main.c \
+	      /jb/kindle-tools/fbdaemon/engine/eink.c \
+	      -static -no-pie -Wl,--gc-sections -lm \
+	      && arm-linux-musleabi-strip ../brogue-kindle-app'
+
+brogue: brogue-kindle
+
+brogue-kindle-app: brogue-kindle
+	@test -f brogue-kindle-app && echo "brogue: device binary ready: brogue-kindle-app"
+
+brogue-test: brogue-host
+	rm -rf /tmp/kfb-frames && mkdir -p /tmp/kfb-frames
+	-KFB_PREVIEW=/tmp/kfb-frames KFB_SCRIPT=' n h j l k k' timeout 20 ./brogue-host -s 7
+	$(PY) tools/check_brogue_preview.py
+
 clean:
 	rm -f xcom-host xcom grabtest chess-host chess tetris-host tetris sudoku-host sudoku \
-	      rockman-host rockman pvz-host pvz calib-host calib
+	      rockman-host rockman pvz-host pvz calib-host calib brogue-host brogue-kindle-app
 
 # --- SimCity POC (600x800 screen mock) -------------------------------------
 poc: poc/screen_600x800_grey.png

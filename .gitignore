@@ -36,3 +36,16 @@ __pycache__/
 *.wav
 /pvz-host
 /pvz
+
+# Brogue: the vendored upstream source tree keeps its own git history, like
+# the jailbreak-kindle constituent, so it is not tracked here. Build outputs
+# and PC test binaries are ignored too; the port code itself (the kfb
+# platform files inside brogue/) lives in that tree's own commits.
+/brogue/
+/build/
+/brogue-host
+/brogue-kindle-app
+/calib
+/calib-host
+/echo-probe
+/previews/

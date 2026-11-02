@@ -8,6 +8,18 @@
 
 Newest first. One line per task. Current truth is in `areas/`, not here.
 
+- 2026-11-02 — brogue — **Backend builds, both targets.** Fixed the Makefile
+  source list (was missing `platformdependent.c` + the Rapid/Bullet variant
+  files: `undefined reference to glyphToUnicode` / `initializeGameVariantRapidBrogue`);
+  dropped `-Wall -Wextra -Werror` for brogue-kindel (upstream BrogueCE never
+  builds under it; its own flags are only the `-Wno-*` set); renamed the device
+  binary to `brogue-kindle-app` (the `brogue` name collides with the upstream
+  launcher script dir); fixed the `KFB_BAR_H` double-define include guard.
+  `make brogue-host` + `make brogue-test` green (13 preview frames 600x800,
+  layout verified: game window rows 392..800, bar rows 0..391). `make
+  brogue-kindle` → static ARM 1.3 MB. New `run-brogue-on-kindle.sh` (house
+  pattern). Not yet on a device; two-tap travel still to do.
+
 - 2026-11-02 — menu — **ROCKMAN launched WIFI: fixed, verified on device.** The deployed `/mnt/us/menu-boot.sh` was stale — written before ROCKMAN existed, so its `case $rc` had no `5)` arm and tap-5 (ROCKMAN) fell through to the old `5) WIFI` arm (md5 local≠device; `menu-boot.conf` was identical). Pushed `tools/menu-boot.sh` via write-then-`mv`, restarted the job (`initctl stop menu`, kill leftovers, `initctl start menu`), then verified end-to-end by injecting a raw tap blob into `/dev/input/event3` on the ROCKMAN rect (raw 2051,2728 + BTN_TOUCH 0x14a + SYN): log shows `menu-boot: launching ROCKMAN`, `pidof rockman` 6634. Device/local md5s now match for `menu-boot.sh`, `menu`, `rockman`.
 
 - 2026-11-02 — xcom/deploy — **The runner now kills leftover games of any name.** `tools/kindle-run.sh` step 1 only killed `$GAME`, so an orphaned `rockman` (post-boot survivor, pid 7515) made two xcom deploys fail with `EVIOCGRAB … Resource busy` while `pidof xcom` was empty; grabtest's "grabbed by" list shows `Xorg` (always has event3 open — noise) plus the real holder. Refactored into `kill_leftover()` looping `xcom rockman tetris chess sudoku`; `menu` deliberately excluded (killing it respawns via menu-boot — stopping its job, step 2, is what frees the grab). Verified: `stopping the launcher session (menu)` → `grabtest: grab OK` → `mission 1/4`.
