@@ -196,6 +196,19 @@ panel). **WIFI** reuses chess's wi-fi screens (join a
 network, it remembers it). **KINDLE** hands the screen back to the Amazon
 reader.
 
+**Fresh Kindle, everything at once** (jailbroken + ssh, then one run):
+
+```bash
+./install-all-on-kindle.sh [IP]       # builds + pushes every game, the menu boot
+                                      # job, the screen-mirror job, fbdaemon,
+                                      # chess key/CA, xcom sound, KOReader; starts
+                                      # the menu. --no-build / --no-koreader to skip.
+```
+
+`install-menu-on-kindle.sh` only covers the menu + five games; the general
+installer also brings xcom, pvz, calib, brogue, the fbdaemon set, both boot
+jobs and KOReader — use it (or `run-menu`) to keep a rebuilt device in sync.
+
 **Read books on the Kindle (KOReader):**
 
 If the file browser crashes and reboots the Kindle: the crash leaves no
