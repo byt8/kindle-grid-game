@@ -76,6 +76,10 @@ make calib-test          # host selftest + tuner PGM check (check_pgm)
   mid-change doesn't cause an immediate double-drop. Probe on host at
   `--speed 700` confirms drops land exactly 700 ms apart, wfm=1 (or the engine's
   periodic soft-clean wfm=6) per flush.
+- **Every tap used to re-anchor the drop** (`drop_at = now + speed` ran for any
+  key, even SPEED/CLEAN/WFM *selection*), so touching any button visibly paused
+  the block. Fixed: only a real SPEED change (`speed_changed`) re-anchors.
+  Selecting a knob or adjusting CLEAN/WFM never touches the timer.
 
 ## Layout (keep in step with `src/calib.c`)
 

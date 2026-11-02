@@ -443,26 +443,30 @@ static void tap_tuner(int x, int y) {
     if (chip_mono(x, y)) { knob_mono = !knob_mono; ek_mono(knob_mono); paint_chips(); return; }
     int b = hit_tuner(x, y);
     if (b < 0) return;
+    int speed_changed = 0;
     switch (b) {
     case T_QUIT:
         running = 0;
         return;
     case T_MINUS:
-        if (sel == 0) { if (knob_speed > 200) knob_speed -= 50; }
+        if (sel == 0) { if (knob_speed > 200) { knob_speed -= 50; speed_changed = 1; } }
         else if (sel == 1) { if (knob_clean > 0) knob_clean -= 10; }
         else knob_wfm = (knob_wfm + WFM_N - 1) % WFM_N;
         break;
     case T_PLUS:
-        if (sel == 0) { if (knob_speed < 2000) knob_speed += 50; }
+        if (sel == 0) { if (knob_speed < 2000) { knob_speed += 50; speed_changed = 1; } }
         else if (sel == 1) { if (knob_clean < 90) knob_clean += 10; }
         else knob_wfm = (knob_wfm + 1) % WFM_N;
         break;
-    case T_SPEED: sel = 0; break;
+    case T_SPEED: sel = 0; break;   /* selecting a knob never disturbs the beat */
     case T_CLEAN: sel = 1; break;
     case T_WFM:   sel = 2; break;
     default: return;
     }
-    drop_at = ek_ms() + (uint32_t)knob_speed;  /* re-anchor after a change */
+    /* Only a real SPEED change re-anchors the metronome. Selecting a knob or
+     * adjusting CLEAN/WFM in mid-drop used to reset the timer here, which made
+     * the block visibly pause on every tap. */
+    if (speed_changed) drop_at = ek_ms() + (uint32_t)knob_speed;
     paint_tuner_rows();
 }
 
