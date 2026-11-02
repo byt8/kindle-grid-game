@@ -219,8 +219,9 @@ test: xcom-host
 	./xcom-host --selftest --no-takeover --seed 1
 	./xcom-host --no-takeover --seed 1 --dump /tmp/xcom-open.pgm
 	printf 'tap 120 536\n' | ./xcom-host --no-takeover --seed 1 --dump /tmp/xcom-sel.pgm
+	printf 'tap 450 16\n'  | ./xcom-host --no-takeover --seed 1 --dump /tmp/xcom-mute.pgm
 	./xcom-host --auto 2 --no-takeover --seed 1 --dump /tmp/xcom-mid.pgm
-	$(PY) tools/check_pgm.py /tmp/xcom-open.pgm /tmp/xcom-sel.pgm /tmp/xcom-mid.pgm
+	$(PY) tools/check_pgm.py /tmp/xcom-open.pgm /tmp/xcom-sel.pgm /tmp/xcom-mute.pgm /tmp/xcom-mid.pgm
 	$(PY) tools/check_sound.py --sound sound
 
 # Every baked tile twice: raw 2-bit, and as it looks on the panel.

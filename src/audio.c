@@ -46,6 +46,7 @@ static pid_t g_pid = -1;
 static int   g_miss;      /* clips that were wanted and not found */
 static int   g_reported;  /* how many of those were named on stderr */
 static int   g_pipe_gone;
+static int   g_muted;    /* the mute button; stays set across missions */
 
 static const char *UNITS[10] = {"zero", "one", "two", "three", "four",
                                 "five", "six", "seven", "eight", "nine"};
@@ -476,7 +477,23 @@ static void send(const char *rec) {
     g_wfd = -1;
 }
 
+/* Muting has to cut a sentence that is already on its way to the speaker, so
+ * two things happen: the flag stops every new request, and the Speaker mixer
+ * is turned down to stop the one in flight. The mixer value on the way back
+ * is 100, the same speaker_route() sets at start-up. */
+void audio_mute(int on) {
+    on = !!on;
+    if (on == g_muted) return;
+    g_muted = on;
+    if (g_mode != AUDIO_SPEAK) return;
+    if (route_one("Speaker", on ? "0" : "100") != 0)
+        fprintf(stderr, "sound: could not %s the speaker\n", on ? "mute" : "unmute");
+}
+
+int audio_ismuted(void) { return g_muted; }
+
 void audio_line(const char *text) {
+    if (g_muted) return;   /* the log keeps the line; the speaker does not */
     if (g_mode == AUDIO_SPEAK) {
         char rec[512];
         snprintf(rec, sizeof rec, "S %s\n", text);
@@ -498,7 +515,7 @@ void audio_effect(const char *name) {
         fprintf(stderr, "sound: '%s' is not a sound effect\n", name);
         return;
     }
-    if (g_mode != AUDIO_SPEAK) return;
+    if (g_muted || g_mode != AUDIO_SPEAK) return;
     char rec[64];
     snprintf(rec, sizeof rec, "E %s\n", name);
     send(rec);

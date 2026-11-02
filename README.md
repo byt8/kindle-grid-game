@@ -27,13 +27,14 @@ cp chess.conf.example chess.conf # chess only: paste your key, key = sk-...
 **Play XCOM on the Kindle:**
 
 ```bash
-./run-on-kindle.sh               # Kindle at 192.168.0.63
+./run-on-kindle.sh               # Kindle at 192.168.0.63 (KINDLE_IP in .kfb-secrets)
 ./run-on-kindle.sh 192.168.0.66  # second Kindle
 ```
 
 It copies the game and its voice clips over, frees the touch screen, runs it, and
 puts the Kindle back to normal when you quit. **Tap a soldier**, tap a boxed square
-to walk, tap an alien then **FIRE**. **QUIT** then **SURE** exits. The fight is a
+to walk, tap an alien then **FIRE**. **QUIT** then **SURE** exits; **MUTE** (left of
+QUIT) silences the speaker mid-sentence, **UNMUTE** brings it back. The fight is a
 **campaign of four boards** — the header counts M1/4 … M4/4, wiping a board out
 advances you to the next one.
 

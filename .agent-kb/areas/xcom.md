@@ -119,3 +119,10 @@ updated: 2026-11-01
 - On 2026-10-31 the game was `Killed` (rc=137) a few seconds after `seed` on `.66`, immediately after a previous session had just restored X/`cvm`. Not reproducible: the next launch ran normally for the whole session.
 - Ruled out: no OOM / `lowmemorykiller` line in dmesg (the ring is only 329 lines but `grep -i oom` and `-i killed` are empty), no `xcom` mention, and `watchdog.log` shows only "framework running, nothing to do" (so `kfb-watchdog.sh` did not run `restore-kindle.sh` under us). `restore-kindle.sh` only `killall`s `cvm` and `kfb`, never `xcom`.
 - If it returns: suspect a race with the previous session's restore still finishing (`cvm` starting) rather than anything in our scripts. Catch it with `dmesg | grep -i kill` on the device the moment it happens.
+
+## Mute button (done 2026-11-02, verified on hardware)
+- Top bar left of QUIT: `MUTE_X 404, MUTE_Y 2, 92x30` (QUIT stays 500..592), drawn and handled in every state including `ST_QUIT`; label flips `MUTE`/`UNMUTE` from `audio_ismuted()`. Button labels are not `say()` text, so `check_sound` needs no clip for them.
+- `audio_mute()/audio_ismuted()` + `static int g_muted` in `src/audio.c`: the flag makes `audio_line`/`audio_effect` return early, **and** `route_one("Speaker", "0"/"100")` flips the mixer — the flag alone cannot stop a sentence whose clips are already queued in the player. `g_mode != AUDIO_SPEAK` guards keep host builds silent.
+- Tap says `sound off`/`sound on` (mute happens first, so "off" is log-only): `sound`, `off`, `on` added to `tools/make_sound.py WORDS` → **105 word clips**. A running game only needs redeployment to speak new clips, not a rebuild.
+- `make test` taps (450,16) → `/tmp/xcom-mute.pgm` in `check_pgm`'s list.
+- [ran 2026-11-02 on 192.168.0.66] `/mnt/us/xcom.log`: `Simple mixer control 'Speaker' … 0` + `xcom: sound off` after one tap, then QUIT/SURE → `eink: UI released` + launcher restore; the service ending "stopped" after that is the normal quit, not a crash. Two `xcom` pids during play = game + audio player child.

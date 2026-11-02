@@ -44,6 +44,8 @@ WORDS = [
     "soldier", "watch", "watching", "hunker", "hunkers", "only", "medic",
     "and", "twice", "no", "action", "left", "beside", "you", "who",
     "see", "already", "walked", "at",
+    # the mute button in the top bar (say() next to MUTE_X)
+    "sound", "off", "on",
     # the names of the units on the map, from sp_label through name_from()
     "sniper", "heavy", "medic", "assault", "sectoid", "mutant", "drone",
 ]

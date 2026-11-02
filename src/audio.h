@@ -23,5 +23,7 @@ void audio_line(const char *text);      /* speak or check one log line */
 void audio_effect(const char *name);    /* shot, hit, miss, down, turn, win, lose */
 int  audio_stop(void);                  /* reaps the player; 0 = it left cleanly */
 int  audio_misses(void);                /* clips wanted but not found so far */
+void audio_mute(int on);                /* 1 = cut the speaker now, drop what comes next */
+int  audio_ismuted(void);               /* what the mute button last set */
 
 #endif

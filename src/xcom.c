@@ -928,6 +928,13 @@ static int in_box(int x, int y, int bx, int by, int bw, int bh) {
 #define QUIT_W 92
 #define QUIT_H 30
 
+/* The sound toggle, left of QUIT: same size, same row, so it is reachable in
+ * every state of the game including the quit confirmation. */
+#define MUTE_X 404
+#define MUTE_Y 2
+#define MUTE_W 92
+#define MUTE_H 30
+
 static int btn_x(int i) { return 8 + i * (BTN_W + 8); }
 
 static void draw_hp(int ox, int oy, const unit *u) {
@@ -968,6 +975,7 @@ static void draw(void) {
     snprintf(line, sizeof line, "SEED %u", game_seed);
     ek_text(280, 18, line, EK_INK);
     button(QUIT_X, QUIT_Y, QUIT_W, QUIT_H, mode == ST_QUIT ? "SURE?" : "QUIT");
+    button(MUTE_X, MUTE_Y, MUTE_W, MUTE_H, audio_ismuted() ? "UNMUTE" : "MUTE");
 
     ek_rect(MAP_X - 2, MAP_Y - 2, COLS * TILE + 4, ROWS * TILE + 4, EK_INK);
     for (int y = 0; y < ROWS; y++) {
@@ -1168,6 +1176,13 @@ static void tap(int x, int y) {
             mode = ST_QUIT;
             say("tap SURE to leave");
         }
+        return;
+    }
+    if (in_box(x, y, MUTE_X, MUTE_Y, MUTE_W, MUTE_H)) {
+        audio_mute(!audio_ismuted());
+        /* Muting first means "sound off" is only written to the log, while
+         * "sound on" is said out loud the moment the speaker comes back. */
+        say(audio_ismuted() ? "sound off" : "sound on");
         return;
     }
     if (mode == ST_QUIT) {
