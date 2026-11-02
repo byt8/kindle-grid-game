@@ -5,6 +5,7 @@ Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack
 Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
 Rockman: dig dirt, grab diamonds, don't let the rocks fall on you.
 Plants vs Pixels: five-lane plant defence — grow sunflowers, shoot peas, hold the lawn.
+**Calib:** a tap-driven calibration app for the panel — a 1 Hz on-glass tick, a smear test, and a tap-reaction stopwatch (answers by tapping what `--probe` logs cannot).
 **SimCity port (in progress):** OpenSimCity/Micropolis core on the 600x800 e-ink panel.
 
 ---
@@ -58,6 +59,15 @@ Tap a piece, tap a square. **QUIT** then **SURE** gives the screen back.
 
 Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down, **QUIT** then **SURE** to exit.
 Pieces fall on a fixed wall-clock beat: each drop is scheduled from the previous deadline (not the last flush), so the panel's refresh time (~250–330 ms) can no longer push drops late. Verified on-device (probe log): drops land exactly 800 ms apart, and a new game after game-over starts on a fresh, even beat. The screen is e-ink — motion looks like a rapid ladder of greys, which is the panel updating, not the game lagging.
+
+**Run the panel calibration (answers "is the game moving the way I see it?"):**
+
+```bash
+make calib                       # -> ./calib (ARM binary)
+./run-calib-on-kindle.sh 192.168.0.66 [--probe]   # pass the IP
+```
+
+Three screens you answer by tapping: **CLOCK** (a 1 Hz digit on the glass with its measured `tk_ms` printed — tap **NEXT** when the ticks look even), **GHOST** (two falling squares, one leaves an inked smear — tap **CLEAN** if you see no smear), **TAPLAG** (a spot jumps; tap the instant you see it — your reaction `last: N us` appears on the glass). **QUIT** gives the screen back.
 
 **Play Sudoku on the Kindle:**
 

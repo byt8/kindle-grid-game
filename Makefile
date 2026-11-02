@@ -10,7 +10,7 @@ HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 .PHONY: all test kindle sound manual grabtest preview preview-old bold chess chess-test chess-kindle \
         tetris tetris-host tetris-test tetris-kindle sudoku sudoku-host sudoku-test sudoku-kindle \
         menu-host menu-kindle menu-test rockman-data rockman-host rockman-test rockman-kindle rockman \
-        pvz-host pvz pvz-test clean
+        pvz-host pvz pvz-test calib calib-host calib-kindle calib-test clean
 
 # ---- rockman data: regenerate from the commented VIC-20 disassembly --------
 
@@ -135,6 +135,27 @@ tetris-kindle: src/tetris.c $(ENGINE)/eink.c $(ENGINE)/eink.h
 	    -o tetris src/tetris.c /jb/kindle-tools/fbdaemon/engine/eink.c \
 	    -static -no-pie -Wl,--gc-sections -lm \
 	    && arm-linux-musleabi-strip tetris'
+
+# ---- calib: tap-driven perception tests for the panel ----------------------
+# Build, push and run like a game, but the screen is a question you answer
+# by tapping: a 1 Hz tick, a smear test, and a tap-reaction measurement.
+
+calib-host: src/calib.c $(ENGINE)/eink.c $(ENGINE)/eink.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/calib.c $(ENGINE)/eink.c -lm
+
+calib-kindle: src/calib.c $(ENGINE)/eink.c $(ENGINE)/eink.h
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" \
+	  -v /home/brendan/jailbreak-kindle:/jb \
+	  -w /src kfb-build \
+	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -ffunction-sections -fdata-sections \
+	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
+	    -o calib src/calib.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -static -no-pie -Wl,--gc-sections -lm \
+	    && arm-linux-musleabi-strip calib'
+
+calib: calib-kindle
 
 # Rules first, then the picture: the opening, one TURN tap, and 24 pieces
 # played by --auto. The three dumps must differ from each other.
@@ -266,9 +287,16 @@ pvz-test: pvz-host
 	./pvz-host --auto 120 --no-takeover --seed 1 --dump /tmp/pvz-play.pgm
 	$(PY) tools/check_pgm.py /tmp/pvz-open.pgm /tmp/pvz-plant.pgm /tmp/pvz-play.pgm
 
+calib-test: calib-host
+	./calib-host --selftest --no-takeover --dump /tmp/calib-clock.pgm
+	./calib-host --no-takeover --screen 2 --dump /tmp/calib-ghost.pgm < /dev/null
+	./calib-host --no-takeover --screen 3 --dump /tmp/calib-taplag.pgm < /dev/null
+	$(PY) tools/check_pgm.py /tmp/calib-clock.pgm /tmp/calib-ghost.pgm /tmp/calib-taplag.pgm
+	$(PY) -c 'import sys;d=open("/tmp/calib-clock.pgm","rb").read();p=b"P5\n600 800\n255\n";assert d.startswith(p);pix=d[len(p):];assert len(pix)==600*800;print("calib: clock/ghost/taplag pgm ok")'
+
 clean:
 	rm -f xcom-host xcom grabtest chess-host chess tetris-host tetris sudoku-host sudoku \
-	      rockman-host rockman pvz-host pvz
+	      rockman-host rockman pvz-host pvz calib-host calib
 
 # --- SimCity POC (600x800 screen mock) -------------------------------------
 poc: poc/screen_600x800_grey.png
