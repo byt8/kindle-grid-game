@@ -5,7 +5,7 @@ Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack
 Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
 Rockman: dig dirt, grab diamonds, don't let the rocks fall on you.
 Plants vs Pixels: five-lane plant defence — grow sunflowers, shoot peas, hold the lawn.
-**Calib:** a live on-glass tuner for the panel — a block drops at a tuneable speed and every knob (drop interval, waveform, clean cadence, wait/mono) is a real engine setting, with the measured on-glass gap printed underneath. Dial it until it *looks* even; those are the settings the games should use.
+**Calib:** opens on two black squares that step together. The left one is the grey zap (it blinks). The right one is plain ink (it jumps). The time each zap took is printed underneath. That is the choice. NEXT opens the tuner.
 **SimCity port (in progress):** OpenSimCity/Micropolis core on the 600x800 e-ink panel.
 **Peer link:** two Kindles talk to each other directly over ad-hoc wifi — no router, no internet. Games and messaging over the same link later.
 
@@ -66,27 +66,26 @@ Tap a piece, tap a square. **QUIT** then **SURE** gives the screen back.
 ```
 
 Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down, **QUIT** then **SURE** to exit.
-Pieces fall on a fixed wall-clock beat: each drop is scheduled from the previous deadline (not the last flush), so the panel's refresh time (~250–330 ms) can no longer push drops late. Verified on-device (probe log): drops land exactly 800 ms apart, and a new game after game-over starts on a fresh, even beat. The screen is e-ink — motion looks like a rapid ladder of greys, which is the panel updating, not the game lagging.
+Pieces fall on a fixed beat. The panel still has to repaint each step. A grey repaint blinks. A black-and-white repaint jumps. Calib shows both.
 
-**Run the panel calibration / tuner (fixes “it looks uneven — what can I do?”):**
+**See the motion choice (calib):**
+
+On this PC, the picture of the screen:
 
 ```bash
-make calib                       # -> ./calib (ARM binary)
-./run-calib-on-kindle.sh 192.168.0.66 [--probe]   # pass the IP
+make calib-host
+./calib-host --no-takeover --screen 4 --dump /tmp/calib-rx.pgm < /dev/null
+python3 tools/pgm2png.py /tmp/calib-rx.pgm rx-layout.png   # open rx-layout.png
 ```
 
-Screen 1 **TUNER** is the fixer, not the asker: a block drops at a tuneable speed,
-and every knob maps to a real engine setting the games use.
+On the Kindle (tap the screen first so it is awake):
 
-- **SPEED / CLEAN / WFM** (bottom row) pick which knob `-`/`+` adjusts; the `>` marks it.
-  - **SPEED** — ms between drops (tetris level-1 default 800, 200–2000).
-  - **CLEAN** — a real GC16 clean fires every N drops (10–90, 0 = never), like tetris's clean frames.
-  - **WFM** — waveform: AUTO / GC16F / GL16F / GC16 (what the engine actually submits).
-- **WAIT / MONO** chips (top row) toggle `ek_wait_updates` (block until the panel settles) and the mono flag live.
-- The **GAP / FLASH** line shows honest numbers on the glass: the wall-time between the last two drops (including the wait for the panel to settle) and the last refresh's cost — the grey flash you're seeing.
-- Dropping is deadline-anchored exactly like tetris, so what you tune here is what the game does.
+```bash
+make calib
+./run-calib-on-kindle.sh 192.168.0.66
+```
 
-Screens 2–3 are the old diagnostics you answer by tapping: **GHOST** (two falling squares, one leaves an inked smear — tap **CLEAN** if you see no smear), **TAPLAG** (a spot jumps; tap the instant you see it — your reaction `last: N us` appears). **QUIT** gives the screen back.
+Left square blinks (grey zap, GC16). Right square jumps (plain ink, DU). The milliseconds under each square are how long that zap took. **QUIT** gives the Kindle back. **NEXT** opens the tuner: SPEED, CLEAN, WFM (AUTO / DU / GC16F / GL16F / GC16), WAIT, MONO. Pick **DU** if the right square is the one you want. Two more NEXT screens are the old smear test and the tap test.
 
 **Play Sudoku on the Kindle:**
 
