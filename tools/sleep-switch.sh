@@ -6,6 +6,7 @@
 #   ./tools/sleep-switch.sh on         # same
 #   ./tools/sleep-switch.sh off        # re-enable sleep (preventScreenSaver=0)
 #   ./tools/sleep-switch.sh status     # show the current powerd state
+#   ./tools/sleep-switch.sh <IP> on    # ...against another Kindle (first arg IP)
 #
 # What it does: the stock `~ds` search-bar trick is exactly
 #   lipc-set-prop com.lab126.powerd preventScreenSaver 1
@@ -17,6 +18,14 @@ set -eu
 cd "$(dirname "$0")/.."
 
 ip=${KINDLE_IP:-192.168.0.66}
+# First argument may be a Kindle IP address ("... <IP> on"); then the command.
+case "${1:-}" in
+    on|off|disable|enable|status) ;;
+    *)
+        ip=$1
+        shift
+        ;;
+esac
 key=${KINDLE_KEY:-$HOME/.ssh/kindle_touch_ed25519}
 
 if [ ! -f "$key" ]; then
