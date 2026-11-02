@@ -238,6 +238,13 @@ keyprobe: tools/keyprobe.c
 	    -o keyprobe tools/keyprobe.c -static -no-pie \
 	    && arm-linux-musleabi-strip keyprobe'
 
+echo-probe: tools/echo-probe.c
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" -w /src kfb-build sh -c \
+	  'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -o echo-probe tools/echo-probe.c -static -no-pie \
+	    && arm-linux-musleabi-strip echo-probe'
+
 test: xcom-host
 	./xcom-host --selftest --no-takeover --seed 1
 	./xcom-host --no-takeover --seed 1 --dump /tmp/xcom-open.pgm

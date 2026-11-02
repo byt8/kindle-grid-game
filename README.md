@@ -7,6 +7,7 @@ Rockman: dig dirt, grab diamonds, don't let the rocks fall on you.
 Plants vs Pixels: five-lane plant defence — grow sunflowers, shoot peas, hold the lawn.
 **Calib:** a tap-driven calibration app for the panel — a 1 Hz on-glass tick, a smear test, and a tap-reaction stopwatch (answers by tapping what `--probe` logs cannot).
 **SimCity port (in progress):** OpenSimCity/Micropolis core on the 600x800 e-ink panel.
+**Peer link:** two Kindles talk to each other directly over ad-hoc wifi — no router, no internet. Games and messaging over the same link later.
 
 ---
 
@@ -33,6 +34,13 @@ cp chess.conf.example chess.conf # chess only: paste your key, key = sk-...
 ```bash
 ./run-on-kindle.sh               # Kindle at 192.168.0.63 (KINDLE_IP in .kfb-secrets)
 ./run-on-kindle.sh 192.168.0.66  # second Kindle
+```
+
+**Prove two Kindles talk directly (no router):**
+
+```bash
+make echo-probe                    # tiny ARM TCP echo server
+./run-peer-test.sh                 # A=192.168.0.63 B=192.168.0.66; or pass IPs
 ```
 
 It copies the game and its voice clips over, frees the touch screen, runs it, and
