@@ -33,8 +33,9 @@ cp chess.conf.example chess.conf # chess only: paste your key, key = sk-...
 
 It copies the game and its voice clips over, frees the touch screen, runs it, and
 puts the Kindle back to normal when you quit. **Tap a soldier**, tap a boxed square
-to walk, tap an alien then **FIRE**. **QUIT** then **SURE** exits; **MUTE** (left of
-QUIT) silences the speaker mid-sentence, **UNMUTE** brings it back. The fight is a
+to walk, tap an alien then **FIRE**. **QUIT** then **SURE** exits; the game opens
+**muted** — **UNMUTE** (left of QUIT) brings the voice back and **MUTE** silences
+it again mid-sentence. The fight is a
 **campaign of four boards** — the header counts M1/4 … M4/4, wiping a board out
 advances you to the next one.
 
@@ -93,7 +94,13 @@ Builds the menu + all five games, pushes them, installs `/etc/upstart/menu.conf`
 buttons: **XCOM / CHESS / TETRIS / SUDOKU / ROCKMAN / WIFI / KINDLE**. Play a game; when you quit
 you land back on the menu. **WIFI** reuses chess's wi-fi screens (join a
 network, it remembers it). **KINDLE** hands the screen back to the Amazon
-reader. Undo (stock boot again):
+reader.
+
+Changed `tools/menu-boot.sh` (button → game dispatch)? It is *copied* to
+`/mnt/us/menu-boot.sh` on the Kindle — re-run `./install-menu-on-kindle.sh
+[IP]` (or just push the file and restart: `ssh root@IP '/sbin/initctl stop
+menu; sleep 1; /sbin/initctl start menu'`) or the new buttons keep hitting the
+old `case` arms. Undo (stock boot again):
 
 ```
 ssh root@KINDLE_IP '/usr/sbin/mntroot rw; rm /etc/upstart/menu.conf; /usr/sbin/mntroot ro'

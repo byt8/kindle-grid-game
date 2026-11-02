@@ -46,7 +46,7 @@ static pid_t g_pid = -1;
 static int   g_miss;      /* clips that were wanted and not found */
 static int   g_reported;  /* how many of those were named on stderr */
 static int   g_pipe_gone;
-static int   g_muted;    /* the mute button; stays set across missions */
+static int   g_muted = 1; /* starts muted: the game opens silent until UNMUTE */
 
 static const char *UNITS[10] = {"zero", "one", "two", "three", "four",
                                 "five", "six", "seven", "eight", "nine"};
@@ -493,8 +493,8 @@ void audio_mute(int on) {
 int audio_ismuted(void) { return g_muted; }
 
 void audio_line(const char *text) {
-    if (g_muted) return;   /* the log keeps the line; the speaker does not */
     if (g_mode == AUDIO_SPEAK) {
+        if (g_muted) return;   /* the log keeps the line; the speaker does not */
         char rec[512];
         snprintf(rec, sizeof rec, "S %s\n", text);
         send(rec);

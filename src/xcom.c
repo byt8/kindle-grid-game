@@ -1506,8 +1506,8 @@ static int selftest(void) {
 }
 
 /* The PC has neither aplay nor a speaker, so sound is opt-in there with
- * --soundcheck (which only reports). The Kindle speaks by default and --mute
- * turns it off. */
+ * --soundcheck (which only reports). The Kindle starts muted — tap UNMUTE
+ * in the top bar for the voice — and --mute disables the sound system. */
 static const char *sound_default(void) {
 #ifdef EK_HOST
     return "sound";

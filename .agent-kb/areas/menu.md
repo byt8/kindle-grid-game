@@ -47,6 +47,18 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
   game never started.
 - WIFI button reuses chess's proven wi-fi screens: `chess --wifi-only`
   (added for the menu; same screens, no board, hands the panel back).
+- **`menu-boot.sh` is deployed, not run from the repo — it goes stale.** The
+  `case $rc` dispatch lives in the *deployed* copy (`/mnt/us/menu-boot.sh`),
+  so a repo edit does nothing until re-pushed (and `install-menu-on-kindle.sh`
+  pushes it only when re-run). Symptom of staleness: a new button's exit code
+  lands on an old arm — ROCKMAN (rc 5) launched WIFI. Check with `md5sum`
+  local vs `/mnt/us/menu-boot.sh`. Push with write-then-`mv` (a running shell
+  keeps the old inode, so the rename avoids corrupting it), then restart the
+  job: `initctl stop menu`, TERM the leftover `menu`/`menu-boot.sh`, `initctl
+  start menu`. Verify remotely by piping a raw `input_event` blob (ARM32
+  `<iihhi>`: X `type3 code0x35`, Y `code0x36`, `BTN_TOUCH 0x14a`, SYN) into
+  `/dev/input/event3` — raw = screen × 4095 / (W-1); the menu's own grab
+  consumes it and the log shows which game launched.
 - `ek_close()` → `release_ui()` → `initctl start framework`, so after WIFI or
   KINDLE the reader UI is usable again. The boot job survives the re-emitted
   `started lab126_gui` because the job is already running.

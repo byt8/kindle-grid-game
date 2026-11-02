@@ -22,7 +22,7 @@ Every soldier and every alien stands in a square with a small bar underneath sho
 
 Under the map are three lines of the game log, which is the last few things that happened, and it is also the exact text the game speaks out loud. Below that is the detail line for whichever soldier you have selected, showing health, actions left, aim, damage, armour, movement, and weapon range.
 
-Along the bottom are four buttons: end, watch, hunker, and heal. In the top right corner is quit, which turns into sure when you tap it. Just left of quit is mute: tap it and the button becomes unmute, the speaker stops even mid-sentence, and the log keeps writing every line. Tap it again to bring the sound back.
+Along the bottom are four buttons: end, watch, hunker, and heal. In the top right corner is quit, which turns into sure when you tap it. Just left of quit is the sound button: the game opens with the sound off and the button reads unmute — tap it to bring the speaker back (the log prints on screen either way). Tap it again to become mute and silence the speaker, even mid-sentence.
 
 How a turn works
 

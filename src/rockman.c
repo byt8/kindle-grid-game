@@ -64,6 +64,29 @@ static int phase, dying, quit_armed, running, redraw_all, clean_next, buttons_di
 static int wfm_clean, failures;
 static volatile sig_atomic_t stop_req;
 
+/* Key buffer: one slot per press, drained one action per control tick. The
+ * screen refresh outlives several taps, so a single pending slot would let a
+ * second tap overwrite the first; this queue keeps them all, in order, and
+ * the game's own tick decides when each press lands. Full drops the newest
+ * press rather than reordering the queue. */
+#define KEYQ_MAX 16
+static int keyq[KEYQ_MAX];
+static int keyq_head, keyq_n;
+
+static void keyq_clear(void) { keyq_head = 0; keyq_n = 0; }
+static int keyq_push(int a) {
+    if (keyq_n >= KEYQ_MAX) return 0;
+    keyq[(keyq_head + keyq_n) % KEYQ_MAX] = a;
+    keyq_n++;
+    return 1;
+}
+static int keyq_peek(void) { return keyq_n ? keyq[keyq_head] : -1; }
+static void keyq_pop(void) {
+    if (!keyq_n) return;
+    keyq_head = (keyq_head + 1) % KEYQ_MAX;
+    keyq_n--;
+}
+
 static int in_screen(int r, int c) {
     return r >= 0 && r < SCR_ROWS && c >= 0 && c < SCR_COLS;
 }
@@ -261,6 +284,7 @@ static void start_room(void) {
     draw_hud();
     timer_reset();
     diamonds = 0;
+    keyq_clear();   /* presses queued for the old room mean nothing here */
     /* Spawn writes monster A. Reset the frame memory so the first
      * MoveMonsters looks for A and finds them. */
     anim[3] = anim[4] = anim[5] = 0;
@@ -315,6 +339,7 @@ static void game_over(void) {
     lives = (uint8_t)(RM_TILE_0 + 5);
     init_flags();
     quit_armed = 0;
+    keyq_clear();
     show_title();
 }
 
@@ -768,6 +793,19 @@ static int count_tile(uint8_t t) {
 
 static int selftest(void) {
     failures = 0;
+    keyq_clear();
+    expect(keyq_peek() == -1, "key buffer starts empty");
+    expect(keyq_push(ACT_LEFT) && keyq_push(ACT_UP) && keyq_push(ACT_RIGHT),
+           "key buffer takes three presses");
+    expect(keyq_peek() == ACT_LEFT, "key buffer serves the first press first");
+    keyq_pop();
+    expect(keyq_peek() == ACT_UP, "key buffer pops in order");
+    keyq_clear();
+    for (int i = 0; i < KEYQ_MAX; i++) expect(keyq_push(i), "key buffer fills");
+    expect(!keyq_push(99), "a full key buffer drops the newest press");
+    expect(keyq_peek() == 0, "a full key buffer still holds the first press");
+    keyq_clear();
+    expect(keyq_peek() == -1, "key buffer clears");
     expect(rm_tune[0] == 0xD9, "tune table loaded");
     expect(rm_rock_sounds[1] == 0xD2, "rock pitches loaded");
     expect(rm_explode_sounds[0] == 0xC8, "explosion noise loaded");
@@ -1131,7 +1169,7 @@ int main(int argc, char **argv) {
     }
 #else
     if (!do_test && auto_n < 0) {
-        int held = -1, pending = -1;
+        int held = -1;
         uint32_t next_pass = ek_ms();
         uint32_t next_flush = 0;
         int dirty = 1;
@@ -1141,13 +1179,17 @@ int main(int argc, char **argv) {
                 if (ev.type == EK_DOWN) {
                     int b = hit(ev.x, ev.y);
                     if (phase != PHASE_PLAY) {
+                        keyq_clear();
                         if (b == ACT_QUIT) do_action(ACT_QUIT);
                         else if (phase == PHASE_WIN) begin_room1();
                         else new_game();
                         dirty = 1;
+                    } else if (held >= 0) {
+                        /* Finger never lifted (this panel repeats DOWN until
+                         * UP): still the same press, so no second move. */
                     } else if (b >= 0) {
-                        pending = b;
                         held = b;
+                        keyq_push(b);       /* one press -> one queued move */
                         buttons_dirty = 1;
                         dirty = 1;
                     } else if (quit_armed) {
@@ -1161,10 +1203,9 @@ int main(int argc, char **argv) {
             }
             uint32_t now = ek_ms();
             if (phase == PHASE_PLAY && (int32_t)(now - next_pass) >= 0) {
-                int act = -1;
-                if (pending >= 0) act = pending;
-                else if (held >= 0 && held != ACT_QUIT) act = held;
-                if (one_pass(act, act >= 0)) pending = -1;
+                int act = keyq_peek();      /* the queue drives, never `held`:
+                                               holding a button does not walk */
+                if (one_pass(act, act >= 0) && act >= 0) keyq_pop();
                 next_pass = now + (uint32_t)((256 - (int)speed) * 16 / 256);
                 if (next_pass == now) next_pass = now + 1;
                 dirty = 1;
