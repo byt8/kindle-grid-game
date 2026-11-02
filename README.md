@@ -1,9 +1,10 @@
-# Five games on a Kindle
+# Games on a Kindle
 
 Four soldiers, aliens in the fog, one small e-ink screen. Tap to walk, tap an alien to shoot, wipe them out.
 Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack blocks and clear lines.
 Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
 Rockman: dig dirt, grab diamonds, don't let the rocks fall on you.
+**SimCity port (in progress):** OpenSimCity/Micropolis core on the 600x800 e-ink panel.
 
 ---
 
@@ -122,6 +123,20 @@ make menu-host && make menu-test        # menu: draw + tap every button on the P
 
 Both host programs take `tap X Y` lines on stdin and `--dump FILE` writes the
 screen, so a bug is replayable: same `--seed`, same dice.
+
+**SimCity screen mock (no Kindle or key needed):**
+
+```bash
+make poc                 # bakes classic Micropolis tiles -> poc/*.png
+python3 -m http.server 8765 --directory poc
+# open http://localhost:8765/view.html  (or see poc/screen_600x800_grey.png directly)
+```
+
+`poc/render_poc.py` draws a 600x800 e-ink screen: header, 20x14 map (classic
+tileset from SimHacker/MicropolisCore), toolbars with 4-bit grey. Contrast note
+baked into the file: the classic palette is pastel, so tiles are stretched
+**per tile** to the full grey band — straight luma conversion makes every tile
+mid-grey and unreadable.
 
 ---
 

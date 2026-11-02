@@ -236,3 +236,13 @@ preview-old:
 clean:
 	rm -f xcom-host xcom grabtest chess-host chess tetris-host tetris sudoku-host sudoku \
 	      rockman-host rockman
+
+# --- SimCity POC (600x800 screen mock) -------------------------------------
+poc: poc/screen_600x800_grey.png poc/screen_600x800_ink.png
+
+poc/screen_600x800_grey.png poc/screen_600x800_ink.png: poc/render_poc.py poc/src_*.png | upstream/tiles.bmp
+	python3 poc/render_poc.py
+
+upstream/tiles.bmp:
+	mkdir -p upstream
+	curl -sL -o $@ "https://raw.githubusercontent.com/SimHacker/MicropolisCore/main/content/micropolis/tilesets/classic/tiles.bmp"
