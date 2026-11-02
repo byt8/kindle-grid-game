@@ -7,7 +7,7 @@ Rockman: dig dirt, grab diamonds, don't let the rocks fall on you.
 Plants vs Pixels: five-lane plant defence — grow sunflowers, shoot peas, hold the lawn.
 **Calib:** opens on two black squares that step together. The left one is the grey zap (it blinks). The right one is plain ink (it jumps). The time each zap took is printed underneath. That is the choice. NEXT opens the tuner.
 **SimCity port (in progress):** OpenSimCity/Micropolis core on the 600x800 e-ink panel.
-**Brogue (in progress):** the classic roguelike from BrogueCE on the 600x800 e-ink panel — 100x34 text grid on the bottom 408 px, permanent 12-button bar on top.
+**Brogue (in progress):** the classic roguelike from BrogueCE on the 600x800 e-ink panel — 100x34 text grid on the bottom 408 px, permanent 12-button bar on top, true 16-level grey (walls of darkness, lit glyphs) via the engine's grey layer.
 **Peer link:** two Kindles talk to each other directly over ad-hoc wifi — no router, no internet. Games and messaging over the same link later.
 
 ---

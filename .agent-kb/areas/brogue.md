@@ -3,8 +3,14 @@
 Status: **backend builds and previews on the host; device binary cross-compiles.**
 `make brogue-host` + `make brogue-test` green (13 preview frames, layout
 checks pass). `make brogue-kindle` produces a static ARM binary
-(`brogue-kindle-app`, 1.3 MB). Not yet pushed to a device. Touch mapping (the
-two-tap travel from the plan) and on-device verification are still to do.
+(`brogue-kindle-app`, 1.4 MB). Grey layer wired: the device front-end owns the
+panel (`ek_open(EK_TAKEOVER)`, `ek_grey_enable()`, `atexit(ek_close)`) and
+paints the game grid as 6x12 grey glyphs from the shared cell grid (full
+0..100 RGB triples, Rec.601 luma → ink 0..15, dark colour = solid ink).
+Polarity = brightness, confirmed by probe: lit cells dark glyphs, unlit stays
+paper. Kindles were offline — not yet pushed; run
+`./run-brogue-on-kindle.sh 192.168.0.63` and take a panel shot to verify the
+grey ramp on glass. Touch mapping (two-tap travel from the plan) still to do.
 
 ## What it is
 
