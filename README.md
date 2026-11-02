@@ -175,11 +175,17 @@ text with `python3 tools/show_png_ascii.py out.png` — no image viewer needed.
 **Boot straight into the launcher menu** (instead of the Amazon UI):
 
 ```bash
-./install-menu-on-kindle.sh [IP]
+./install-menu-on-kindle.sh [IP]     # first time: build + push + boot job + show now
+./run-menu-on-kindle.sh [IP]         # iterate: push fresh menu, show it now
 ```
 
-Builds the menu + all five games, pushes them, installs `/etc/upstart/menu.conf`
-(replacing the old direct-to-chess boot job), and shows the menu now. Eight
+`install-menu-on-kindle.sh` builds the menu + all five games, pushes them,
+installs `/etc/upstart/menu.conf`
+(replacing the old direct-to-chess boot job), and shows the menu now.
+`run-menu-on-kindle.sh` is the lightweight iteration path: it pushes a fresh
+`menu` + `menu-boot.sh` + `grabtest` and restarts the launcher session without
+touching the boot job — use it when a new button or a menu-boot.sh edit needs
+to land on the device. Eight
 buttons: **XCOM / CHESS / TETRIS / SUDOKU / ROCKMAN / KOREADER / WIFI / KINDLE**. Play a game; when you quit
 you land back on the menu. **KOREADER** launches the KOReader reader
 (`/mnt/us/koreader/koreader.sh`; when it exits, the launcher re-takes the
@@ -198,6 +204,7 @@ preserved — after a crash look at `/mnt/us/menu-boot.log.prev` (last lines),
 
 ```bash
 ./install-koreader-on-kindle.sh [IP]   # pushes + unzips KOReader on /mnt/us
+./run-koreader-on-kindle.sh [IP]       # run it now (no menu needed), exit to give the panel back
 ```
 
 This installs KOReader from the staged
@@ -208,9 +215,8 @@ outside `/mnt/us`.
 
 Changed `tools/menu-boot.sh` (button → game dispatch)? It is *copied* to
 `/mnt/us/menu-boot.sh` on the Kindle — re-run `./install-menu-on-kindle.sh
-[IP]` (or just push the file and restart: `ssh root@IP '/sbin/initctl stop
-menu; sleep 1; /sbin/initctl start menu'`) or the new buttons keep hitting the
-old `case` arms. Undo (stock boot again):
+[IP]` or `./run-menu-on-kindle.sh [IP]` (both push a fresh copy and restart
+the session) or the new buttons keep hitting the old `case` arms. Undo (stock boot again):
 
 ```
 ssh root@KINDLE_IP '/usr/sbin/mntroot rw; rm /etc/upstart/menu.conf; /usr/sbin/mntroot ro'

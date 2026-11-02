@@ -1,9 +1,11 @@
 #!/bin/sh
 # kindle-run.sh -- device-side wrapper: run a game without stealing or stranding.
 #
-# Pushed to /mnt/us/xcom-run.sh (or /mnt/us/chess-run.sh) and run there with a
-# pty, so a ^C on the PC hangs up this shell too and the restore below still
-# happens. GAME names the binary: /mnt/us/$GAME, killed and restarted by name.
+# Pushed to /mnt/us/xcom-run.sh (or /mnt/us/chess-run.sh, /mnt/us/koreader-run.sh)
+# and run there with a pty, so a ^C on the PC hangs up this shell too and the
+# restore below still happens. GAME names the binary: /mnt/us/$GAME, killed and
+# restarted by name -- except GAME=koreader, which runs KOReader's own launcher
+# script (see step 5).
 #
 # Why any of this is needed:
 #   * /dev/input/event3 allows exactly one EVIOCGRAB. The screen mirror
@@ -138,7 +140,7 @@ kill_leftover() {
         exit 1
     fi
 }
-for g in xcom rockman tetris chess sudoku calib pvz brogue-kindle-app; do
+for g in xcom rockman tetris chess sudoku calib pvz brogue-kindle-app luajit koreader koreader.sh; do
     kill_leftover "$g"
 done
 
@@ -228,8 +230,11 @@ if ! /mnt/us/grabtest; then
 fi
 
 # 5. Play. xcom talks, so it gets its clips or an explicit --mute; anything
-#    else (chess) has no sound to arrange. Any argument passed to this script
-#    goes to the game (--auto 3, --apicheck and friends).
+#    else (chess) has no sound to arrange. GAME=koreader is not a game binary:
+#    it runs KOReader's own launcher, deliberately WITHOUT --framework_stop --
+#    koreader.sh's STOP_FRAMEWORK=no path just works over a dead UI, exactly as
+#    the launcher session runs it (see tools/menu-boot.sh). Any argument passed
+#    to this script goes to the app (--auto 3, --apicheck, --asap and friends).
 args=""
 if [ "$GAME" = xcom ]; then
     sound_dir=/mnt/us/xcom-sound
@@ -243,19 +248,23 @@ if [ "$GAME" = xcom ]; then
         args="$args --mute"
     fi
 fi
-say "starting the game"
-# Keep a copy of what the game says on the device itself. The ssh session that
+say "starting the app"
+# Keep a copy of what the app says on the device itself. The ssh session that
 # carries the live copy dies with the launcher, and then a fault that happened
 # while it ran leaves no evidence at all.
 # The status is written to a file from the left-hand side because a pipeline
 # only reports tee's exit code.
 rm -f /tmp/$GAME.rc
-# Marks this boot as having run a game, so the boot job does not start a second
+# Marks this boot as having run an app, so the boot job does not start a second
 # one when a QUIT restores the reader. /tmp is ram, so it clears at reboot.
 : >/tmp/$GAME.started
 : >/mnt/us/$GAME.log
-( /mnt/us/$GAME $args "$@" 2>&1; echo $? >/tmp/$GAME.rc ) | tee -a /mnt/us/$GAME.log
+if [ "$GAME" = koreader ]; then
+    ( sh /mnt/us/koreader/koreader.sh "$@" 2>&1; echo $? >/tmp/$GAME.rc ) | tee -a /mnt/us/$GAME.log
+else
+    ( /mnt/us/$GAME $args "$@" 2>&1; echo $? >/tmp/$GAME.rc ) | tee -a /mnt/us/$GAME.log
+fi
 rc=$(cat /tmp/$GAME.rc 2>/dev/null || echo 1)
-say "game exited rc=$rc"
-say "       the game's own output is in /mnt/us/$GAME.log"
+say "app exited rc=$rc"
+say "       the app's own output is in /mnt/us/$GAME.log"
 exit $rc

@@ -24,6 +24,19 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
   pushes binaries, runners, wifi script, chess.conf, installs
   `/etc/upstart/menu.conf` (removing `chess.conf`), and starts the session
   immediately via `setsid sh menu-boot.sh &`.
+- `run-menu-on-kindle.sh` — the iteration path: pushes fresh `menu` +
+  `menu-boot.sh` + `grabtest` (write-then-`mv`: a running menu-boot.sh keeps its
+  old inode, and copying over a running binary is "Text file busy"), stops the
+  session job if any, TERMs leftover `menu`/`menu-boot.sh`, starts the session
+  with `setsid`, confirms `pidof menu` within 20 s (and fails loudly on the
+  `.menu-stop` guard exits instead of the old false "game exited" success), then
+  follows `menu-boot.log`. Never touches the boot job → after a reboot a device
+  without menu.conf shows the stock reader again.
+- `run-koreader-on-kindle.sh` — standalone KOReader: pushes the runner as
+  `koreader-run.sh`, runs `GAME=koreader` (new mode in `tools/kindle-run.sh`:
+  runs `/mnt/us/koreader/koreader.sh` WITHOUT `--framework_stop`, same as the
+  menu session; the leftover-kill list now covers `luajit koreader koreader.sh`)
+  and follows the log until KOReader exits. Does not replace the install step.
 - `install-koreader-on-kindle.sh` — pushes the staged KOReader zip
   (`jailbreak-kindle/kindle-tools/koreader-kindle-v2026.07.1.zip`, md5
   `af87904b4b47007fecfe907bbd15fe05`) and unzips at `/mnt/us` (the zip's top
