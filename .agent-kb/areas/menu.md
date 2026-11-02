@@ -87,3 +87,21 @@ with the KOREADER button live — panel verified 2026-11-02: hexdump of `/dev/fb
 shows all eight bands (y 170/242/314/386/458/530 games + 600 wifi + 660 kindle,
 ROW_H 72). Host tests pass: `make menu-test` walks all eight buttons and the
 dump is sane.
+
+## Device state 2026-11-29 (the file-browser crash hunt)
+
+- User reported: file browser (KOReader) crashes, restarting the Kindle. Reboot
+  cause seen for 07:39:47 was `reset=user_reboot`.
+- `.63` unreachable this whole session from EVERY vantage: WSL ssh timeout x15,
+  Windows ping/22/9000/9200 dead, ARP entry `e0:cb:1d:5f:02:cd` stale and never
+  refreshes, `.66` can't ping it (100% loss, empty ARP table), peer-net
+  `10.30.0.205` dead, new `.69` is not a Kindle.
+- `.66` reachable the whole time (busybox 2013 box, no `iw`/`head -c`, no
+  sshd on it at all — we only ever SSH *into* .66, it can't SSH out; its
+  `arp -n` shows nothing = thinks LAN is empty).
+- kfb tunnel is DOWN: no cloudflared process on the Windows side, `kfb.aijly.com`
+  returns 502. So no out-of-band screen/daemon path while diagnosing.
+- Takeaway: when the framework is down (menu-game/KOReader session), the
+  Kindle's wlan can go silent and *not* rejoin the AP until reboot. If `.63`
+  looks dead, first suspect a wedged wlan0, not the app: check router
+  DHCP table / WPS the unit back, or power-cycle it.
