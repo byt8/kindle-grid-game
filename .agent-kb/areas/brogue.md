@@ -1,6 +1,6 @@
 # brogue
 
-Status: **backend builds and previews on the host; device binary cross-compiles.**
+Status: **runs on the device and takes the panel. Taps do nothing, so QUIT on the glass does not give the screen back.** Kill `brogue-kindle-app` over ssh; the runner's restore trap then starts the menu. Do not SIGTERM `menu` to get the panel (see areas/menu.md). Host preview and the ARM binary both build.
 `make brogue-host` + `make brogue-test` green (13 preview frames, layout
 checks pass). `make brogue-kindle` produces a static ARM binary
 (`brogue-kindle-app`, 1.4 MB). Grey layer wired: the device front-end owns the
@@ -103,4 +103,4 @@ text mode, which is what we want); `/mnt/us/brogue` on the device.
 
 - Touch mapping: two-tap travel (first tap places the cursor, second tap
   travels), taps -> `rogueEvent` on real buttons.
-- On-device run + layout verification (panel grey ramp vs preview ramp).
+- On-device layout check (panel grey ramp vs the preview ramp). The binary has run on .63; taps are still unwired, so the glass cannot quit the game.

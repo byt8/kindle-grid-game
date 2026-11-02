@@ -61,6 +61,10 @@ restore() {
         fi
     fi
     rm -f /mnt/us/DONT_START_FRAMEWORK
+    # Drop the "a runner owns the panel" stamp before anything starts the
+    # menu again. Left in place, the next menu death looks like a handoff
+    # and the session exits instead of coming back.
+    rm -f /mnt/us/.menu-handoff
 
     if [ "$menu_was" = 1 ]; then
         # This device boots into the launcher session, so the state to hand back
@@ -168,38 +172,61 @@ if [ -n "$(pidof kfb 2>/dev/null || true)" ]; then
     fi
 fi
 
+# Pids whose command line contains $1. Busybox pidof only sees the 15-character
+# comm name, so a shell script (menu-boot.sh shows up as "sh") is invisible to it.
+pids_cmdline() {
+    needle=$1
+    for d in /proc/[0-9]*; do
+        cmd=$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null) || continue
+        case "$cmd" in
+            *"$needle"*) echo "${d#/proc/}";;
+        esac
+    done
+}
+
 # 2b. The launcher session draws its menu with the touch grab held, so a game
 #     started from a PC while that session is at its menu phase is refused here
 #     exactly like the mirror: grabtest reports EBUSY and the run dies before
 #     drawing anything. The menu process is only alive in that phase -- when the
 #     session launches a game itself the menu exits first (that is the handover,
 #     see tools/menu-boot.sh) -- so a live `menu` here is always someone else's
-#     session holding the panel, never our own parent, and stopping the job is
-#     what gives it back. restore() above puts it back on the way out.
-if [ -n "$(pidof menu 2>/dev/null || true)" ]; then
+#     session holding the panel, never our own parent.
+#
+#     Do not SIGTERM the menu. menu.c treats SIGTERM as the KINDLE button:
+#     it exits 0 and ek_close() starts the reader, then menu-boot.sh runs
+#     restore-kindle.sh while this game is taking the panel. The two fight,
+#     cvm never comes back, and the screen stays frozen. SIGKILL cannot be
+#     caught, so the grab dies with the process and the reader stays down.
+#     The session script is killed in the same command so it cannot see the
+#     menu die and run that restore. restore() above puts the menu back on
+#     the way out.
+job_up=0
+if /sbin/initctl status menu 2>/dev/null | grep -q 'start/running'; then
+    job_up=1
+fi
+menus=$(pids_cmdline '/mnt/us/menu ')
+boots=$(pids_cmdline 'menu-boot.sh')
+if [ "$job_up" = 1 ] || [ -n "$menus$boots" ]; then
     say "stopping the launcher session (menu) so it lets go of the touch device"
     menu_was=1
+    : > /mnt/us/.menu-handoff
+    # Supervisor loop in menu.conf relaunches menu-boot unless this stamp exists.
+    : > /mnt/us/.menu-stop
+    kill -9 $boots $menus 2>/dev/null
     /sbin/initctl stop menu >/dev/null 2>&1
     i=0
-    while [ -n "$(pidof menu 2>/dev/null || true)" ] && [ $i -lt 10 ]; do
+    while :; do
+        menus=$(pids_cmdline '/mnt/us/menu ')
+        boots=$(pids_cmdline 'menu-boot.sh')
+        [ -z "$menus$boots" ] && break
         i=$((i + 1))
+        [ "$i" -ge 10 ] && break
         sleep 1
     done
-    # Stopping the job can leave the menu process behind (upstart signals the
-    # job's main script first); it releases the grab only when it exits.
-    if [ -n "$(pidof menu 2>/dev/null || true)" ]; then
-        say "the launcher menu survived the stop (pid $(pidof menu)); asking it to exit"
-        kill -TERM $(pidof menu) 2>/dev/null
-        i=0
-        while [ -n "$(pidof menu 2>/dev/null || true)" ] && [ $i -lt 5 ]; do
-            i=$((i + 1))
-            sleep 1
-        done
-        if [ -n "$(pidof menu 2>/dev/null || true)" ]; then
-            say "ERROR: the launcher menu (pid $(pidof menu)) will not exit, so touch"
-            say "       would stay locked. Stop it with: initctl stop menu"
-            exit 1
-        fi
+    if [ -n "$menus$boots" ]; then
+        say "ERROR: the launcher will not exit (menu: ${menus:-none} menu-boot: ${boots:-none}),"
+        say "       so touch would stay locked. Stop it with: initctl stop menu"
+        exit 1
     fi
 fi
 

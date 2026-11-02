@@ -31,7 +31,7 @@ make calib                        # Calib tuner -> ./calib
 **Play Brogue or run the calib tuner on the Kindle** (same push-and-run pattern):
 
 ```bash
-./run-brogue-on-kindle.sh [IP]    # roguelike; tap QUIT then SURE to give the screen back
+./run-brogue-on-kindle.sh [IP]    # roguelike. Taps do nothing yet; see "When it goes wrong" to give the screen back
 ./run-calib-on-kindle.sh [IP]     # perception tuner; tap QUIT to give the screen back
 ```
 
@@ -680,6 +680,18 @@ and let it finish restoring.
 
 **Screen draws but taps do nothing** — the screen mirror grabbed touch. A reboot
 does not fix it (the mirror starts with the reader UI). `initctl stop kfbterm`.
+
+**Screen stuck on the boot bar, taps do nothing** — the game menu was told to
+stop and it turned the book reader back on while the game still held the
+glass. The two fought, and the reader lost. Brogue does not read taps yet, so
+QUIT on the glass does nothing. From this PC:
+
+```
+ssh root@192.168.0.63 'kill -9 $(pidof brogue-kindle-app menu); /sbin/initctl stop menu; rm -f /mnt/us/DONT_START_FRAMEWORK; /sbin/initctl start framework'
+```
+
+When `cvm` is running, press the power button once if the glass still looks blank.
+The library should be there.
 
 **Dead game and dead reader** (panel holding the last picture forever):
 

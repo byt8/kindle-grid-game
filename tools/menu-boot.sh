@@ -165,6 +165,17 @@ while :; do
     rc=$?
     /sbin/initctl start powerd >> "$LOG" 2>&1 || say "could not restart powerd after the menu"
     case $rc in
+        137|143)
+            # 143: the menu saw .menu-handoff and refused to start the reader.
+            # 137: the runner SIGKILLed the menu (an old menu binary cannot be
+            # trusted with SIGTERM). Either way, do not restore and do not
+            # draw the menu again on top of the game.
+            if [ -f /mnt/us/.menu-handoff ]; then
+                say "runner took the panel (menu rc=$rc); not restoring the reader"
+                : > /mnt/us/.menu-stop
+                exit "$rc"
+            fi
+            say "menu exited rc=$rc; showing it again" ;;
         0)  say "KINDLE chosen; restoring the reader UI"
             : > /mnt/us/.menu-stop
             /sbin/initctl start powerd >> "$LOG" 2>&1 || \

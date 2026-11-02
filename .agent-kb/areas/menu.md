@@ -52,16 +52,20 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
   menu-boot.sh stops it first, and re-checks with `grabtest`.
 - **The standalone runners used to collide with this session.** `./run-*-on-kindle.sh`
   from a PC while the launcher was showing its menu got `grabtest: EVIOCGRAB
-  refused: Resource busy` (the `menu` process holds the grab), died before
-  drawing, and the host watcher still printed "the game has exited; the Kindle
-  reader is back" — a false success, and the "needs a reboot" line from the
-  restore was noise because the reader is *meant* to be down here. Fixed in
-  `tools/kindle-run.sh` (used by all five games): before the grab check, a live
-  `pidof menu` means someone else's session holds the panel → `initctl stop menu`
-  (plus a TERM to the menu process if the job's stop leaves it), and `restore()`
-  then does `initctl start menu` instead of the stock-reader restore. A live
-  `menu` process can only be the menu phase: when the session launches a game
-  itself the menu has already exited, so the stop never kills our own parent.
+  refused: Resource busy` (the `menu` process holds the grab). Fixed in
+  `tools/kindle-run.sh`: a live menu means stop that session, and `restore()`
+  does `initctl start menu` instead of the stock-reader restore.
+- **Never SIGTERM the menu to take the panel.** [ran 2026-11-02 .63] `menu.c`
+  used to treat SIGTERM as the KINDLE button (exit 0 + `ek_close()` →
+  `release_ui()` starts the framework). menu-boot.sh then ran
+  `restore-kindle.sh` while brogue was taking the glass. cvm never came back;
+  the screen froze on the boot bar. `kindle-run.sh` now writes
+  `/mnt/us/.menu-handoff` and `/mnt/us/.menu-stop`, then **SIGKILL**s `menu`
+  and `menu-boot.sh` in one `kill -9` (a caught signal must not run). The new
+  menu exits 143 without `ek_close()` only when `.menu-handoff` exists; a stray
+  signal with no stamp still restores the reader. menu-boot.sh on rc 137 or 143
+  with that stamp exits and does not restore. `pidof` does not see
+  `menu-boot.sh` (comm is `sh`); match `/proc/*/cmdline`.
   `run-rockman-on-kindle.sh` now prints the runner's log and exits 1 when the
   game never started.
 - WIFI button reuses chess's proven wi-fi screens: `chess --wifi-only`

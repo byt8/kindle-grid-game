@@ -24,6 +24,7 @@
  *        5  ROCKMAN
  *        6  KOREADER
  *        7  WIFI
+ *      143  a runner stopped us (SIGTERM). Do not restore the reader.
  *   - The KINDLE button restores the Amazon UI; the menu comes back after any
  *     game ends because the boot job restarts it.
  *
@@ -223,8 +224,16 @@ int main(int argc, char **argv) {
     }
 #endif
 
+    if (g_signal && access("/mnt/us/.menu-handoff", F_OK) == 0) {
+        /* A game runner stamped .menu-handoff and then stopped us so it
+         * can take the panel. This is not the KINDLE button. ek_close()
+         * starts the reader, and menu-boot.sh would restore over the game.
+         * Dying releases the touch grab. The reader stays down. */
+        _exit(143);
+    }
+
     if (chosen == B_KINDLE || (chosen < 0 && rc == 0)) {
-        /* KINDLE, or a signal: hand the panel back first, then exit 0.
+        /* KINDLE button, or the host test closed stdin: hand the panel back.
          * ek_close() runs release_ui(), which starts the framework again. */
         ek_clear(EK_PAPER);
         ek_force_full();
