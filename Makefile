@@ -104,12 +104,13 @@ menu: menu-kindle
 menu-test: menu-host
 	./menu-host --no-takeover --dump /tmp/menu.pgm
 	printf ''                        | ./menu-host --no-takeover; test $$? -eq 0
-	printf 'tap 300 206\n'           | ./menu-host --no-takeover; test $$? -eq 1
-	printf 'tap 300 290\n'           | ./menu-host --no-takeover; test $$? -eq 2
-	printf 'tap 300 374\n'           | ./menu-host --no-takeover; test $$? -eq 3
-	printf 'tap 300 458\n'           | ./menu-host --no-takeover; test $$? -eq 4
-	printf 'tap 300 542\n'           | ./menu-host --no-takeover; test $$? -eq 5
-	printf 'tap 300 627\n'           | ./menu-host --no-takeover; test $$? -eq 6
+	printf 'tap 300 202\n'           | ./menu-host --no-takeover; test $$? -eq 1
+	printf 'tap 300 274\n'           | ./menu-host --no-takeover; test $$? -eq 2
+	printf 'tap 300 346\n'           | ./menu-host --no-takeover; test $$? -eq 3
+	printf 'tap 300 418\n'           | ./menu-host --no-takeover; test $$? -eq 4
+	printf 'tap 300 490\n'           | ./menu-host --no-takeover; test $$? -eq 5
+	printf 'tap 300 562\n'           | ./menu-host --no-takeover; test $$? -eq 6
+	printf 'tap 300 627\n'           | ./menu-host --no-takeover; test $$? -eq 7
 	printf 'tap 300 687\n'           | ./menu-host --no-takeover; test $$? -eq 0
 	$(PY) -c 'import sys;d=open("/tmp/menu.pgm","rb").read();p=b"P5\n600 800\n255\n";assert d.startswith(p);pix=d[len(p):];assert len(pix)==600*800;assert pix.count(0)>1000 and pix.count(255)>1000;print("menu.pgm ok")'
 

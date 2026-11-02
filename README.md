@@ -92,11 +92,25 @@ text with `python3 tools/show_png_ascii.py out.png` — no image viewer needed.
 ```
 
 Builds the menu + all five games, pushes them, installs `/etc/upstart/menu.conf`
-(replacing the old direct-to-chess boot job), and shows the menu now. Seven
-buttons: **XCOM / CHESS / TETRIS / SUDOKU / ROCKMAN / WIFI / KINDLE**. Play a game; when you quit
-you land back on the menu. **WIFI** reuses chess's wi-fi screens (join a
+(replacing the old direct-to-chess boot job), and shows the menu now. Eight
+buttons: **XCOM / CHESS / TETRIS / SUDOKU / ROCKMAN / KOREADER / WIFI / KINDLE**. Play a game; when you quit
+you land back on the menu. **KOREADER** launches the KOReader reader
+(`/mnt/us/koreader/koreader.sh`; when it exits, the launcher re-takes the
+panel). **WIFI** reuses chess's wi-fi screens (join a
 network, it remembers it). **KINDLE** hands the screen back to the Amazon
 reader.
+
+**Read books on the Kindle (KOReader):**
+
+```bash
+./install-koreader-on-kindle.sh [IP]   # pushes + unzips KOReader on /mnt/us
+```
+
+This installs KOReader from the staged
+`jailbreak-kindle/kindle-tools/koreader-kindle-v2026.07.1.zip` (verified
+md5) — the plain K4/Touch/PW1 build. It shows both in KUAL ("Start KOReader")
+and as the menu's **KOREADER** button. No reboot needed; nothing is written
+outside `/mnt/us`.
 
 Changed `tools/menu-boot.sh` (button → game dispatch)? It is *copied* to
 `/mnt/us/menu-boot.sh` on the Kindle — re-run `./install-menu-on-kindle.sh
@@ -315,7 +329,8 @@ Do not edit that header by hand.
 `/tmp/rockman-play.pgm` (24 steps of digging).
 
 On the Kindle: `make rockman-kindle`, then `./run-rockman-on-kindle.sh <ip>`.
-The menu's ROCKMAN button is exit code 5; WIFI moved to 6. No sound.
+The menu's ROCKMAN button is exit code 5; KOREADER is 6 (launches
+`/mnt/us/koreader/koreader.sh`), WIFI is 7. No sound.
 
 ---
 

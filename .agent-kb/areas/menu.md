@@ -1,14 +1,15 @@
 # Area: menu launcher
 
-The Kindle boots into a seven-button launcher (`src/menu.c`) instead of the
+The Kindle boots into an eight-button launcher (`src/menu.c`) instead of the
 Amazon UI. Same e-ink engine as the games, same takeover rules.
 
 ## How it works
 
-- `src/menu.c` — buttons: XCOM / CHESS / TETRIS / SUDOKU / ROCKMAN / WIFI / KINDLE.
-  On tap it draws a "starting..." card, releases the panel + touch grab
-  (`ek_close()`), and `_exit(rc)` with `1=XCOM 2=CHESS 3=TETRIS 4=SUDOKU
-  5=ROCKMAN 6=WIFI`. KINDLE/signal → 0 (restore the UI). Host build reads
+- `src/menu.c` — buttons: XCOM / CHESS / TETRIS / SUDOKU / ROCKMAN / KOREADER /
+  WIFI / KINDLE. Row height 72, six game rows at y 170..594, then WIFI 600,
+  KINDLE 660. On tap it draws a "starting..." card, releases the panel + touch
+  grab (`ek_close()`), and `_exit(rc)` with `1=XCOM 2=CHESS 3=TETRIS 4=SUDOKU
+  5=ROCKMAN 6=KOREADER 7=WIFI`. KINDLE/signal → 0 (restore the UI). Host build reads
   `tap X Y` from stdin and `--dump` writes a PGM, so `make menu-test` walks
   every button on the PC.
 - `tools/menu-boot.sh` — the always-on session, run by the upstart job. Stops
@@ -23,6 +24,11 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
   pushes binaries, runners, wifi script, chess.conf, installs
   `/etc/upstart/menu.conf` (removing `chess.conf`), and starts the session
   immediately via `setsid sh menu-boot.sh &`.
+- `install-koreader-on-kindle.sh` — pushes the staged KOReader zip
+  (`jailbreak-kindle/kindle-tools/koreader-kindle-v2026.07.1.zip`, md5
+  `af87904b4b47007fecfe907bbd15fe05`) and unzips at `/mnt/us` (the zip's top
+  level is `koreader/` + `extensions/koreader/`, so unzip at the userstore root
+  IS the install). KOReader shows in KUAL *and* as the menu's KOREADER button.
 
 ## Key gotchas
 
@@ -47,6 +53,11 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
   game never started.
 - WIFI button reuses chess's proven wi-fi screens: `chess --wifi-only`
   (added for the menu; same screens, no board, hands the panel back).
+- KOREADER (rc 6) in menu-boot.sh runs `/mnt/us/koreader/koreader.sh` **without**
+  `--framework_stop` — the framework is already stopped by the menu session, and
+  koreader.sh's `STOP_FRAMEWORK=no` path just works over a dead UI. When KOReader
+  exits, the panel stays dead until menu-boot re-takes it (next loop), which is
+  fine.
 - **`menu-boot.sh` is deployed, not run from the repo — it goes stale.** The
   `case $rc` dispatch lives in the *deployed* copy (`/mnt/us/menu-boot.sh`),
   so a repo edit does nothing until re-pushed (and `install-menu-on-kindle.sh`
@@ -58,7 +69,11 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
   start menu`. Verify remotely by piping a raw `input_event` blob (ARM32
   `<iihhi>`: X `type3 code0x35`, Y `code0x36`, `BTN_TOUCH 0x14a`, SYN) into
   `/dev/input/event3` — raw = screen × 4095 / (W-1); the menu's own grab
-  consumes it and the log shows which game launched.
+  consumes it and the log shows which game launched. The Kindle has no
+  `base64`/`scp`/`od` — pull `/dev/fb0` with
+  `hexdump -v -e '1/1 "%02x\n"'` and reconstruct on the PC (600x800 8bpp,
+  stride 608); the device also drops off wifi when the framework is down
+  (ssh timeouts), and comes back by itself.
 - `ek_close()` → `release_ui()` → `initctl start framework`, so after WIFI or
   KINDLE the reader UI is usable again. The boot job survives the re-emitted
   `started lab126_gui` because the job is already running.
@@ -66,7 +81,9 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
 ## Status
 
 Installed and running: 192.168.0.66 boots into the launcher (the `menu` job is
-`start/running`, framework stopped, `pidof menu` alive), and the standalone
-Rockman runner now stops and restarts that session correctly — verified on the
-panel 2026-11-02 (grabtest free, game reached its title screen). Host tests
-pass: `make menu-test` walks all seven buttons and the dump is sane.
+`start/running`, framework stopped, `pidof menu` alive), the standalone Rockman
+runner stops and restarts that session correctly, and KOReader is installed
+with the KOREADER button live — panel verified 2026-11-02: hexdump of `/dev/fb0`
+shows all eight bands (y 170/242/314/386/458/530 games + 600 wifi + 660 kindle,
+ROW_H 72). Host tests pass: `make menu-test` walks all eight buttons and the
+dump is sane.

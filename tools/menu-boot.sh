@@ -104,7 +104,13 @@ while :; do
             GAME=sudoku sh /mnt/us/sudoku-run.sh >> "$LOG" 2>&1 ;;
         5)  say "launching ROCKMAN"
             GAME=rockman sh /mnt/us/rockman-run.sh >> "$LOG" 2>&1 ;;
-        6)  say "WIFI setup"
+        6)  say "launching KOREADER"
+            # Framework is already stopped and the panel is ours; koreader.sh
+            # runs without --framework_stop and leaves the UI dead on exit,
+            # which is fine -- the launcher re-takes the panel next loop. Log
+            # tail is our only record on the device.
+            sh /mnt/us/koreader/koreader.sh >> /mnt/us/koreader-launch.log 2>&1 ;;
+        7)  say "WIFI setup"
             /mnt/us/chess --wifi-only --conf /mnt/us/chess.conf >> "$LOG" 2>&1 ;;
         *)  say "menu exited rc=$rc; showing it again" ;;
     esac
