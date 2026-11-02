@@ -105,3 +105,33 @@ dump is sane.
   Kindle's wlan can go silent and *not* rejoin the AP until reboot. If `.63`
   looks dead, first suspect a wedged wlan0, not the app: check router
   DHCP table / WPS the unit back, or power-cycle it.
+
+## Crash hunt findings (same day, later session)
+
+- **The `.63`/`.66` pair got shuffled between sessions: the "crash unit" was at
+  `.63` earlier and is now at `.66`.** The KINDLE button hands the panel back to
+  the reader UI, so the device that held the crashed KOReader session is just
+  the one that answers now. Diagnose by *content* (crash.log, menu-boot.log),
+  not by IP.
+- **The file-browser crash is a native hard kill with no traceback.** KOReader's
+  `/mnt/us/koreader/crash.log` (v2026.07.1, `reader.lua`) ends abruptly at
+  07:34:37 mid-startup after "Restoring user input handling" — no Lua error, no
+  clean exit, no `[ko-input]` shutdown lines. dmesg shows the reboot cause
+  `reset=user_reboot` (Amazon marks every soft reboot that way; it does not say
+  who asked). No core: `ulimit -c` hard limit is 0 (cannot raise), and
+  `core_pattern` `/mnt/us/menu-core.%p` yields nothing. Conclusion: KOReader
+  died, then something rebooted — likely the device watchdog or a powerd/
+  lab126 path.
+- **The evidence was being destroyed by the launcher itself.** `menu-boot.sh`
+  does `: > "$LOG"` (truncate) at boot, so the crashed session's last lines +
+  the heartbeat vanished with the reboot. Fixed in `tools/menu-boot.sh`:
+  rotate to `menu-boot.log.prev` / `menu-heartbeat.prev` before truncating, and
+  write `[[koreader.sh started/exited rc=N at ...]]` markers into the
+  append-only `/mnt/us/koreader-launch.log`. Deployed; takes effect next boot.
+  Next crash leaves the smoking-gun lines + exact exit rc.
+- **Deploy gotcha (fresh): the Kindle has no `base64` either** — the b64-pipe
+  trick used for other devices silently no-ops and the `mv` then overwrites the
+  launcher with the 22-byte "base64: not found" error. Restore went through as
+  a raw stdin pipe (`cat file | ssh root@ip 'cat > /mnt/us/menu-boot.sh.new &&
+  chmod 755 ... && mv ...'`) — keep `wc -c` + md5 + `sh -n` checks on the
+  device side; the device md5 now matches the repo (b53529b...).

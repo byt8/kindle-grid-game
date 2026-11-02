@@ -189,6 +189,13 @@ reader.
 
 **Read books on the Kindle (KOReader):**
 
+If the file browser crashes and reboots the Kindle: the crash leaves no
+traceback (native kill; `ulimit -c` is hard 0 so no core), and the old launcher
+erased its own log at every boot. Since the hardening, the crashed session is
+preserved — after a crash look at `/mnt/us/menu-boot.log.prev` (last lines),
+`/mnt/us/menu-heartbeat.prev` (gap = the hang window) and
+`/mnt/us/koreader-launch.log` (has `[[koreader.sh exited rc=N]]` markers).
+
 ```bash
 ./install-koreader-on-kindle.sh [IP]   # pushes + unzips KOReader on /mnt/us
 ```

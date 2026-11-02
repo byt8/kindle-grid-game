@@ -19,6 +19,9 @@
 set -u
 
 LOG=/mnt/us/menu-boot.log
+# The previous session's log is the evidence after a crash-reboot (the old
+# one wiped itself at every boot, so the reboot erased the crash record).
+[ -s "$LOG" ] && mv -f "$LOG" "$LOG.prev"
 : > "$LOG"
 say() { echo "menu-boot: $*" >> "$LOG"; }
 
@@ -88,6 +91,7 @@ if [ -w /proc/sys/kernel/core_pattern ]; then
     say "core_pattern now $(cat /proc/sys/kernel/core_pattern)"
 fi
 HB=/mnt/us/menu-heartbeat
+[ -s "$HB" ] && mv -f "$HB" "$HB.prev"
 : > "$HB"
 while [ -e "$HB" ]; do
     echo "hb $$ $(date +%s)" >> "$HB"
@@ -145,9 +149,14 @@ while :; do
             # Framework is already stopped and the panel is ours; koreader.sh
             # runs without --framework_stop and leaves the UI dead on exit,
             # which is fine -- the launcher re-takes the panel next loop. Log
-            # tail is our only record on the device.
+            # tail is our only record on the device. Markers go into the
+            # append-only launch log too: a hard reboot wipes menu-boot.log
+            # (now rotated to menu-boot.log.prev), but this file survives.
+            echo "[[koreader.sh started at $(date)]]" >> /mnt/us/koreader-launch.log
             sh /mnt/us/koreader/koreader.sh >> /mnt/us/koreader-launch.log 2>&1
-            say "KOREADER exited rc=$? at $(date)" ;;
+            rc=$?
+            say "KOREADER exited rc=$rc at $(date)"
+            echo "[[koreader.sh exited rc=$rc at $(date)]]" >> /mnt/us/koreader-launch.log ;;
         7)  say "WIFI setup"
             /mnt/us/chess --wifi-only --conf /mnt/us/chess.conf >> "$LOG" 2>&1 ;;
         *)  say "menu exited rc=$rc; showing it again" ;;
