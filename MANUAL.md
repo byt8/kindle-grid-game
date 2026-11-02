@@ -16,7 +16,7 @@ What you see
 
 The top of the screen shows the turn number and the word your turn. Next to that is a count of how many aliens you can currently see, and the random seed for this game, which is only useful when something has gone wrong.
 
-Then comes the map, twelve squares wide and thirteen squares tall. Pale squares are grass, and long smooth squares are road. Darker squares are trees, and those slow you down. Black shapes with hard edges are city walls, and you cannot walk through those. You will also see rocks, trees, crates, and water, and none of those can be crossed either. Any square you have never seen is covered by a dark dither pattern, which is fog.
+Then comes the map, twelve squares wide and thirteen squares tall. Pale squares are grass, and long smooth squares are road. Darker squares are trees, and those slow you down. Black shapes with hard edges are city walls, and you cannot walk through those. You will also see rocks, trees, crates, and water, and none of those can be crossed either. Any square you have never seen is covered by a flat dark grey wash, which is fog.
 
 Every soldier and every alien stands in a square with a small bar underneath showing how much health is left. Your people carry a badge with a black ring, and the aliens carry a badge with a white ring inside a black square.
 

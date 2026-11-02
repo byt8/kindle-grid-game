@@ -2,6 +2,7 @@
 
 Newest first. One line per task. Current truth is in `areas/`, not here.
 
+- 2026-11-01 — rockman — Kindle build fixed: `tap_at` is host-pipe-only, so it is now `#ifdef EK_HOST`; `make rockman-kindle` produces `./rockman` (74 KB). Push still pending, SSH to 192.168.0.66 timed out.
 - 2026-11-01 — rockman — Playable port; menu ROCKMAN is exit 5, WIFI is 6.
 - 2026-11-01 — xcom — greyscale option B: shared engine editable after asking; build opt-in ek_grey, dither rejected
 
@@ -44,6 +45,8 @@ Newest first. One line per task. Current truth is in `areas/`, not here.
 - 2026-10-31 — chess — Gift-unit standalone: in-game wi-fi setup (scan, drawn keyboard, remembered network in `/mnt/us/wifi.conf` via `tools/chess-wifi.sh`), fixed the busybox `awk -F'\t'` scan bug and a join that "succeeded" without switching networks, `--wifi-shot` per-screen renders, `kill -USR1` screenshot of a running game, and `tools/chess-boot.conf` to boot straight into the game; README rewritten around Quick Start. Boot job still to be installed and reboot-tested.
 
 - 2026-10-31 — chess — Chess against DeepSeek on the Kindle: full rule set with perft/kiwipete self-tests, tap-to-move board, one API question per move with a retry and a visible failure, `make chess-kindle` and `run-chess-on-kindle.sh`; `tools/kindle-run.sh` became game-generic. Waiting on a real API key.
+
+2026-11-01 — xcom — **Greyscale landed**: the shared engine gained an opt-in 16-level layer (`ek_grey_enable`, `ek_grey_rect`, `grey_ramp`), XCOM now draws terrain, sprites, fog and bars as tone, sprite tiles are 4 bpp in `sprites.h`, the baker stores real grey instead of a dither pattern, and the README no longer claims the panel is 1-bit. PC dumps verified (9 panel values); the device is untested.
 
 2026-10-31 — xcom — Added MANUAL.md and make_manual_audio.py for TTS listening
 

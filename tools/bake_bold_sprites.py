@@ -1,12 +1,23 @@
 #!/usr/bin/env python3
-"""Bake bold sprites for the Kindle panel and write src/sprites.h.
+"""Bake sprites for the Kindle panel and write src/sprites.h.
 
-The old cutter (tools/slice_sprites.py) took a painted sheet and *dithered*
-it to 2 bits. At 40x40 that turns into grey mush: a soldier and a crate
-dither to the same speckle. This tool does the opposite. It takes bold
-line art drawn at 512x512 per sprite, thresholds it hard (no dither), then
-dilates the ink by one pixel so no stroke is thinner than 2 px on the
-panel. Bold in, bold out.
+The art is drawn at 512x512 per sprite and the panel does grey, so the
+tone is kept: crop to the bounding box, area-resize into a 36x34 box, and
+store what comes out. The picture is never thresholded -- at 40x40 a hard
+threshold throws away exactly the information e-ink can show, which is why
+the old version of this file's output read as flat silhouettes.
+
+Two decisions do still need a binary image, and both are explicit:
+
+  - the silhouette mask. Transparency has no grey: a pixel is either on
+    the tile or it is background. A flood-fill from the border over the
+    thresholded resize decides which it is.
+  - the ink guard. A sprite that comes out too faint stops the run.
+
+A tile pixel is 0 transparent, 1 paper, 2..9 a tone where v-1 is the ink
+level 0..8. xcom.c scales that level with its ink15() helper and hands it
+to ek_grey_rect(), the engine's greyscale layer, so the tone stored here
+is the tone the panel draws -- no dither sits between the two.
 
 Terrain is not taken from a picture. A photo of grass scaled to 40x40 is
 noise; a 40x40 hatch reads as "grass" across the room. So the terrain
@@ -32,10 +43,37 @@ TILE = 40
 # own rim and the HP bar do not sit on top of the silhouette.
 FIT_W, FIT_H = 36, 34
 
-TRANSPARENT, PAPER, INK = 0, 1, 2
+# Tile pixel values, packed 4 bits each by pack() below.
+#   0          transparent: no pixel of the tile is written at all
+#   1          paper: an opaque white pixel (the unit's body highlight)
+#   2..9       a tone, where v - 1 is the ink level 0..8
+# 9 is solid ink, so INK is what every terrain pattern writes.
+TRANSPARENT, PAPER = 0, 1
+BAYER_LEVELS = 8
+TONE_MAX = PAPER + BAYER_LEVELS      # 9
+INK = TONE_MAX
 
-# Hard threshold. Slightly below mid-grey keeps the model's anti-aliased
-# edge pixels as ink, which is what makes the stroke read at 40 px.
+# The ramp eink.c's grey layer displays, plus the ink15() mapping xcom.c
+# uses to put an ink level 0..8 on it. Mirrored here so a preview shows
+# the panel's grey instead of a guess at it. If the grey layer cannot be
+# allocated the engine falls back to a 4x4 Bayer dither of level*2, which
+# is byte for byte the look this game had before greyscale.
+GREY_RAMP = (255, 238, 221, 204, 187, 170, 153, 136,
+             119, 102, 85, 68, 51, 34, 17, 0)
+
+
+def ink15(level):
+    """Sprite ink level 0..8 -> grey layer level 0..15, same rounding as xcom."""
+    return (level * 15 + 4) // 8
+
+# Ascii ramp for --ascii: indexed by the tile pixel value itself, so
+# 0 (transparent) is blank and 9 (solid ink) is the darkest glyph.
+ASCII = " .:-=+*#%@"
+
+# Threshold, used only where a decision has to be binary: the bounding
+# box, the silhouette mask, and the guard below. The picture itself is
+# never thresholded. Slightly below mid-grey keeps the model's
+# anti-aliased edge pixels in the silhouette.
 THRESH = 120
 
 
@@ -167,25 +205,13 @@ def dilate(ink, w, h, passes):
     return cur
 
 
-def erode(ink, w, h, passes):
-    """Shrink ink by `passes` pixels (4-neighbour)."""
-    cur = ink
-    for _ in range(passes):
-        out = bytearray(cur)
-        for y in range(h):
-            for x in range(w):
-                if not cur[y * w + x]:
-                    continue
-                if x == 0 or x + 1 == w or y == 0 or y + 1 == h \
-                        or not (cur[y * w + x - 1] and cur[y * w + x + 1]
-                                and cur[(y - 1) * w + x] and cur[(y + 1) * w + x]):
-                    out[y * w + x] = 0
-        cur = out
-    return cur
+def cell_to_tile(g, cw, ch, trace=None):
+    """One 512x512 cell of generated art -> TILE*TILE values of 0..9.
 
-
-def cell_to_tile(g, cw, ch, thicken, hollow, trace=None):
-    """One 512x512 cell of generated art -> TILE*TILE values of 0/1/2.
+    The tone comes from `small`, the area-resized greyscale, straight
+    through. The only threshold on the path decides what is background,
+    because transparency is not a shade: outside the silhouette no pixel
+    of the tile exists, inside it every shade survives.
 
     `trace`, when it is a dict, receives every intermediate stage as
     (bytes, width, height) under its step name, so a diagnostic can show
@@ -202,7 +228,8 @@ def cell_to_tile(g, cw, ch, thicken, hollow, trace=None):
         return None
     # A cell drawn in white-on-black has more ink than paper. Flip it so the
     # silhouette is always the darker side.
-    if sum(ink) * 2 > cw * ch:
+    flip = sum(ink) * 2 > cw * ch
+    if flip:
         ink = bytearray(0 if v else 1 for v in ink)
     note("src_ink", ink, cw, ch)
     box = bbox(ink, cw, ch)
@@ -216,26 +243,22 @@ def cell_to_tile(g, cw, ch, thicken, hollow, trace=None):
     for y in range(bh):
         src = (by + y) * cw + bx
         cut[y * bw:(y + 1) * bw] = g[src:src + bw]
+    if flip:
+        # White-on-black art: the bbox came from the flipped mask, so the
+        # greyscale that feeds the tone has to be flipped with it.
+        cut = bytearray(255 - v for v in cut)
     small = area_resize(cut, bw, bh, dw, dh)
     note("small", small, dw, dh)
     small_ink = threshold(small, dw * dh)
     if sum(small_ink) == 0:
         die("art vanished when scaled to 40 px")
     note("small_ink", small_ink, dw, dh)
-    small_ink = dilate(small_ink, dw, dh, thicken)
-    mask = shape_mask(small_ink, dw, dh)
-    if hollow:
-        # Friendly units read as a bold outline with a white body, hostiles
-        # as solid black. At 40 px the interior detail is gone anyway, so the
-        # silhouette alone has to carry the distinction -- and black vs white
-        # is the only contrast an e-ink panel guarantees. An outline that
-        # erodes to nothing is a hard error, not a thin sprite.
-        eaten = erode(small_ink, dw, dh, 2)
-        if sum(eaten) == 0:
-            die("hollow outline disappeared at 40 px; the shape is too thin")
-        small_ink = bytearray(1 if a and not b else 0
-                              for a, b in zip(small_ink, eaten))
-    note("cut", small_ink, dw, dh)
+    # The mask is closed by one dilation before the flood runs. At 36 px a
+    # single gap in an outline would let the flood from the border into the
+    # body and punch holes in the silhouette. It touches nothing else: the
+    # tone below still comes from the untouched resize.
+    mask = shape_mask(dilate(small_ink, dw, dh, 1), dw, dh)
+    note("mask", mask, dw, dh)
 
     tile = bytearray(TILE * TILE)
     ox = (TILE - dw) // 2
@@ -245,7 +268,9 @@ def cell_to_tile(g, cw, ch, thicken, hollow, trace=None):
             i = y * dw + x
             if not mask[i]:
                 continue
-            tile[(oy + y) * TILE + ox + x] = INK if small_ink[i] else PAPER
+            # The average dark of this pixel of the resize, as an ink level.
+            level = (255 - small[i]) * BAYER_LEVELS // 255
+            tile[(oy + y) * TILE + ox + x] = PAPER + level
     note("tile", tile, TILE, TILE)
     return tile
 
@@ -369,13 +394,13 @@ PATTERNS = {
 def pack(px):
     if len(px) != TILE * TILE:
         die(f"tile has {len(px)} pixels, want {TILE * TILE}")
-    out = bytearray(TILE * TILE // 4)
+    out = bytearray(TILE * TILE // 2)
     for i, v in enumerate(px):
-        if v not in (0, 1, 2):
-            die(f"pixel value {v}")
-        out[i >> 2] |= v << ((i & 3) * 2)
+        if v < TRANSPARENT or v > TONE_MAX:
+            die(f"pixel value {v} is not 0..{TONE_MAX}")
+        out[i >> 1] |= v << ((i & 1) * 4)
     for i, v in enumerate(px):
-        if (out[i >> 2] >> ((i & 3) * 2)) & 3 != v:
+        if (out[i >> 1] >> ((i & 1) * 4)) & 15 != v:
             die("pack/unpack mismatch")
     return out
 
@@ -473,21 +498,26 @@ def main():
         _probe, cw, ch = load_cell(path, cols, rows, 0)
         if len(sheet["sprites"]) > cols * rows:
             die(f"{path} claims {len(sheet['sprites'])} sprites but has {cols * rows} cells")
+        if "style" in sheet or "thicken" in sheet:
+            die(f"{path.name}: 'style'/'thicken' are gone; every cell bakes to a tone now")
         for i, sid in enumerate(sheet["sprites"]):
             if sid not in stats:
                 die(f"{sid} is not in {STATS.name}")
             g, gw, gh = load_cell(path, cols, rows, i)
-            tile = cell_to_tile(g, gw, gh, sheet.get("thicken", 1),
-                                sheet.get("style", "solid") == "hollow")
+            tile = cell_to_tile(g, gw, gh)
             if tile is None:
                 die(f"{sid} (cell {i} of {path.name}) has no ink")
-            ink = sum(1 for v in tile if v == INK)
+            # Tone mass: a pixel at the darkest level counts 8, paper counts
+            # 0, so for all-black art this is the ink count the guard used to
+            # measure, and a grey silhouette now fails for being faint rather
+            # than for being thin.
+            tone = sum(v - PAPER for v in tile if v > PAPER)
             body = sum(1 for v in tile if v != TRANSPARENT)
-            pct = 100 * ink // body if body else 0
+            pct = 100 * tone // (BAYER_LEVELS * body) if body else 0
             if pct < 15:
-                die(f"{sid} came out only {pct}% ink; too thin to read on e-ink")
+                die(f"{sid} came out only {pct}% ink; too faint to read on e-ink")
             tiles[sid] = tile
-            source[sid] = f"{path.name} cell {i} ({ink} ink px, {pct}% of body)"
+            source[sid] = f"{path.name} cell {i} ({tone} tone-px, {pct}% ink)"
 
     for sid, fn in PATTERNS.items():
         tiles[sid] = fn()
@@ -514,7 +544,7 @@ def main():
     lines.append("#define XCOM_SPRITES_H")
     lines.append("#include <string.h>")
     lines.append(f"#define SP_TILE {TILE}")
-    lines.append(f"#define SP_N {(TILE * TILE) // 4}")
+    lines.append(f"#define SP_N {(TILE * TILE) // 2}")
     lines.append(f"#define SP_COUNT {len(order)}")
     lines.append("enum {")
     for i, name in enumerate(idents):
@@ -553,9 +583,12 @@ def main():
         blob = pack(tiles[sid])
         lines.append("    {" + ",".join(f"0x{b:02x}" for b in blob) + "},")
     lines.append("};")
+    lines.append("/* 4 bits per pixel: 0 transparent, 1 paper, 2..9 a tone whose")
+    lines.append(" * value minus 1 is the ink level 0..8, which xcom rescales to the")
+    lines.append(" * 0..15 the engine's grey layer takes. */")
     lines.append("static int sp_at(int id, int x, int y) {")
     lines.append("    int i = y * SP_TILE + x;")
-    lines.append("    return (sp_px[id][i >> 2] >> ((i & 3) * 2)) & 3;")
+    lines.append("    return (sp_px[id][i >> 1] >> ((i & 1) * 4)) & 15;")
     lines.append("}")
     lines.append("static int sp_find(const char *id) {")
     lines.append("    for (int i = 0; i < SP_COUNT; i++)")
@@ -577,7 +610,7 @@ def main():
                 row = ""
                 for x in range(TILE):
                     v = t[y * TILE + x]
-                    row += "#" if v == INK else ("." if v == PAPER else " ")
+                    row += ASCII[v]
                 print(row)
 
     if preview:
@@ -586,8 +619,13 @@ def main():
 
 
 def write_preview(path, order, tiles):
-    """Each tile twice: the 2-bit data, and how it looks on the panel
-    (transparent shown as light grey so the silhouette edge is visible)."""
+    """Each tile twice: the tone as stored, and the panel's own answer to it.
+
+    Left is data (transparent as light grey so the silhouette edge is
+    visible), right is what ek_grey_rect() will actually put on the panel
+    once ink15() has scaled the level. If the two disagree, the renderer
+    is the thing to suspect.
+    """
     cols = 6
     cell_w, cell_h = TILE * 2 + 12, TILE + 8
     rows = (len(order) + cols - 1) // cols
@@ -601,20 +639,15 @@ def write_preview(path, order, tiles):
         for y in range(TILE):
             for x in range(TILE):
                 v = t[y * TILE + x]
-                if v == INK:
-                    c = (0, 0, 0)
-                elif v == PAPER:
-                    c = (255, 255, 255)
-                else:
-                    c = (190, 190, 190)
-                px[cx + x, cy + y] = c
-                if v == INK:
-                    c2 = (0, 0, 0)
-                elif v == PAPER:
-                    c2 = (255, 255, 255)
-                else:
-                    c2 = (216, 216, 216)
-                px[cx + TILE + 8 + x, cy + y] = c2
+                if v == TRANSPARENT:
+                    px[cx + x, cy + y] = (190, 190, 190)
+                    px[cx + TILE + 8 + x, cy + y] = (216, 216, 216)
+                    continue
+                level = v - PAPER
+                tone = 255 - level * 255 // BAYER_LEVELS
+                px[cx + x, cy + y] = (tone, tone, tone)
+                g = GREY_RAMP[ink15(level)]
+                px[cx + TILE + 8 + x, cy + y] = (g, g, g)
     img.save(path)
 
 

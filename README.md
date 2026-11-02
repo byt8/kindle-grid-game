@@ -121,18 +121,28 @@ screen, so a bug is replayable: same `--seed`, same dice.
 | `tools/grabtest.c` | "is the touch device free right now?" probe |
 | `MANUAL.md` | plain-prose game manual for TTS |
 
-### The sprites are drawn bold on purpose
+### The panel shows real grey, so the art keeps its tone
 
-The panel is 1 bit: black or white, no grey. A painted picture dithered to 40x40
-turns into speckle, and a soldier stops looking different from a crate. So:
+The engine puts 16 greys on the panel and this game asks for them: startup calls
+`ek_grey_enable()`, then every sprite, terrain square, fogged square and badge is
+painted with `ek_grey_rect()`. Nothing is dithered, so a tone stored in
+`sprites.h` is the tone you see — the speckle the old 1-bit build laid over every
+square is gone. (No grey layer available? The engine says so and falls back to
+the old 4x4 dither byte for byte, so the game never blanks.)
 
-- **Units and objects** are bold line art generated at 512x512, hard-thresholded
-  (no dither), trimmed to the silhouette, then ink-dilated one pixel so no stroke
-  is thinner than 2 px.
-- **Friendlies are hollow** (white body, black outline). **Aliens are solid black.**
-  At 40 px there is no room for interior detail, so team is read from black vs white.
-- **Terrain is a pattern, not a picture**: dots = grass, trunks = forest, waves =
-  water, dashes = road, windows = city, pluses = rubble, peaks = mountains.
+The baker keeps the art's tone all the way down: crop to the bounding box,
+area-resize into <=36x34, flood the background out, centre. Only two decisions
+are binary, and both are explicit:
+
+- **The silhouette.** Transparency has no grey — a flood-fill from the border
+  over the thresholded resize decides tile or background.
+- **The ink guard.** A cell with no ink, or under 15% tone once fitted to 40x40,
+  **aborts the bake** rather than shipping a blank tile. Nothing is substituted.
+
+Team is read from the silhouette plus the badge the game draws over it, not from
+black vs white. **Terrain is a pattern, not a picture**: dots = grass, trunks =
+forest, waves = water, dashes = road, windows = city, pluses = rubble, peaks =
+mountains.
 
 To redo the art, drop four sheets into `bold/` — 13 cells total, no code changes:
 
@@ -148,20 +158,20 @@ supply — those seven come from `PATTERNS` in the baker.
 
 Rules the baker enforces, so the art has to be drawn to them:
 
-- **512x512 per cell** (1024x1024 sheets). Below ~200 px the hard threshold eats every
-  interior line. Any size divides as long as it splits evenly into the grid.
-- **Black line art on white.** Grey >= 120 becomes paper, so shading is invisible. The file
-  is sniffed by content, not extension — WebP named `.png` is fine.
-- `players.png` bakes **hollow**: your outline is kept, the inside turns white. Give every
-  figure a heavy closed outline or the bake dies with *"hollow outline disappeared at 40 px"*.
-- `enemies` / `objects` / `drone` bake **solid**: the silhouette becomes black. Interior
-  detail is discarded, so the outline alone has to be recognisable.
-- A cell with no ink, or under 15% ink once fitted to 40x40, **aborts the bake** rather than
-  shipping a blank tile. Nothing is substituted.
+- **512x512 per cell** (1024x1024 sheets), though any size that splits evenly into
+  the grid works. Tiny cells are the risk: one that comes out empty dies with
+  *"art vanished when scaled to 40 px"*.
+- **Line art on white, grey welcome.** Tones are kept, not flattened — grey >= 120
+  only decides the bounding box and the silhouette. The file is sniffed by content,
+  not extension: WebP named `.png` is fine.
+- **At least 15% tone** once the cell is fitted to 40x40, or the bake dies with
+  *"<id> came out only 9% ink; too faint to read on e-ink"*. Nothing is substituted.
+- **`"style"` and `"thicken"` are gone** from `bold_sprite_sources.json`: every cell
+  bakes to a tone now, and the baker refuses a sheet that still carries them.
 
-### Why the art looks fine but the game does not
+### Seeing every stage of the art at once
 
-The baker runs seven steps on the way down to 40x40, and only the last one is
+The baker runs these steps on the way down to 40x40, and only the last one is
 what the panel shows. See all of them at once:
 
 ```bash
@@ -169,18 +179,17 @@ python3 tools/sprite_stages.py                 # -> sprite-stages.png
 python3 tools/sprite_stages.py --only soldier  # one row
 ```
 
-One row per sprite: source art, the box-resize into <=36x34, the hard
-threshold that survives it, the dilation and (for friendlies) the hollow
-erosion, the stored 40x40 tile, then a mock of that tile on grass and on
-forest with the paper rim, team badge and HP bar the game draws over it. The
-40x40 beside each name is true panel size; every other column is magnified
-4x with nearest-neighbour, no smoothing.
+One row per sprite: source art, the box-resize into <=36x34, the silhouette
+mask (the only thresholded thing in the pipeline), the stored 40x40 tone,
+then the same tile on grass and on forest as the panel draws it, with the
+paper rim, team badge and HP bar the game paints over it. The 40x40 beside
+each name is true panel size; every other column is magnified 4x with
+nearest-neighbour, no smoothing.
 
-Measured on the current art: friendlies lose about 40% of their ink to the
-hollow erosion (~400 px down to ~240) and end up as a thin outline; solid
-enemies *gain* ink (144-289 px up to 361-687) because dilation fuses their
-interior into one black blob, 73-95% of the tile. Those two effects are the
-whole difference between "looks fine" and "looks terrible".
+Column 4 and the two mock columns hold the same tone — no dither sits between
+storage and screen — so if they ever disagree the renderer is what to suspect,
+not the art. `tools/find_tile.py` is that check against a real dump: it reads a
+tile out of `sprites.h` and searches the dumped greys byte for byte.
 
 Then `make preview && make test`. Unit stats (HP, aim, damage) come from
 `tactical_sprite_map_with_descriptions.json`, not the art, so new pictures change no rules.

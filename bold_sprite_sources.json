@@ -13,14 +13,12 @@
         2,
         2
       ],
-      "thicken": 1,
       "sprites": [
         "player_units/soldier",
         "player_units/sniper",
         "player_units/heavy",
         "player_units/medic"
-      ],
-      "style": "hollow"
+      ]
     },
     {
       "file": "bold/enemies.png",
@@ -28,7 +26,6 @@
         2,
         2
       ],
-      "thicken": 1,
       "sprites": [
         "enemies/sectoid",
         "enemies/sniper",
@@ -42,7 +39,6 @@
         2,
         2
       ],
-      "thicken": 1,
       "sprites": [
         "objects_decor/rocks",
         "objects_decor/tree",
@@ -56,7 +52,6 @@
         1,
         1
       ],
-      "thicken": 1,
       "sprites": [
         "enemies/drone"
       ]

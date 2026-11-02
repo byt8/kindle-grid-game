@@ -763,17 +763,37 @@ static int sprite_on(int id, int x, int y) {
     return sp_at(id, x, y) != 0;
 }
 
+/* A tile pixel is 0 transparent, 1 paper, 2..9 a tone whose value minus 1
+ * is the ink level 0..8 (see sprites.h). The grey layer takes 0..15, so
+ * ink15() rescales it: 0 stays paper, 8 stays solid ink, and everything
+ * between is a real grey on the panel instead of a dither pattern laid
+ * over the pixels. Round-to-nearest going up, and exact the other way
+ * through ek_grey_rect's own dither fallback, so a build with no grey
+ * layer still lays down precisely the old 4x4 Bayer pattern. */
+static int ink15(int level8) { return (level8 * 15 + 4) / 8; }
+
+/* Draw one sprite row by row, running equal tones together: that is what
+ * keeps a whole sprite to a few dozen calls a row instead of forty. */
 static void blit_sprite(int x, int y, int id) {
     if (id < 0 || id >= SP_COUNT) {
         fprintf(stderr, "xcom: sprite %d is not real\n", id);
         exit(1);
     }
-    for (int r = 0; r < TILE; r++)
-        for (int c = 0; c < TILE; c++) {
+    for (int r = 0; r < TILE; r++) {
+        int c = 0;
+        while (c < TILE) {
             int v = sp_at(id, c, r);
-            if (v == 0) continue;
-            ek_px(x + c, y + r, v == 2 ? EK_INK : EK_PAPER);
+            if (v == 0) {
+                c++;
+                continue;
+            }
+            int len = 1;
+            while (c + len < TILE && sp_at(id, c + len, r) == v)
+                len++;
+            ek_grey_rect(x + c, y + r, len, 1, ink15(v - 1));
+            c += len;
         }
+    }
 }
 
 /* A paper rim, then the picture. On black trees a black soldier would
@@ -869,7 +889,7 @@ static void draw(void) {
             int ox = MAP_X + x * TILE;
             int oy = MAP_Y + y * TILE;
             if (!seen[y][x]) {
-                ek_dither_rect(ox, oy, TILE, TILE, 6);
+                ek_grey_rect(ox, oy, TILE, TILE, ink15(6));
                 continue;
             }
             unsigned char ch = (unsigned char)MAP[y][x];
@@ -1480,7 +1500,11 @@ int main(int argc, char **argv) {
         audio_stop();
         return 1;
     }
-    ek_mono(1);
+    /* Real greyscale: the sprites carry 16 tones and a dither would throw
+     * half of them away. If the layer cannot be allocated we fall back to
+     * dither, which is byte for byte what this game did before. */
+    if (ek_grey_enable() != 0)
+        fprintf(stderr, "xcom: no memory for the grey layer, dithering instead\n");
     ek_wait_updates(wait);
     if (force_clean) {
         /* The old behaviour: every update a clean GC16 refresh. */

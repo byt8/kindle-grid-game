@@ -732,6 +732,9 @@ static int hit(int x, int y) {
     return -1;
 }
 
+#ifdef EK_HOST
+/* Pipe-driven taps ("tap X Y" on stdin) exist only in the host build; the
+   Kindle build drives the same transitions from its press/release loop. */
 static void tap_at(int x, int y) {
     int b = hit(x, y);
     if (phase != PHASE_PLAY) {
@@ -751,6 +754,7 @@ static void tap_at(int x, int y) {
     if (b == ACT_QUIT) do_action(ACT_QUIT);
     else play_action(b);
 }
+#endif
 
 /* ---- self-test ---------------------------------------------------------- */
 

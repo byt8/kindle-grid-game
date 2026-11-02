@@ -37,9 +37,10 @@ updated: 2026-11-01
 
 ## Dead ends
 - Do not add `RotAt`, auto-firing traps, or the plan's extra score adders. They are not in `scratch/Rockman.asm`.
+- [verified 2026-11-01 src/rockman.c main] The two builds have separate input paths: `tap_at()` is called only from the `EK_HOST` stdin pipe (`tap X Y`), while the Kindle uses its own `ek_poll` press/release loop (held buttons repeat). `tap_at` is `#ifdef EK_HOST` for that reason — unwrapped it breaks `make rockman-kindle` under `-Werror=unused-function` while `make rockman-test` still passes, so the host test alone does not catch it.
 
 ## Do not redo
 - At speed 0 the timer kills on pass 6730 (256 for the first step, then 6 per step, 9 marks of 120). The self-test asserts that number.
 
 ## Open
-- Not built or played on a Kindle yet. `make rockman-kindle` needs the `kfb-build` docker image.
+- Built as `./rockman` (kfb-build image works), but not pushed or played yet: `./run-rockman-on-kindle.sh 192.168.0.66` timed out on SSH, so the device was off-network.

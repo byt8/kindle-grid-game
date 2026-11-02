@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Show every post-processing stage between the art in bold/ and the panel.
+"""Show every stage between the art in bold/ and the panel.
 
-The sheets look fine and the game looks wrong because the baker runs seven
-steps on the way from a 512x512 cell to a 40x40 tile: threshold, bounding
-box, area-resize into a 36x34 box, threshold again, ink dilation, a hollow
-erosion for friendlies, and centring. This prints those stages side by
+The sheets look fine and the game looks wrong because the baker runs a few
+steps on the way from a 512x512 cell to a 40x40 tile: a threshold for the
+bounding box, an area-resize into a 36x34 box, a silhouette mask that says
+which pixels are background, and centring. This prints those stages side by
 side, magnified with no smoothing, plus a mock of how the tile lands on the
 map (terrain, paper rim, team badge, HP bar) so feedback can name the step
 that broke the sprite instead of the result.
+
+The picture keeps its tone the whole way. The last three columns are drawn
+the way the panel draws them: the tone is turned into the same 4x4 Bayer
+dither ek_dither_rect() will lay down, because that is all a 1-bit canvas
+can carry.
 
     python3 tools/sprite_stages.py                     # -> sprite-stages.png
     python3 tools/sprite_stages.py --only soldier      # rows matching "soldier"
@@ -25,16 +30,17 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "bold_sprite_sources.json"
 
 TILE = 40
-TRANSPARENT, PAPER, INK = 0, 1, 2
+TRANSPARENT, PAPER = 0, 1
+INK = 9                            # solid ink, see bake_bold_sprites.pack()
 
-LEFT = 240          # label column: sprite id, style, and the 1:1 tile
+LEFT = 240          # label column: sprite id, tone, and the 1:1 tile
 COLW = 168
 ROWH_EXTRA = 14
 LEGEND_H = 76
 HEADER_H = 34
 DIVIDER_H = 22
 
-COLUMNS = ["source art", "resized to fit", "threshold", "dilate + hollow",
+COLUMNS = ["source art", "resized to fit", "silhouette mask",
            "tile 40x40", "in game \u00b7 grass", "in game \u00b7 forest"]
 
 
@@ -50,6 +56,11 @@ def load_baker():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+# The baker is imported once at module level: every renderer below has to
+# use its constants (tone values, the Bayer matrix) rather than copy them.
+bake = load_baker()
 
 
 def load_font():
@@ -163,10 +174,26 @@ def r_mask(buf, w, h, mag):
     return im.resize((w * mag, h * mag), Image.NEAREST).convert("RGB")
 
 
-def r_tile(buf, mag):
+def r_tile(buf, mag, panel=False):
+    """A 40x40 tile, either as stored or as the panel will show it.
+
+    panel=False: the tone as stored, so the grey that reaches sprites.h is
+    readable. panel=True: the grey ek_grey_rect() puts on the panel after
+    ink15() has scaled the level; transparency stays mid grey so the
+    silhouette edge is still visible over terrain.
+    """
+    data = []
+    for y in range(TILE):
+        for x in range(TILE):
+            v = buf[y * TILE + x]
+            if v == TRANSPARENT:
+                data.append(190)
+            elif panel:
+                data.append(bake.GREY_RAMP[bake.ink15(v - PAPER)])
+            else:
+                data.append(255 - (v - PAPER) * 255 // 8)
     im = Image.new("L", (TILE, TILE))
-    # 190 grey shows where the tile is transparent, as bake's preview does.
-    im.putdata([0 if v == INK else (255 if v == PAPER else 190) for v in buf])
+    im.putdata(data)
     if mag != 1:
         im = im.resize((TILE * mag, TILE * mag), Image.NEAREST)
     return im.convert("RGB")
@@ -195,26 +222,26 @@ def main():
     ncol = len(COLUMNS)
     width = LEFT + ncol * colw
 
-    bake = load_baker()
     manifest = json.loads(MANIFEST.read_text())
     font = load_font()
 
     art_rows, terrain_rows = [], []
     for sheet in manifest["sheets"]:
         cols, rws = sheet["grid"]
-        hollow = sheet.get("style", "solid") == "hollow"
         path = ROOT / sheet["file"]
         for i, sid in enumerate(sheet["sprites"]):
             if a.only and a.only not in sid:
                 continue
             g, gw, gh = bake.load_cell(path, cols, rws, i)
             trace = {}
-            tile = bake.cell_to_tile(g, gw, gh, sheet.get("thicken", 1),
-                                     hollow, trace=trace)
+            tile = bake.cell_to_tile(g, gw, gh, trace=trace)
             if tile is None:
                 die(f"{sid} produced no tile")
+            body = sum(1 for v in tile if v != bake.TRANSPARENT)
+            tone = sum(v - bake.PAPER for v in tile if v > bake.PAPER)
             art_rows.append({
-                "sid": sid, "tile": tile, "trace": trace, "hollow": hollow,
+                "sid": sid, "tile": tile, "trace": trace,
+                "pct": 100 * tone // (8 * body) if body else 0,
                 "unit": sid.startswith(("player_units/", "enemies/")),
                 "team_you": sid.startswith("player_units/"),
                 "terrain": bake.PATTERNS["terrain_tiles/grass"](),
@@ -230,11 +257,11 @@ def main():
         die("nothing matched --only " + repr(a.only))
 
     legend = [
-        "XCOM sprite pipeline: bold/ art  ->  tools/bake_bold_sprites.py  ->  src/sprites.h  ->  1-bit e-ink panel.",
-        "player_units bake HOLLOW: the silhouette is kept and the inside is forced white, so interior detail is thrown away by design. "
-        "enemies and objects bake SOLID: silhouette only, detail discarded.",
-        "Columns 2-4 are the real working size (<=36x34) blown up %dx with nearest-neighbour, no smoothing. "
-        "The 40x40 beside each name is actual panel size." % mag,
+        "XCOM sprite pipeline: bold/ art  ->  tools/bake_bold_sprites.py  ->  src/sprites.h  ->  16-level grey e-ink panel.",
+        "The picture keeps its tone: crop to the bounding box, area-resize into <=36x34, flood the background out, centre. "
+        "Nothing thresholds the picture, dilates it or hollows it -- friendlies and hostiles are told apart by silhouette and badge.",
+        "Columns 2-3 are the real working size (<=36x34) blown up %dx with nearest-neighbour, no smoothing. "
+        "Column 4 is the stored tone; the last two are the same tile as the panel actually draws it, greys and all. The 40x40 beside each name is actual panel size." % mag,
         "Objects replace their map tile outright (no rim, no badge, no HP bar); the forest column is blank for them on purpose.",
     ]
     legend_h = 14 + len(legend) * 17
@@ -266,24 +293,21 @@ def main():
         cells.append(("art", r_art(tr["src"][0], w, h, cell)))
         b, w, h = tr["small"]
         cells.append(("small", r_grey(b, w, h, mag)))
-        b, w, h = tr["small_ink"]
-        cells.append(("small_ink", r_mask(b, w, h, mag)))
-        b, w, h = tr["cut"]
-        cells.append(("cut", r_mask(b, w, h, mag)))
+        b, w, h = tr["mask"]
+        cells.append(("mask", r_mask(b, w, h, mag)))
         cells.append(("tile", r_tile(row["tile"], mag)))
         if row["unit"]:
             grass = mock_unit(row["tile"], row["terrain"], row["team_you"])
             forest = mock_unit(row["tile"], bake.PATTERNS["terrain_tiles/forest"](),
                                row["team_you"])
-            cells.append(("grass", r_tile(grass, mag)))
-            cells.append(("forest", r_tile(forest, mag)))
+            cells.append(("grass", r_tile(grass, mag, panel=True)))
+            cells.append(("forest", r_tile(forest, mag, panel=True)))
         else:
-            cells.append(("grass", r_tile(mock_object(row["tile"]), mag)))
+            cells.append(("grass", r_tile(mock_object(row["tile"]), mag, panel=True)))
             cells.append(("forest", None))   # objects replace the tile; no terrain
 
         draw.text((8, y + 8), row["sid"], font=font, fill=(0, 0, 0))
-        style = "hollow" if row["hollow"] else "solid"
-        draw.text((8, y + 26), style, font=font, fill=(120, 120, 120))
+        draw.text((8, y + 26), f"{row['pct']}% ink", font=font, fill=(120, 120, 120))
         img.paste(r_tile(row["tile"], 1), (LEFT - 56, y + 6))
 
         for i, (key, im) in enumerate(cells):
@@ -297,8 +321,8 @@ def main():
         draw.text((8, y + 8), row["sid"], font=font, fill=(0, 0, 0))
         draw.text((8, y + 26), "pattern", font=font, fill=(120, 120, 120))
         img.paste(r_tile(row["tile"], 1), (LEFT - 56, y + 6))
-        put(img, draw, LEFT + 4 * colw, y, colw, cell, r_tile(row["tile"], mag), font)
-        put(img, draw, LEFT + 5 * colw, y, colw, cell, r_tile(row["tile"], mag), font)
+        put(img, draw, LEFT + 4 * colw, y, colw, cell, r_tile(row["tile"], mag, panel=True), font)
+        put(img, draw, LEFT + 5 * colw, y, colw, cell, r_tile(row["tile"], mag, panel=True), font)
 
     y = body_y
     for row in art_rows:
