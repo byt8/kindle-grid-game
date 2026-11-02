@@ -8,9 +8,32 @@ panel (`ek_open(EK_TAKEOVER)`, `ek_grey_enable()`, `atexit(ek_close)`) and
 paints the game grid as 6x12 grey glyphs from the shared cell grid (full
 0..100 RGB triples, Rec.601 luma → ink 0..15, dark colour = solid ink).
 Polarity = brightness, confirmed by probe: lit cells dark glyphs, unlit stays
-paper. Kindles were offline — not yet pushed; run
-`./run-brogue-on-kindle.sh 192.168.0.63` and take a panel shot to verify the
-grey ramp on glass. Touch mapping (two-tap travel from the plan) still to do.
+paper. Touch mapping (two-tap travel from the plan) still to do.
+
+## 2026-11-02 .63 incident — first on-device run parked the fridge Kindle
+
+`./run-brogue-on-kindle.sh 192.168.0.63` pushed the game, took the screen
+(`pillow stop`, `framework stop`, `eink: UI taken over`), then lost contact —
+the monitor loop printed `cannot reach` forever. .63 was left running
+`brogue-kindle-app` with the framework down and Wi-Fi dead, so the device
+vanished from the LAN entirely (no ARP, no tcp/22 — it times out rather than
+refuses).
+
+- **Consequence: the USB drive does not mount while the device is stuck in
+  the takeover.** Windows enumerates `Kindle Internal Storage`
+  (serial `B011140822260CM1` = .63) but the partition reports **No Media**
+  — the userstore only appears when the framework USB stack runs. Retrying
+  drive-mode on Windows, disconnecting/re-enabling the PnP device, and
+  `Set-Disk -IsOffline $false` do not help; the screen must be handed back
+  first (tap QUIT then SURE), or the device rebooted to the library.
+- **Also parked**: an unmanaged watcher task `./run-brogue-on-kindle.sh
+  192.168.0.63` that loops `cannot reach` forever — kill it before working
+  on .63 again.
+- Recovery path documented in README "When it goes wrong": restore UI by
+  hand if reachable (`sh /mnt/us/fbdaemon/restore-kindle.sh`), else quit the
+  game from the panel, else reboot, then reinstall SSH via USB with
+  `push-provision.ps1` (provision.sh + sshserv.conf boot job) since dropbear
+  is not persistent on this device.
 
 ## What it is
 
