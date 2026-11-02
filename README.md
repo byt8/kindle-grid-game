@@ -44,6 +44,14 @@ make echo-probe                    # tiny ARM TCP echo server
 ./run-peer-test.sh                 # A=192.168.0.63 B=192.168.0.66; or pass IPs
 ```
 
+**Stop the Kindle falling asleep (fixed wifi/ssh dropouts while debugging):**
+
+```bash
+./tools/sleep-switch.sh on      # disable auto sleep (resets on reboot)
+./tools/sleep-switch.sh off     # re-enable
+./tools/sleep-switch.sh status  # confirm preventScreenSaver=1
+```
+
 It copies the game and its voice clips over, frees the touch screen, runs it, and
 puts the Kindle back to normal when you quit. **Tap a soldier**, tap a boxed square
 to walk, tap an alien then **FIRE**. **QUIT** then **SURE** exits; the game opens

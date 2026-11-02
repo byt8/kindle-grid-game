@@ -8,6 +8,7 @@
 
 Newest first. One line per task. Current truth is in `areas/`, not here.
 
+- 2026-11-02 — device/sleep — **Auto-sleep on the Kindle Touch is now a one-liner to kill: `lipc-set-prop com.lab126.powerd preventScreenSaver 1`** (that is exactly what the stock `~ds` search-bar trick runs — `/usr/bin/ds.sh` on the device contains that single line; KUAL's "Sleep Disable" extension does the same). Proven live on 192.168.0.66: flag went 0→1 and powerd state shows `Remaining time in this state: Unknown`, i.e. it never counts down to screen-saver → suspend → the wifi/ssh link stays up. New `tools/sleep-switch.sh` (`on|off|status`, same key/args as the run scripts) since the flag resets on reboot. Not the config-file route: this firmware's powerd reads `system/daemon/powerd/*` via libdynconf/appreg (no `/var/local/system/daemon/` dir, no `syscfg` binary, `preventScreenSuspension` prop doesn't exist), but the lipc property is the sanctioned toggle and it's live — no restart needed.
 - 2026-11-02 — brogue — **Backend builds, both targets.** Fixed the Makefile
   source list (was missing `platformdependent.c` + the Rapid/Bullet variant
   files: `undefined reference to glyphToUnicode` / `initializeGameVariantRapidBrogue`);
