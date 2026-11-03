@@ -587,7 +587,7 @@ static void conf_defaults(void) {
 
 static int  clock_alloc_ms;     /* per side, ms; 0 = no clock */
 static char g_conf_path[256];   /* where the clock choice is persisted */
-static const int TIMER_CHOICES[] = { 0, 60, 180, 600, 1800 };   /* seconds per side */
+static const int TIMER_CHOICES[] = { 0, 60, 180, 300, 600, 900, 1800 };   /* seconds per side: chess.com's off, 1, 3, 5, 10, 15, 30 min */
 static int  clock_set = 0;      /* index into TIMER_CHOICES that clock_alloc_ms matches */
 
 static char *trim(char *s) {
