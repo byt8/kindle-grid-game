@@ -118,6 +118,30 @@ panel ioctls, so the on-glass result still needs one look on a device.
 Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down, **QUIT** then **SURE** to exit.
 Pieces fall on a fixed beat. The panel still has to repaint each step. A grey repaint blinks. A black-and-white repaint jumps. Calib shows both.
 
+**Play it with the calibrated values** (what the tuner settled on — speed 200, clean 30, WFM DU):
+
+```bash
+make tetris-kindle && ./run-tetris-on-kindle.sh 192.168.0.66 --tuned --stats
+```
+
+`--tuned` is exactly `--speed 200 --clean-n 30 --wfm DU`. Each option works alone too.
+On the Kindle this prints one line per update; the `us=` field is how many **ms** that
+repaint really took.
+
+**What the numbers say, measured on the device:** a DU repaint of a few 8x8 tiles costs
+**~276–312 ms**. So 200 ms is *below the panel's floor* — the game cannot drop that fast
+and will run at roughly 300 ms instead. Tetris now says so once instead of silently
+playing slower than asked. The honest cadence is **~320 ms**, i.e. `--speed 320`.
+
+Two more measured facts:
+
+- **CLEAN 30 is worth keeping.** The GC16 clean frame costs ~631 ms (vs 276 ms for DU).
+  That is a real swallow of the 320 ms beat every 30 drops — acceptable, since it clears
+  the ghosting DU leaves.
+- **DU ghosting needs a longer clean, not just a shorter one.** The `folded=12` /
+  `folded=13` flushes in the log are the engine folding many dirty tiles into one rect;
+  a DU-only game slowly leaves old outlines, so keep CLEAN 30 rather than 0.
+
 **See the motion choice (calib):**
 
 On this PC, the picture of the screen:

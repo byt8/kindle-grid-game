@@ -159,6 +159,14 @@ static int bag_left;
 
 static int stats_on, force_clean, clean_next, probe;
 static int wfm_clean;
+
+/* Calibration values, settable so the tuned pair can be played as a real
+ * game instead of guessed at in the tuner. 0 = keep the level table. */
+static int speed_override;   /* ms between drops, 0 = drop_ms() level table */
+static int wfm_motion;       /* forced waveform on motion frames, 0 = AUTO   */
+static int clean_every;      /* GC16 clean every N drops, 0 = engine's own   */
+static int drop_n;           /* drops since the game started (clean cadence) */
+static int warned_slow;      /* the panel's real cost was reported once      */
 static volatile sig_atomic_t stop_req;
 #ifndef EK_HOST
 static uint32_t drop_at; /* next auto-drop deadline, anchored on a fixed beat */
@@ -212,6 +220,7 @@ static int ghost_y(void) {
 }
 
 static int drop_ms(void) {
+    if (speed_override) return speed_override;
     int ms = 800 - (level - 1) * 70;
     return ms < 140 ? 140 : ms;
 }
@@ -466,6 +475,7 @@ static int lock_piece(void) {
 
 static void step_down(void) {
     if (over) return;
+    drop_n++;
     if (fits(cur_pt, cur_rot, cur_x, cur_y + 1)) cur_y++;
     else lock_piece();
 }
@@ -473,6 +483,7 @@ static void step_down(void) {
 static void hard_drop(void) {
     if (over) return;
     while (fits(cur_pt, cur_rot, cur_x, cur_y + 1)) cur_y++;
+    drop_n++;
     lock_piece();
 }
 
@@ -483,6 +494,7 @@ static void reset_game(uint32_t seed) {
     over = 0;
     quit_armed = 0;
     running = 1;
+    drop_n = 0;
     rng_state = seed ? seed : 1;
     bag_left = 0;
     next_pt = pick_piece();
@@ -577,6 +589,10 @@ static void expire_buttons(void) {
 
 static void present(void) {
     int clean = force_clean || clean_next || redraw_all;
+    /* A clean fires on the calib cadence too: every N drops, like the tuner's
+     * CLEAN knob. count is advanced by the callers that actually drop a piece. */
+    if (!clean && clean_every > 0 && drop_n > 0 && drop_n % clean_every == 0)
+        clean = 1;
 
     if (redraw_all) {
         memset(btn_flash, 0, sizeof btn_flash); /* fresh paint, no flashes */
@@ -589,9 +605,21 @@ static void present(void) {
     }
     clean_next = 0;
 
-    ek_waveform(clean ? wfm_clean : 0);
+    ek_waveform(clean ? wfm_clean : wfm_motion);
     ek_stats st = ek_flush();
     ek_waveform(0);
+
+    /* An honest floor: if the panel's own refresh costs more than the beat we
+     * asked for, the drops cannot run at that speed. Say so once instead of
+     * silently playing slower than the number in --speed. */
+    if (!warned_slow && (int)st.us > drop_ms() + 20) {
+        warned_slow = 1;
+        fprintf(stderr,
+                "tetris: the panel needs %u ms per update but the beat is %d ms; "
+                "drops run as fast as the panel can, not at %d ms. "
+                "Fastest honest beat is about %u ms.\n",
+                st.us, drop_ms(), drop_ms(), st.us + 10u);
+    }
 
     if (stats_on)
         fprintf(stderr,
@@ -765,6 +793,10 @@ static void usage(void) {
             "  --seed N     same seed, same bag\n"
             "  --stats      print what each screen update cost\n"
             "  --clean      refresh the whole picture on every update (slow)\n"
+            "  --speed N    fixed ms between drops (default: the level table)\n"
+            "  --wfm NAME   waveform for motion frames: DU / GL16F / GC16F / AUTO\n"
+            "  --clean-n N  GC16 clean every N drops (0 = engine's own policy)\n"
+            "  --tuned      the calibrated set: speed 200, clean 30, WFM DU\n"
             "  --probe      log every drop and flush for timing (debug)\n");
 }
 
@@ -798,6 +830,29 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "--selftest")) do_test = 1;
         else if (!strcmp(argv[i], "--stats")) stats_on = 1;
         else if (!strcmp(argv[i], "--clean")) force_clean = 1;
+        else if (!strcmp(argv[i], "--tuned")) {
+            speed_override = 200; clean_every = 30; wfm_motion = -1; /* DU, resolved below */
+        } else if (!strcmp(argv[i], "--speed") && i + 1 < argc) {
+            char *end = NULL;
+            long v = strtol(argv[++i], &end, 10);
+            if (!end || *end || v < 50 || v > 5000) { usage(); return 2; }
+            speed_override = (int)v;
+        } else if (!strcmp(argv[i], "--clean-n") && i + 1 < argc) {
+            char *end = NULL;
+            long v = strtol(argv[++i], &end, 10);
+            if (!end || *end || v < 0 || v > 999) { usage(); return 2; }
+            clean_every = (int)v;
+        } else if (!strcmp(argv[i], "--wfm") && i + 1 < argc) {
+            const char *nm = argv[++i];
+            if (!strcasecmp(nm, "AUTO")) wfm_motion = 0;
+            else {
+                wfm_motion = ek_waveform_by_name(nm);
+                if (!wfm_motion) {
+                    fprintf(stderr, "tetris: unknown waveform '%s'\n", nm);
+                    return 2;
+                }
+            }
+        }
         else if (!strcmp(argv[i], "--no-takeover")) flags &= ~EK_TAKEOVER;
         else if (!strcmp(argv[i], "--no-wait")) wait = 0;
         else if (!strcmp(argv[i], "--probe")) probe = 1;
@@ -835,6 +890,14 @@ int main(int argc, char **argv) {
         ek_close();
         return 1;
     }
+    if (wfm_motion == -1) {            /* --tuned asked for DU by name */
+        wfm_motion = ek_waveform_by_name("DU");
+        if (!wfm_motion) {
+            fprintf(stderr, "tetris: DU waveform is missing\n");
+            ek_close();
+            return 1;
+        }
+    }
     ek_mono(1);
     ek_wait_updates(wait);
     if (force_clean) {
@@ -845,7 +908,7 @@ int main(int argc, char **argv) {
         /* The engine tiles the panel itself, so most frames are a handful of
          * 8x8 dirty tiles: let it pick DU / GL16_FAST and clean the area that
          * keeps re-inking every 30 flushes. */
-        ek_waveform(0);
+        ek_waveform(wfm_motion);   /* 0 = AUTO, or the tuned waveform */
         ek_ghost(6, 30);
         ek_policy(60, 4, 30);
     }

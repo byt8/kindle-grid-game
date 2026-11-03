@@ -150,6 +150,21 @@ Rule to keep: **any screen that draws `for (i=0..4) draw_btn(i)` gets NEXT for
 free; a screen with a custom button row must add its own, and a host tap-chain
 test is the only thing that catches a missing one.**
 
+## Measured: the tuned set on the device (2026-11-02, tetris @192.168.0.63)
+
+Ran `./run-tetris-on-kindle.sh 192.168.0.63 --tuned --stats` (tuned = speed 200,
+clean 30, WFM DU). Numbers from `/mnt/us/tetris-run.log`:
+
+- **DU repaint of 4 rects / ~96 tiles costs 271–312 ms.** So a 200 ms beat is
+  below the panel floor. `--speed 200` cannot be honoured; real cadence ≈ 300 ms.
+  Added a one-shot honest warning in tetris `present()` when `st.us > drop_ms()+20`.
+- **GC16 clean frame = 631 ms** (vs 276 ms DU). At 30 drops that is one long
+  swallow per 30 — worth it, it clears DU ghosting.
+- Tetris now takes `--speed N`, `--clean-n N`, `--wfm DU|GC16F|GL16F|AUTO`, and
+  `--tuned` (= the three calibrated values). `drop_n` counts steps; `present()`
+  forces a GC16 when `drop_n % clean_every == 0`.
+- Gameplay is unaffected: `make tetris-test` still passes (20 solid blocks).
+
 ## Open / next
 
 - [ran 2026-11-02 @192.168.0.66 port 22 open] `make calib && ./run-calib-on-kindle.sh 192.168.0.66` pushed and the app took the panel (fb0 600x800, touch event3). User said **"du seems to work well"** — DU is the right motion waveform. Next: bake DU into the games' motion flushes (tetris already auto-picks DU when nothing forces grey), and read the two RX ms numbers only if the beat still needs tuning.
