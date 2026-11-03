@@ -165,6 +165,26 @@ clean 30, WFM DU). Numbers from `/mnt/us/tetris-run.log`:
   forces a GC16 when `drop_n % clean_every == 0`.
 - Gameplay is unaffected: `make tetris-test` still passes (20 solid blocks).
 
+## Settled: level 1 = 600 ms (2026-11-02, user feedback)
+
+User played the 200-speed build: *"its better - not perfect - but its too fast for
+first level. about half that would be ok."* 200 was already the panel floor, so
+"half the speed" = double the interval = **600 ms**.
+
+What changed in `src/tetris.c`:
+
+- `LEVEL_1_TUNED 600` — what `--tuned` starts at (was 200).
+- `PANEL_FLOOR 320` replaces the old hardcoded `140`. Level table is still
+  800 − 70/level, clamped to `PANEL_FLOOR`.
+- `--speed N` **refuses** `N < 320` with an explicit message and exit 2. It does
+  *not* clamp: clamping would hide which number is really in force.
+- `--speed N` still accelerates 70 ms per level (it used to freeze the beat).
+- Selftest now asserts `drop_ms() == PANEL_FLOOR` at level 40.
+
+Re-measured on .63 with the 600 build: **523 flushes, all DU, 276–312 ms each**,
+and the "panel needs more" warning never fired — the beat is genuinely honoured
+now. `us=1566` / `us=1015` blips are single-copy stalls (powerd/SD), not the panel.
+
 ## Open / next
 
 - [ran 2026-11-02 @192.168.0.66 port 22 open] `make calib && ./run-calib-on-kindle.sh 192.168.0.66` pushed and the app took the panel (fb0 600x800, touch event3). User said **"du seems to work well"** — DU is the right motion waveform. Next: bake DU into the games' motion flushes (tetris already auto-picks DU when nothing forces grey), and read the two RX ms numbers only if the beat still needs tuning.

@@ -118,20 +118,25 @@ panel ioctls, so the on-glass result still needs one look on a device.
 Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down, **QUIT** then **SURE** to exit.
 Pieces fall on a fixed beat. The panel still has to repaint each step. A grey repaint blinks. A black-and-white repaint jumps. Calib shows both.
 
-**Play it with the calibrated values** (what the tuner settled on — speed 200, clean 30, WFM DU):
+**Play it with the calibrated values** (speed 600, clean 30, WFM DU):
 
 ```bash
-make tetris-kindle && ./run-tetris-on-kindle.sh 192.168.0.66 --tuned --stats
+make tetris-kindle && ./run-tetris-on-kindle.sh <kindle-ip> --tuned --stats
 ```
 
-`--tuned` is exactly `--speed 200 --clean-n 30 --wfm DU`. Each option works alone too.
+`--tuned` is exactly `--speed 600 --clean-n 30 --wfm DU`. Each option works alone too.
 On the Kindle this prints one line per update; the `us=` field is how many **ms** that
 repaint really took.
 
 **What the numbers say, measured on the device:** a DU repaint of a few 8x8 tiles costs
-**~276–312 ms**. So 200 ms is *below the panel's floor* — the game cannot drop that fast
-and will run at roughly 300 ms instead. Tetris now says so once instead of silently
-playing slower than asked. The honest cadence is **~320 ms**, i.e. `--speed 320`.
+**~276–312 ms**, so **600 ms** leaves a real, even wait between drops. Earlier builds used
+200 ms, which is *below what the panel can paint* — the game ran at ~300 ms whatever the
+number said, and level 1 felt too fast. **320 ms is the hard floor**; asking for less is
+refused with a message rather than quietly rounded up:
+
+```
+tetris: --speed 200 is under the panel floor of 320 ms (one DU repaint costs ~276-312 ms); pick 320 or more
+```
 
 Two more measured facts:
 
@@ -180,9 +185,11 @@ asked for, the panel is really keeping that beat. The **VERDICT** line prints
 1. **WFM → DU** (tap WFM, then `+` until the value row says DU). DU is the 1-bit
    motion waveform: one black push per step, no grey zap. A grey waveform's zap
    is a real time cost, not a poison — see step 3.
-2. **SPEED → start at 800** (tetris level 1). Watch the VERDICT line. If it says
+2. **SPEED → start at 600** (tetris level 1). 600 is measured: a DU repaint costs
+   ~276–312 ms, so 600 leaves a real gap. Watch the VERDICT line. If it says
    LAGGING, raise SPEED by 50 until it says KEEPS THE BEAT. That number is your
-   steady cadence — bake it into the game.
+   steady cadence — bake it into the game. Anything under **320** is refused,
+   because the panel physically cannot paint a frame that fast.
 3. **Grey is a trade, not a fix.** If the game needs real grey (XCOM art), the
    mid-step zap is unavoidable; the FLASH number on the tuner is how many ms each
    drop costs. Grey motion will *never* look metronome-even — that's physics, not

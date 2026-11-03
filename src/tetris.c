@@ -219,10 +219,31 @@ static int ghost_y(void) {
     return y;
 }
 
+/* The level table, the panel floor, and the tuned level-1 speed.
+ *
+ * Measured on the device: a DU repaint of a falling piece costs ~276-312 ms.
+ * So any beat at or under ~300 ms is the panel's own limit, not a speed --
+ * it plays at ~300 ms whatever was asked for. That is why 200 read as "too
+ * fast", and 600 (about double) is the first level-1 beat with a real, even
+ * wait between drops.
+ *
+ * PANEL_FLOOR clamps every level, so a late level cannot ask the glass for
+ * something it cannot paint. LEVEL_1_TUNED is what --tuned (and so calib's
+ * numbers) start at; the plain table still starts at 800. */
+#define LEVEL_STEP     70
+#define PANEL_FLOOR    320
+#define LEVEL_1_TUNED  600
+
 static int drop_ms(void) {
-    if (speed_override) return speed_override;
-    int ms = 800 - (level - 1) * 70;
-    return ms < 140 ? 140 : ms;
+    int ms;
+    if (speed_override) {
+        /* A fixed speed still gets faster per level, at the same 70 ms a level
+         * the table uses -- otherwise --speed would freeze the difficulty. */
+        ms = speed_override - (level - 1) * LEVEL_STEP;
+    } else {
+        ms = 800 - (level - 1) * LEVEL_STEP;
+    }
+    return ms < PANEL_FLOOR ? PANEL_FLOOR : ms;
 }
 
 static void draw_cell(int cx, int cy, int style);
@@ -770,7 +791,7 @@ static int selftest(void) {
     int fast = drop_ms();
     expect(fast < slow, "a higher level drops the piece sooner");
     level = 40;
-    expect(drop_ms() >= 140, "the speed has a floor");
+    expect(drop_ms() == PANEL_FLOOR, "no level asks for less than the panel can paint");
 
     /* Leave the machine in a clean state for whatever runs next. */
     memset(drawn, 0xff, sizeof drawn);
@@ -793,10 +814,10 @@ static void usage(void) {
             "  --seed N     same seed, same bag\n"
             "  --stats      print what each screen update cost\n"
             "  --clean      refresh the whole picture on every update (slow)\n"
-            "  --speed N    fixed ms between drops (default: the level table)\n"
+            "  --speed N    fixed level-1 ms between drops (default 600)\n"
             "  --wfm NAME   waveform for motion frames: DU / GL16F / GC16F / AUTO\n"
             "  --clean-n N  GC16 clean every N drops (0 = engine's own policy)\n"
-            "  --tuned      the calibrated set: speed 200, clean 30, WFM DU\n"
+            "  --tuned      the calibrated set: speed 600, clean 30, WFM DU\n"
             "  --probe      log every drop and flush for timing (debug)\n");
 }
 
@@ -831,11 +852,23 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--stats")) stats_on = 1;
         else if (!strcmp(argv[i], "--clean")) force_clean = 1;
         else if (!strcmp(argv[i], "--tuned")) {
-            speed_override = 200; clean_every = 30; wfm_motion = -1; /* DU, resolved below */
+            speed_override = LEVEL_1_TUNED;
+            clean_every = 30;
+            wfm_motion = -1;   /* DU, resolved by name below */
         } else if (!strcmp(argv[i], "--speed") && i + 1 < argc) {
             char *end = NULL;
             long v = strtol(argv[++i], &end, 10);
             if (!end || *end || v < 50 || v > 5000) { usage(); return 2; }
+            /* Refuse rather than clamp: a drop costs ~276 ms to paint, so a
+             * smaller number cannot be honoured and quietly becoming 320
+             * would hide which number is really in force. */
+            if (v < PANEL_FLOOR) {
+                fprintf(stderr,
+                        "tetris: --speed %ld is under the panel floor of %d ms "
+                        "(one DU repaint costs ~276-312 ms); pick %d or more\n",
+                        v, PANEL_FLOOR, PANEL_FLOOR);
+                return 2;
+            }
             speed_override = (int)v;
         } else if (!strcmp(argv[i], "--clean-n") && i + 1 < argc) {
             char *end = NULL;
