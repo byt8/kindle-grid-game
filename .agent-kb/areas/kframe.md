@@ -17,7 +17,8 @@ updated: 2026-11-03
 - [verified 2026-11-03 src/kframe.c] Volume is `amixer sget/sset Speaker`. If amixer fails, the page shows the error and `+`/`-` do not invent a level.
 - [verified 2026-11-03 src/kframe.c] Wi-fi still shells out to `/mnt/us/chess-wifi.sh`. The filename is historical. The screens moved here from `chess.c`.
 - [verified 2026-11-03 src/chess.c] Other games are not wired. Their own QUIT buttons are unchanged.
-- [ran 2026-11-03 make chess-test] Host selftest, menu picture, volume page, and two-tap quit all passed. Volume on this PC prints `amixer: not found`. Not run on a Kindle.
+- [ran 2026-11-03 make chess-test] Host selftest, menu picture, volume page, and two-tap quit all passed. Volume on this PC prints `amixer: not found`.
+- [ran 2026-11-03 ssh .63] The file `./run-chess-on-kindle.sh` pushes is `./chess`, and it does not rebuild unless asked. On 2026-11-03 that file was still the 1 Nov ARM binary (111900 bytes, no `THIS GAME` string) while `chess-host` was new, so a deploy looked identical. New binary is 116004 bytes. After the push, `pidof chess` was 5925 and the log said `grab OK` then `board loop`. The glass was not seen from here.
 
 ## Built
 - Chess: top-right hamburger. Menu order is QUIT, VOLUME, WIFI, then NEW and RETRY. QUIT needs a second tap (`SURE?`). Entry: `kframe_init` from `open_frame`.
@@ -30,3 +31,4 @@ updated: 2026-11-03
 ## Open
 - Tetris, sudoku, xcom, rockman, pvz, calib, brogue do not call `kframe` yet.
 - Volume has not been tried on a Kindle, where `amixer` and the `Speaker` control exist.
+- The glass after the .63 restart was not looked at from this PC. The running binary is the new one (`THIS GAME` is in `/mnt/us/chess`).

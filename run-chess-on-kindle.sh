@@ -16,8 +16,14 @@ cd "$(dirname "$0")"
 
 KJ=jailbreak-kindle/kindle-tools
 
+# Always rebuild when src/chess.c or src/kframe.c is newer. Copying the old
+# ./chess is what shipped the pre-menu game on 2026-11-03: the host binary
+# was new, this file was still the 1 November ARM build, and the Kindle
+# looked unchanged.
+echo "run-chess-on-kindle: building ./chess"
+make chess-kindle
 if [ ! -f ./chess ]; then
-    echo "run-chess-on-kindle: no Kindle binary. Run: make chess-kindle" >&2
+    echo "run-chess-on-kindle: make chess-kindle did not produce ./chess" >&2
     exit 1
 fi
 if [ ! -f ./grabtest ]; then

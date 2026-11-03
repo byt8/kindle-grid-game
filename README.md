@@ -72,12 +72,13 @@ advances you to the next one.
 **Play chess on the Kindle:**
 
 ```bash
-./run-chess-on-kindle.sh 192.168.0.66   # always pass the IP
+./run-chess-on-kindle.sh 192.168.0.63   # builds ./chess first, then pushes it
 ```
 
-Tap a piece, tap a square. The **button at the top right** opens one menu:
-**QUIT** (tap it twice), **VOLUME**, **WIFI**, then this game's **NEW** and **RETRY**.
-Only chess has this menu so far. The other games still use their own buttons.
+The script rebuilds `./chess` before it copies. A push of an old `./chess` looks
+like nothing changed. On the glass the three bottom buttons are gone. The new
+control is the small button at the **top right**: **QUIT** (tap twice),
+**VOLUME**, **WIFI**, then **NEW** and **RETRY**. Only chess has this menu.
 
 **Play Tetris on the Kindle:**
 
