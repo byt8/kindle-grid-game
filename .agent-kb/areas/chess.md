@@ -14,10 +14,11 @@ NEW, RETRY and TIMER are chess's own rows under the shared ones.
 
 ## Chess clock
 
-The TIMER row in the shared menu cycles `TIMER_CHOICES[] = {0, 60, 180, 600,
-1800}` seconds per side; the choice is persisted as `clock = N` in
+The TIMER row in the shared menu cycles `TIMER_CHOICES[] = {0, 60, 180, 300,
+600, 900, 1800}` seconds per side (chess.com's set: off, 1, 3, 5, 10, 15,
+30 min); the choice is persisted as `clock = N` in
 `chess.conf` (survives a reboot), and `timer_label_set()` renders
-`TIMER: off / 1 min / 3 min / 10 min / 30 min`. `clock_show()` draws
+`TIMER: off / 1 min / 3 min / 5 min / 10 min / 15 min / 30 min`. `clock_show()` draws
 `W m:ss  B m:ss` top right of the board; `clock_poke()` ticks only the side to
 move while no menu is open (and not while the LLM owes a reply — the model's
 wait is not burned against you), `clock_restart()` hands the clock over after a
