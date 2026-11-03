@@ -88,9 +88,11 @@ drawn at the top right of the board, the clock only runs while it is that
 side's turn, and running out of time loses the game. The LLM is told the clock
 state too, so it answers quickly when you are short of time.
 
-After each move the board's `present()` forces one GC16 clean of the moved
-squares (`ek_force_full()`), so a moved sprite cannot leave a faint ghost on its
-old square under the grey layer.
+Tapping a piece shows only a highlight ring: legal-move dots are deliberately
+not drawn. A moved piece can still leave a faint ghost on its old square — the
+first attempt (`ek_force_full()` per move) did not fix it, because that only
+sends a *partial-mode* GC16 and the engine never issues a real full refresh
+after the first paint. Open item, see `.agent-kb/areas/chess.md`.
 
 **Play Tetris on the Kindle:**
 

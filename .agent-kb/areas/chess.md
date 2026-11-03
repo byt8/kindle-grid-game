@@ -36,21 +36,44 @@ pieces are just the same tile scaled down at draw time.
   piece on a light and a dark square at panel grey/scale. Rerun the baker to
   regenerate the header if the art changes; chess.c and the Makefile stay put.
 
-### Sprite ghosting after a move (grey tones linger)
+### Sprite ghosting after a move (grey tones linger) — STILL OPEN
 
-After a half-move the from/to squares can keep a faint piece silhouette. Cause:
-with the grey layer on, every chess flush is already a GC16 **partial** over the
-diff, and a partial GC16 parks the pigment halfway only where it re-drives — the
-pixels a moved sprite leaves behind are never re-driven, so Pearl residue stays.
-The engine's designed anti-dote is `ek_force_full()`: it makes the **next flush
-GC16-clean exactly the accumulated moving region** (verified on host: a 1-rect
-flush reports `full=0 wfm=GC16`), instead of waiting for the every-30-dirty-frames
-soft clean (chess only flushes ≈1 rect per move, so 30 dirty frames is many moves
-away). `src/chess.c` now sets a `clean_next` flag wherever a half-move lands
-(`human_move`, `do_promo`, `play_ai`, the `--fake-ai` batch) and the board's
-`present()` calls `ek_force_full()` before its flush when it is set. This is the
-same "big change -> clean" idea xcom's `clean_next`/`end_turn` uses; the host
-cannot show the ghost (it has no Pearl), only the driver numbers.
+After a half-move the from/to squares can keep a faint piece silhouette (the
+user confirmed it on the panel after the first fix attempt).
+
+**The first fix did nothing, and why:** `clean_next` + `ek_force_full()` was
+shipped (commit `ed34d6c`) on the theory that it triggers a GC16 clean of the
+moved region. It does trigger — but read `eink.c`'s flush path:
+`ek_force_full()` only sets `since_full = policy_full_every`, which makes the
+next flush take the `want_full` branch, and **that branch submits
+`UPDATE_MODE_PARTIAL`** (eink.c:1187). Searching the whole engine,
+`UPDATE_MODE_FULL` appears exactly once: the very first paint (eink.c:1140).
+So no engine API other than first paint can ever send a genuine full-mode
+refresh — the "clean" every game (xcom `clean_next`, tetris, rockman) calls is
+a partial-mode GC16, and on this panel a partial GC16 clearly does not lift the
+Pearl residue a moved grey sprite leaves. Host cannot show this: `host_mode`
+stubs `submit_update` away entirely (eink.c:915), so any host "verified"
+flush numbers prove nothing about the glass.
+
+**The proven pattern on this hardware:** `kfb.c`'s `blank_panel()` — the code
+that definitively wipes a mangled screen — submits a full-screen region with
+`UPDATE_MODE_FULL` + `WFM_GC16`. Same as first paint. The engine's own policy
+comment says the same: one GC16 cleanup "to clear DU ghosting".
+
+**The fix (needs a shared-constituent change, go-ahead required):** add a
+generic API to `jailbreak-kindle/kindle-tools/fbdaemon/engine/eink.c`, e.g.
+`ek_full_refresh()` — flag that makes the next flush submit its rects (or the
+panel) with `UPDATE_MODE_FULL`, default behaviour of every existing caller
+unchanged. Chess's `present()` then calls it from `clean_next` instead of
+`ek_force_full()`. No consumer named, pure option. Engine note: while writing,
+consider whether the ghost-clean branch itself should use FULL mode when the
+ghost region is small (it is what that branch is for), but that would change
+xcom/tetris/rockman behaviour — keep it opt-in via the new API first.
+
+**Not the cause:** the software side is correct — `present()` does
+`ek_clear(EK_PAPER)` (which resets the grey layer to 255 everywhere, eink.c:478)
+and redraws every frame, so the pushed pixels for the vacated square are right;
+host dump of the canvas shows no stale piece. The ghost lives on the glass only.
 
 ### THE `ek_mono` grey killer (found on device)
 
@@ -144,6 +167,12 @@ make chess-kindle          # static ARM musl, docker kfb-build, 83 KB
 600x800: top bar 0-64 with the hamburger at (548, 2), board 28,64 with 68 px
 squares, comment lines from 616. No bottom button row. Shapes are drawn in a
 0..100 box and scaled; squares are dithered, not grey.
+
+**No move hints (user request, 2026-11-03):** the legal-move dots (12x12 fill on
+empty targets) and capture rings (inner rect on occupied targets) were removed
+from `draw_board`; a selected piece now shows only the triple-ring selection
+outline. `nlegal`/`legal_now` are still computed (they gate the tap-to-move) —
+only the drawing loop is gone.
 
 ## Wi-fi setup screen (for a gifted unit)
 

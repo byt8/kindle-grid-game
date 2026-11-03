@@ -1179,15 +1179,8 @@ static void draw_board(void) {
             ek_rect(x, y, SQ_PX, SQ_PX, EK_INK);
         }
     }
-    /* the human's legal targets, then the pieces over the top */
+    /* the pieces over the top; sel keeps a plain highlight ring */
     if (sel >= 0) {
-        for (int i = 0; i < nlegal; i++) {
-            if (legal_now[i].from != sel) continue;
-            int f = FILE_OF(legal_now[i].to), r = RANK_OF(legal_now[i].to);
-            int x = BOARD_X + f * SQ_PX, y = BOARD_Y + (7 - r) * SQ_PX;
-            if (P.sq[legal_now[i].to]) ek_rect(x + 2, y + 2, SQ_PX - 4, SQ_PX - 4, EK_INK);
-            else ek_fill_rect(x + SQ_PX / 2 - 6, y + SQ_PX / 2 - 6, 12, 12, EK_INK);
-        }
         int f = FILE_OF(sel), r = RANK_OF(sel);
         int x = BOARD_X + f * SQ_PX, y = BOARD_Y + (7 - r) * SQ_PX;
         ek_rect(x, y, SQ_PX, SQ_PX, EK_INK);
@@ -1253,10 +1246,13 @@ static void present(void) {
     }
     ek_text(12, 740, "top right opens quit, volume, wi-fi", EK_INK);
     kframe_paint();
-    /* A half-move redraws the from/to squares but the previous sprite's mid-grey
-     * tones leave a faint ghost under DU/partial refreshes. Force the next flush
-     * to GC16-clean exactly the region that has been moving, instead of waiting
-     * for the engine's every-30-dirty-frames soft clean. */
+    /* A half-move leaves a faint ghost of the moved piece on its old square.
+     * ek_force_full() merges the moving region into one GC16 clean on the next
+     * flush -- but note the engine submits that with UPDATE_MODE_PARTIAL, and a
+     * partial-mode GC16 does NOT lift the residue on this panel (verified: the
+     * ghost survived this call on device). A real UPDATE_MODE_FULL is only sent
+     * by the engine's first paint; chess needs a full-refresh engine API to
+     * finish this fix (see .agent-kb/areas/chess.md, "Sprite ghosting"). */
     if (clean_next) {
         clean_next = 0;
         ek_force_full();
