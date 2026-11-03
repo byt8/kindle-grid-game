@@ -75,7 +75,9 @@ advances you to the next one.
 ./run-chess-on-kindle.sh 192.168.0.66   # always pass the IP
 ```
 
-Tap a piece, tap a square. **QUIT** then **SURE** gives the screen back.
+Tap a piece, tap a square. The **button at the top right** opens one menu:
+**QUIT** (tap it twice), **VOLUME**, **WIFI**, then this game's **NEW** and **RETRY**.
+Only chess has this menu so far. The other games still use their own buttons.
 
 **Play Tetris on the Kindle:**
 

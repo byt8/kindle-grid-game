@@ -6,10 +6,11 @@ moves come back. `chess.conf` holds the real key and is gitignored.
 
 ## What it is
 
-`src/chess.c` — one file, you are White on a 600x800 touchscreen, DeepSeek is
-Black and writes one line of trash talk under the board. Same shape as
-`src/xcom.c`: single-file game + shared e-ink engine (`EK_HOST` for the PC
-build), tap-to-pick/tap-to-move, QUIT+SURE to give the screen back.
+`src/chess.c` — you are White on a 600x800 touchscreen, DeepSeek is
+Black and writes one line of trash talk under the board. Tap-to-pick/tap-to-move.
+Quit, volume, wi-fi and the power-key sleep are the shared shell in
+`src/kframe.c` (see `areas/kframe.md`). The hamburger is the top-right corner.
+NEW and RETRY are chess's own rows under the shared ones.
 
 ## Commands that matter
 
@@ -71,14 +72,14 @@ make chess-kindle          # static ARM musl, docker kfb-build, 83 KB
 
 ## Screen layout
 
-600x800: top bar 0-64, board 28,64 with 68 px squares, comment lines from 624,
-QUIT/button row at 744. Shapes are drawn in a 0..100 box and scaled; squares are
-dithered, not grey.
+600x800: top bar 0-64 with the hamburger at (548, 2), board 28,64 with 68 px
+squares, comment lines from 616. No bottom button row. Shapes are drawn in a
+0..100 box and scaled; squares are dithered, not grey.
 
 ## Wi-fi setup screen (for a gifted unit)
 
 The stock Wi-Fi dialog is unreachable once the game owns the panel, so the game
-draws its own: `wifi_setup()` in `src/chess.c` (list of networks → drawn
+draws its own: `kframe_wifi_setup()` in `src/kframe.c` (list of networks → drawn
 keyboard for the name if needed → drawn keyboard for the password → failure
 screen with TRY AGAIN / OTHER NETWORKS). Joining is shelled out to
 `/mnt/us/chess-wifi.sh` (`tools/chess-wifi.sh`), which uses `wpa_cli` on
@@ -230,7 +231,7 @@ running, not inferred:
     saturated buffer then hides every press. Measured: the buffer held exactly 5
     `PWRON1` lines while its whole 16 KB turned over in minutes.
 
-How the code finds a press now (`pwr_presses()`, `pwr_log_grew()`):
+How the code finds a press now (`kframe_pwr_presses()`, `kframe_pwr_log_grew()` in `src/kframe.c`):
 `klogctl(SIZE_BUFFER)` then `klogctl(READ_ALL)` 150 ms apart into two buffers;
 `pwr_log_grew()` finds where the older copy's last 128 bytes now sit in the
 newer one, which is exactly how many bytes were written in between, and only
@@ -253,13 +254,13 @@ game would eat the device's `dmesg` and destroy the evidence of its own waking.
   (one place, covers xcom/tetris/chess/menu identically) and `restore()` starts
   it again on exit. Chess's own power-key sleep still works — it reads the
   kernel log, not powerd.
-- `sleep_now()`: `pwr_drain(200)`, paint ASLEEP (`ek_force_full`), write `mem`
+- `sleep_now()` in `src/kframe.c`: `pwr_drain(200)`, paint ASLEEP (`ek_force_full`), write `mem`
   to `/sys/power/state` (the write returns on wake), log `asleep for N s` from
   /proc/uptime, `pwr_drain(800)` so the waking press is not counted again,
   `ek_force_full` + `present()`, then rejoin wi-fi with `chess-wifi.sh auto`
   when `wifi_status()` says it is gone.
 - A press during the model's wait cancels the question: `run_curl()` waits in
-  `select(2)` with a 200 ms timeout and kills curl when `pwr_presses()` reports
+  `select(2)` with a 200 ms timeout and kills curl when `kframe_pwr_presses()` reports
   anything at all.
 - A write failure to `/sys/power/state` shows on the status line and stderr and
   is never swallowed.

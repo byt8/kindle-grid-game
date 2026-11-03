@@ -16,23 +16,23 @@
  *     reported on the screen. The game never invents a move to keep going.
  *
  * Screen is 600x800, one bit, touch: 8x8 board of 68 px squares, a status
- * bar on top, the model's remarks underneath, three buttons at the bottom.
+ * bar on top, the model's remarks underneath. Quit, volume, wi-fi and the
+ * power-key sleep live in the shared menu (src/kframe.c): the hamburger is
+ * the top-right corner. NEW and RETRY are this game's own rows in that menu.
  */
 #include "eink.h"
+#include "kframe.h"
 
 #include <ctype.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/klog.h>
 #include <sys/select.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <time.h>
 #include <unistd.h>
 
 /* ---- the board --------------------------------------------------------- */
@@ -686,156 +686,6 @@ static int json_content(const char *body, char *out, size_t n) {
     return -1;
 }
 
-/* ---- the power button --------------------------------------------------
- * The power button is not an input device on this Kindle. Measured on the
- * device: 90 s of presses and 120 s more produced *zero* events on every
- * /dev/input/eventN, INCLUDING event2 -- "whitney-button", which only ever
- * carries the touch codes. /proc/whitney_button is not the key either: it only
- * ever says "unlocked", because it reports whether the screen saver has locked
- * the machine, not whether the key is down.
- *
- * What a press does produce is one `pmic: PWRON1 event` line in the kernel log,
- * readable from /dev/kmsg, and a bump of PMIC_IRQ in /proc/interrupts.
- *
- * The game reads /dev/kmsg, not the PMIC_IRQ counter, because that counter
- * counts *every* power-chip interrupt -- charger, RTC, USB, and the wake from
- * suspend itself. Using it put the game to sleep with nobody touching it. The
- * PMIC_IRQ line is still handy as a human check: one bump per press.
- *
- * Reading the log works with powerd stopped, which is what the game wants:
- * powerd answers a press with the Kindle's screen saver, and with the game
- * holding the panel that brought the whole reader UI back over the board. So the
- * game stops powerd (see main) and sleeps and wakes the machine itself.
- *
- * pwr_latch is set when a press has been seen and not yet acted on; the event
- * loop is the only place that acts on it.
- */
-#define PWR_STATE "/sys/power/state"
-
-/* The kernel log, reached the way dmesg reaches it. This kernel is 2.6.31: it has
- * a /dev/kmsg node but no devkmsg driver behind it, so every read of that node
- * fails with EINVAL (tools/kmsgprobe.c shows this). klogctl(READ_ALL) reads the
- * ring buffer instead and, unlike /proc/kmsg, does not consume it.
- */
-#define PWR_LOG_READ_ALL 3
-#define PWR_LOG_SIZE     10
-#define PWR_LOG_MAX      (256 * 1024)
-#define PWR_LOG_EVERY_MS 150      /* reading 100+ KB is not free on this arm */
-
-static void set_status(const char *fmt, ...);   /* defined further down */
-
-static int pwr_latch;
-
-/* How many power-button records a run of kernel log text holds. One press
- * writes `pmic: PWRON1 event`; nothing else in this kernel says PWRON1, which is
- * why PMIC_IRQ (which counts charger, RTC, USB and the wake from suspend too)
- * is not used. Split out so --selftest can check it against real text. */
-static int count_pwr_records(const char *text) {
-    int n = 0;
-    for (const char *p = strstr(text, "PWRON1"); p; p = strstr(p + 6, "PWRON1")) n++;
-    return n;
-}
-
-/* How many bytes were written to the log between two looks. The buffer is a
- * fixed size ring that is always full, so a new record pushes the oldest bytes
- * out of the front: the tail of the older copy reappears earlier in the newer
- * one, and the distance it moved is exactly how much was written. -1 when it
- * moved further than the probe can see.
- *
- * Split out so --selftest can check it against synthetic buffers. */
-static int pwr_log_grew(const char *prev, const char *cur, int len) {
-    const int probe = 128;
-    if (len <= probe) return -1;
-    for (int p = len - probe; p >= 0; p--)
-        if (!memcmp(cur + p, prev + len - probe, (size_t)probe)) return len - probe - p;
-    return -1;
-}
-
-#ifdef EK_HOST
-/* A desktop has no Kindle power chip; the tests and the fake-input harness never
- * need it. This is a dev-only build, not the game that runs on the device. */
-static int pwr_presses(void) { return 0; }
-__attribute__((unused)) static void pwr_drain(int ms) { (void)ms; }
-#else
-/* Two copies of the ring buffer, so "what was there last time" is free. */
-static char    *pwr_log;
-static char    *pwr_log_prev;
-static int      pwr_log_len;
-static int      pwr_log_had = -1;      /* PWRON1 lines in it at the last look */
-static uint32_t pwr_log_at;            /* ek_ms of the last look */
-static int      pwr_log_broke;         /* already complained about the log */
-
-static int pwr_log_size(void) {
-    if (pwr_log_len) return pwr_log_len;
-    int n = klogctl(PWR_LOG_SIZE, NULL, 0);
-    if (n <= 0 || n > PWR_LOG_MAX) {
-        if (!pwr_log_broke++) {
-            fprintf(stderr, "chess: no power button: cannot size the kernel log: %s\n",
-                    strerror(errno));
-            set_status("no power button - %s", strerror(errno));
-        }
-        return -1;
-    }
-    pwr_log = malloc((size_t)n + 2);
-    pwr_log_prev = malloc((size_t)n + 2);
-    if (!pwr_log || !pwr_log_prev) {
-        fprintf(stderr, "chess: out of memory reading the kernel log\n");
-        return -1;
-    }
-    pwr_log_len = n;
-    return n;
-}
-
-/* How many presses have arrived since the last call; -1 when the log cannot be
- * read at all. The read is rate limited, so a press is noticed within 150 ms.
- *
- * Only the bytes written since the last look are examined, so a record that
- * scrolls out of the ring can never look like a press and can never hide one --
- * both of which a plain count of PWRON1 lines in the buffer would do, because
- * this buffer turns over in a few minutes of the device's own USB chatter. */
-static int pwr_presses(void) {
-    int len = pwr_log_size();
-    if (len < 0) return -1;
-    uint32_t now = ek_ms();
-    if (pwr_log_at && now - pwr_log_at < PWR_LOG_EVERY_MS) return 0;
-    pwr_log_at = now ? now : 1;
-
-    int n = klogctl(PWR_LOG_READ_ALL, pwr_log, len);
-    if (n < 0) {
-        if (!pwr_log_broke++) {
-            fprintf(stderr, "chess: no power button: cannot read the kernel log: %s\n",
-                    strerror(errno));
-            set_status("no power button - %s", strerror(errno));
-        }
-        return -1;
-    }
-    pwr_log[n] = 0;
-    int had = count_pwr_records(pwr_log);
-    int hits = 0;
-    int grew = pwr_log_had < 0 ? -1 : pwr_log_grew(pwr_log_prev, pwr_log, n);
-    if (grew > 0)
-        hits = count_pwr_records(pwr_log + n - grew);
-    else if (grew < 0 && pwr_log_had >= 0 && had > pwr_log_had)
-        /* Lost the overlap -- the log turned over faster than it could be read.
-         * Counting cannot invent a press, so all this can do is miss one. */
-        hits = had - pwr_log_had;
-    pwr_log_had = had;
-
-    char *swap = pwr_log_prev;             /* keep this look for the next one */
-    pwr_log_prev = pwr_log;
-    pwr_log = swap;
-    return hits;
-}
-
-/* Let anything the press is still writing land, then throw it away: the press
- * that woke the machine must not count as a new one. */
-static void pwr_drain(int ms) {
-    ek_sleep_ms(ms);
-    pwr_log_at = 0;                      /* ignore the rate limit */
-    while (pwr_presses() > 0) { }
-}
-#endif  /* EK_HOST */
-
 /* Run curl with the JSON on its stdin and collect what it prints. */
 static int run_curl(const char *json, char *out, size_t n, char *err, size_t en) {
     int in[2], op[2];
@@ -878,9 +728,8 @@ static int run_curl(const char *json, char *out, size_t n, char *err, size_t en)
     close(in[1]);
 
     /* Wait for the reply, but keep an eye on the power button: a press during
-     * a three-minute wait must not be swallowed, and a reply is worthless if
-     * the machine is going to sleep. Watching the PMIC counter rather than
-     * sitting in read() is what makes that possible. */
+     * a three-minute wait must not be swallowed. kframe_pwr_presses reads the
+     * kernel log for PWRON1. The PMIC counter is the wrong signal. */
     size_t got = 0;
     int cancelled = 0;
     for (;;) {
@@ -897,7 +746,7 @@ static int run_curl(const char *json, char *out, size_t n, char *err, size_t en)
             break;
         }
         if (sel == 0) {
-            if (pwr_presses() != 0) { cancelled = 1; break; }
+            if (kframe_pwr_presses() != 0) { cancelled = 1; break; }
             continue;
         }
         ssize_t r = read(op[0], out + got, n - 1 - got);
@@ -917,7 +766,7 @@ static int run_curl(const char *json, char *out, size_t n, char *err, size_t en)
     if (cancelled) {
         kill(pid, SIGTERM);
         waitpid(pid, &st, 0);
-        pwr_latch = 1;
+        kframe_pwr_set_latch(1);
         snprintf(err, en, "cancelled by the power button");
         return -1;
     }
@@ -1069,8 +918,6 @@ static int api_move(const pos *p, const char *history, move *out, char *say, siz
 #define BOARD_Y  64
 #define BOARD_END (BOARD_Y + 8 * SQ_PX)
 #define COMMENT_Y (BOARD_END + 8)
-#define BTN_Y     744
-#define BTN_H     42
 
 /* shape helpers: everything is drawn in a 0..100 box and scaled */
 static int g_ox, g_oy, g_size, g_ink;
@@ -1202,13 +1049,10 @@ static char remark[512];          /* what the model said */
 static char status[160];
 static char hist_uci[2048];       /* space separated, for the prompt */
 static char hist_san[1024];       /* the last few moves, for the screen */
-static char g_wifi_ssid[64];      /* "" when wlan0 is not joined */
-static char g_wifi_ip[32];
-static char g_wifi_err[240];      /* the last wi-fi failure, shown on screen */
 static int  over;                 /* 0 playing, otherwise game_state() */
 static int  promo_from = -1, promo_to = -1;
 static int  api_busy;
-static int  stop_req;
+static volatile int stop_req;
 static volatile int shot_req;      /* SIGUSR1: save a picture of the screen */
 #define SHOT_PATH "/tmp/chess-shot.pgm"
 #ifndef EK_HOST
@@ -1292,7 +1136,7 @@ static int play_ai(void) {
     /* one retry: a model that wrote an illegal move is usually right the
      * second time once it is told what went wrong */
     int rc = api_move(&P, hist_uci, &m, say, sizeof say, err, sizeof err);
-    if (pwr_latch) { api_busy = 0; return -2; }    /* the loop sleeps, then asks again */
+    if (kframe_pwr_latched()) { api_busy = 0; return -2; }    /* the loop sleeps, then asks again */
     if (rc != 0) {
         char first[200];
         snprintf(first, sizeof first, "%s", err);
@@ -1300,7 +1144,7 @@ static int play_ai(void) {
         snprintf(hist2, sizeof hist2, "%.2000s (your last answer was refused: %.180s. "
                  "Answer only with a legal move from the list.)", hist_uci, first);
         rc = api_move(&P, hist2, &m, say, sizeof say, err, sizeof err);
-        if (pwr_latch) { api_busy = 0; return -2; }
+        if (kframe_pwr_latched()) { api_busy = 0; return -2; }
         if (rc != 0) {
             api_busy = 0;
             set_status("computer: %.120s", err);
@@ -1316,23 +1160,6 @@ static int play_ai(void) {
     check_over();
     if (!over) set_status("your turn");
     return 0;
-}
-
-/* ---- buttons ---------------------------------------------------------- */
-
-static const struct { const char *label; int x, w; } BTNS[3] = {
-    { "NEW",   20, 175 },
-    { "RETRY", 212, 175 },
-    { "QUIT",  404, 175 },
-};
-
-static void button(int i) {
-    int x = BTNS[i].x;
-    ek_fill_rect(x, BTN_Y, BTNS[i].w, BTN_H, EK_PAPER);
-    ek_rect(x, BTN_Y, BTNS[i].w, BTN_H, EK_INK);
-    ek_rect(x + 1, BTN_Y + 1, BTNS[i].w - 2, BTN_H - 2, EK_INK);
-    int tw = (int)strlen(BTNS[i].label) * 8;
-    ek_text(x + (BTNS[i].w - tw) / 2, BTN_Y + (BTN_H - 16) / 2, BTNS[i].label, EK_INK);
 }
 
 /* ---- the screen ------------------------------------------------------- */
@@ -1410,17 +1237,19 @@ static void draw_promo(void) {
 }
 
 static void present(void) {
+    if (kframe_covering()) {
+        kframe_paint();
+        ek_flush();
+        return;
+    }
     ek_clear(EK_PAPER);
 
     ek_text(12, 8, "CHESS", EK_INK);
     ek_text(64, 8, "- against", EK_INK);
     ek_text(136, 8, CFG.model, EK_INK);
     ek_text(12, 28, status, EK_INK);
-    /* Wi-fi lives in the corner: tapping it brings up the picker again. */
-    ek_rect(496, 2, 96, 22, EK_INK);
-    ek_text(508, 5, g_wifi_ssid[0] ? "WI-FI *" : "NO WI-FI", EK_INK);
     if (over) {
-        ek_text(12, 46, "tap NEW for another game", EK_INK);
+        ek_text(12, 46, "open the menu (top right) and tap NEW", EK_INK);
     } else if (api_busy) {
         ek_text(12, 46, "waiting for the api (up to 3 minutes)", EK_INK);
     } else {
@@ -1435,505 +1264,10 @@ static void present(void) {
         if (remark[0]) wrap(remark, 12, COMMENT_Y, 72, 5);
         else ek_text(12, COMMENT_Y, "(the computer has not said anything yet)", EK_INK);
     }
-    ek_text(12, BTN_Y - 24, "tap the squares to move", EK_INK);
-    for (int i = 0; i < 3; i++) button(i);
+    ek_text(12, 740, "top right opens quit, volume, wi-fi", EK_INK);
+    kframe_paint();
     ek_flush();
 }
-
-/* ---- wi-fi setup ------------------------------------------------------
- * A gifted unit has no way into the stock Wi-Fi dialog: the game owns the
- * panel and the reader UI is deliberately not running. So the game brings its
- * own: scan, tap a network, type the password on a drawn keyboard. The joining
- * itself is done by /mnt/us/chess-wifi.sh through wpa_cli (see
- * tools/chess-wifi.sh), which also remembers the network -- so the next boot
- * joins by itself and this screen never appears again.
- */
-
-#ifndef WIFI_SCRIPT
-#define WIFI_SCRIPT "/mnt/us/chess-wifi.sh"
-#endif
-
-#define W_MAX    12          /* networks listed on one screen */
-#define W_KB_X   22          /* first key column */
-#define W_KEY    56          /* key pitch, and the key's own size */
-#define W_KB_Y   150         /* first key row */
-#define W_ROW_H  50          /* height of a network row in the list */
-
-typedef struct { char ssid[64]; int sig; int secure; } wnet;
-static wnet g_nets[W_MAX];
-static int  g_nnets;
-
-/* Run a shell command, capture stdout+stderr, return its exit status. */
-static int run_sh(const char *cmd, char *out, size_t n) {
-    int op[2];
-    if (pipe(op) != 0) { snprintf(out, n, "could not make a pipe"); return -1; }
-    pid_t pid = fork();
-    if (pid < 0) {
-        snprintf(out, n, "could not start a shell");
-        close(op[0]); close(op[1]);
-        return -1;
-    }
-    if (pid == 0) {
-        close(op[0]);
-        dup2(op[1], 1);
-        dup2(op[1], 2);
-        close(op[1]);
-        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
-        _exit(127);
-    }
-    close(op[1]);
-    size_t got = 0;
-    ssize_t r;
-    while ((r = read(op[0], out + got, n - 1 - got)) > 0) {
-        got += (size_t)r;
-        if (got >= n - 1) break;
-    }
-    out[got] = 0;
-    close(op[0]);
-    int st = 0;
-    waitpid(pid, &st, 0);
-    if (!WIFEXITED(st)) return -1;
-    return WEXITSTATUS(st);
-}
-
-/* Wrap a string for /bin/sh: single quotes, with ' as '\''. */
-static void shq(char *out, size_t n, const char *in) {
-    size_t o = 0;
-    if (o + 1 < n) out[o++] = '\'';
-    for (const char *p = in; *p && o + 5 < n; p++) {
-        if (*p == '\'') {
-            out[o++] = '\''; out[o++] = '\\'; out[o++] = '\''; out[o++] = '\'';
-        } else {
-            out[o++] = *p;
-        }
-    }
-    if (o + 1 < n) out[o++] = '\'';
-    out[o] = 0;
-}
-
-/* 0 when wlan0 is joined and has an address. Fills g_wifi_ssid / g_wifi_ip. */
-static int wifi_status(void) {
-    char buf[512];
-    g_wifi_ssid[0] = 0;
-    g_wifi_ip[0] = 0;
-    int rc = run_sh("sh " WIFI_SCRIPT " status", buf, sizeof buf);
-    for (char *line = buf; line && *line; ) {
-        char *nl = strchr(line, '\n');
-        if (nl) *nl = 0;
-        if (!strncmp(line, "ssid=", 5)) snprintf(g_wifi_ssid, sizeof g_wifi_ssid, "%s", line + 5);
-        if (!strncmp(line, "ip=", 3))   snprintf(g_wifi_ip, sizeof g_wifi_ip, "%s", line + 3);
-        line = nl ? nl + 1 : NULL;
-    }
-    int ok = (rc == 0);
-    if (!ok) g_wifi_ssid[0] = 0;
-    return ok ? 0 : -1;
-}
-
-/* Fill g_nets, strongest first. -1 when the scan failed (g_wifi_err says why). */
-static int wifi_scan(void) {
-    char buf[4096];
-    g_nnets = 0;
-    int rc = run_sh("sh " WIFI_SCRIPT " scan", buf, sizeof buf);
-    if (rc != 0) {
-        snprintf(g_wifi_err, sizeof g_wifi_err, "%.200s",
-                 buf[0] ? buf : "the scan failed (is wpa_supplicant running?)");
-        return -1;
-    }
-    char *save = NULL;
-    for (char *line = strtok_r(buf, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
-        char *tab = strchr(line, '\t');
-        if (!tab) continue;
-        *tab = 0;
-        char *sig = tab + 1;
-        char *tab2 = strchr(sig, '\t');
-        if (tab2) *tab2 = 0;
-        if (g_nnets >= W_MAX) break;
-        snprintf(g_nets[g_nnets].ssid, sizeof g_nets[0].ssid, "%s", line);
-        g_nets[g_nnets].sig = atoi(sig);
-        g_nets[g_nnets].secure = tab2 ? strcmp(tab2 + 1, "open") != 0 : 1;
-        g_nnets++;
-    }
-    if (!g_nnets) {
-        snprintf(g_wifi_err, sizeof g_wifi_err, "no networks found - tap RESCAN");
-        return -1;
-    }
-    return 0;
-}
-
-/* 0 when the link is up and has an address. On failure g_wifi_err says why. */
-static int wifi_join(const char *ssid, const char *psk) {
-    char qs[160], qp[160], cmd[420], buf[1024];
-    shq(qs, sizeof qs, ssid);
-    shq(qp, sizeof qp, psk);
-    snprintf(cmd, sizeof cmd, "sh " WIFI_SCRIPT " join %s %s", qs, qp);
-    fprintf(stderr, "chess: joining %s\n", ssid);
-    g_wifi_err[0] = 0;
-    int rc = run_sh(cmd, buf, sizeof buf);
-    if (rc != 0) {
-        /* the script's last "error: ..." line is the useful one */
-        char *last = strstr(buf, "error: ");
-        snprintf(g_wifi_err, sizeof g_wifi_err, "%.200s",
-                 last ? last + 7 : (buf[0] ? buf : "the join failed"));
-        char *nl = strchr(g_wifi_err, '\n');
-        if (nl) *nl = 0;
-        fprintf(stderr, "chess: wi-fi: %s\n", g_wifi_err);
-        return -1;
-    }
-    return wifi_status();
-}
-
-/* One tap, ignoring the DOWN repeats the panel sends while a finger rests. */
-static int wait_tap(int *x, int *y) {
-    static int seen, when;
-#ifdef EK_HOST
-    /* The host build has no touch panel: it is driven by 'tap X Y' lines on
-     * stdin instead, the same script the board tests use. */
-    if (!isatty(0)) {
-        char buf[64];
-        if (fgets(buf, sizeof buf, stdin) && sscanf(buf, "tap %d %d", x, y) == 2) return 1;
-        return 0;
-    }
-#endif
-    while (!stop_req) {
-        if (shot_req) { shot_req = 0; ek_dump_pgm(SHOT_PATH, 1); }
-        ek_event ev;
-        {
-            static uint32_t hb;
-            if (ek_ms() - hb > 5000) {
-                hb = ek_ms();
-                fprintf(stderr, "chess: heartbeat: waiting for a tap elsewhere");
-                fprintf(stderr, " (power log %s)\n",
-                        pwr_presses() < 0 ? "unreadable" : "ok");
-            }
-        }
-        while (ek_poll(&ev)) {
-            if (ev.type == EK_UP) { seen = 0; continue; }
-            if (ev.type != EK_DOWN) continue;
-            uint32_t now = ek_ms();
-            if (seen && now - (uint32_t)when < 400) continue;
-            seen = 1;
-            when = (int)now;
-            *x = ev.x;
-            *y = ev.y;
-            return 1;
-        }
-        ek_sleep_ms(20);
-    }
-    return 0;
-}
-
-static void wbox(int x, int y, int w, int h, const char *label, int scale) {
-    int tw = (int)strlen(label) * 8 * scale;
-    ek_fill_rect(x, y, w, h, EK_PAPER);
-    ek_rect(x, y, w, h, EK_INK);
-    ek_rect(x + 1, y + 1, w - 2, h - 2, EK_INK);
-    if (scale > 1) ek_text_scale(x + (w - tw) / 2, y + (h - 16 * scale) / 2, label, EK_INK, scale);
-    else           ek_text(x + (w - tw) / 2, y + (h - 16) / 2, label, EK_INK);
-}
-
-static const char *KB[4] = { "1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm" };
-
-/* The typed-so-far line, with the cursor, in a framed box. */
-static void w_entry(const char *value, int y) {
-    ek_rect(20, y, 560, 40, EK_INK);
-    ek_rect(21, y + 1, 558, 38, EK_INK);
-    ek_text(30, y + 12, value, EK_INK);
-    int n = (int)strlen(value);
-    ek_text(30 + n * 8, y + 12, "_", EK_INK);
-}
-
-static void w_keyboard(const char *bottom_right) {
-    for (int r = 0; r < 4; r++) {
-        int len = (int)strlen(KB[r]);
-        for (int i = 0; i < len; i++) {
-            int x = W_KB_X + i * W_KEY;
-            int y = W_KB_Y + r * 60;
-            char label[2] = { KB[r][i], 0 };
-            ek_fill_rect(x, y, W_KEY - 4, 54, EK_PAPER);
-            ek_rect(x, y, W_KEY - 4, 54, EK_INK);
-            ek_text(x + (W_KEY - 4 - 8) / 2, y + 19, label, EK_INK);
-        }
-    }
-    wbox(20,  W_KB_Y + 4 * 60, 130, 54, "SHIFT", 1);
-    wbox(160, W_KB_Y + 4 * 60, 120, 54, "DEL", 1);
-    wbox(290, W_KB_Y + 4 * 60, 140, 54, "CLEAR", 1);
-    wbox(20,  W_KB_Y + 4 * 60 + 64, 280, 54, "BACK", 1);
-    wbox(310, W_KB_Y + 4 * 60 + 64, 270, 54, bottom_right, 1);
-}
-
-/* Which keyboard cell, if any, was tapped. Returns 0 for none. */
-static int w_key_at(int x, int y, char *out) {
-    for (int r = 0; r < 4; r++) {
-        int len = (int)strlen(KB[r]);
-        for (int i = 0; i < len; i++) {
-            int kx = W_KB_X + i * W_KEY, ky = W_KB_Y + r * 60;
-            if (x >= kx && x < kx + W_KEY - 4 && y >= ky && y < ky + 54) {
-                *out = KB[r][i];
-                return 1;
-            }
-        }
-    }
-    return 0;
-}
-
-#define W_BOT (W_KB_Y + 4 * 60)
-#define W_BOT2 (W_KB_Y + 4 * 60 + 64)
-
-/* Draw the list of networks. Returns nothing; the tap loop decides. */
-static void w_draw_list(void) {
-    ek_clear(EK_PAPER);
-    ek_text_scale(12, 6, "WI-FI", EK_INK, 2);
-    if (g_wifi_ssid[0]) {
-        char line[128];
-        snprintf(line, sizeof line, "on %s   %s", g_wifi_ssid, g_wifi_ip);
-        ek_text(140, 16, line, EK_INK);
-    } else {
-        ek_text(140, 16, "not connected - tap a network", EK_INK);
-    }
-    if (g_wifi_err[0]) ek_text(12, 52, g_wifi_err, EK_INK);
-    else if (!g_nnets) ek_text(12, 52, "looking for networks...", EK_INK);
-
-    for (int i = 0; i < g_nnets; i++) {
-        int y = 84 + i * W_ROW_H;
-        if (y + W_ROW_H > 600) break;
-        ek_rect(20, y, 560, W_ROW_H - 6, EK_INK);
-        char name[40];
-        snprintf(name, sizeof name, "%.30s", g_nets[i].ssid);
-        ek_text(30, y + (W_ROW_H - 6 - 16) / 2, name, EK_INK);
-        ek_text(470, y + (W_ROW_H - 6 - 16) / 2, g_nets[i].secure ? "WPA2" : "open", EK_INK);
-    }
-    wbox(20,  660, 170, 50, "RESCAN", 1);
-    wbox(210, 660, 190, 50, "TYPE NAME", 1);
-    wbox(420, 660, 160, 50, "SKIP", 1);
-    ek_flush();
-}
-
-static void w_draw_text(const char *title, const char *value, const char *bottom_right) {
-    ek_clear(EK_PAPER);
-    char head[120];
-    snprintf(head, sizeof head, "%.60s", title);
-    ek_text(12, 12, head, EK_INK);
-    ek_text(12, 34, "tap the letters, then the button at the bottom", EK_INK);
-    w_entry(value, 70);
-    w_keyboard(bottom_right);
-    ek_flush();
-}
-
-static void w_draw_msg(const char *title, const char *body) {
-    ek_clear(EK_PAPER);
-    ek_text(12, 12, title, EK_INK);
-    wrap(body, 12, 44, 72, 8);
-    ek_flush();
-}
-
-static void w_draw_fail(void) {
-    w_draw_msg("that did not work", g_wifi_err);
-    wbox(20, 660, 250, 50, "TRY AGAIN", 1);
-    wbox(300, 660, 280, 50, "OTHER NETWORKS", 1);
-    ek_flush();
-}
-
-/* The whole setup, modal. 0 when the unit ends up online. */
-static int wifi_setup(void) {
-    enum { M_LIST, M_SSID, M_PASS, M_DONE };
-    int mode = M_LIST;
-    char ssid[64] = "", pw[64] = "";
-    int shift = 0;
-    int secure = 1;
-
-    g_wifi_err[0] = 0;
-    wifi_scan();
-
-    for (;;) {
-        if (stop_req) return -1;
-
-        if (mode == M_LIST) {
-            w_draw_list();
-            int x, y;
-            if (!wait_tap(&x, &y)) return -1;
-            if (y >= 660 && y < 710) {
-                if (x >= 20 && x < 190) { g_wifi_err[0] = 0; wifi_scan(); continue; }
-                if (x >= 210 && x < 400) { mode = M_SSID; ssid[0] = 0; pw[0] = 0; secure = 1; continue; }
-                if (x >= 420 && x < 580) return -1;        /* SKIP: play anyway */
-            }
-            for (int i = 0; i < g_nnets; i++) {
-                int ry = 84 + i * W_ROW_H;
-                if (y >= ry && y < ry + W_ROW_H - 6 && x >= 20 && x < 580) {
-                    snprintf(ssid, sizeof ssid, "%s", g_nets[i].ssid);
-                    secure = g_nets[i].secure;
-                    pw[0] = 0;
-                    if (secure) {
-                        mode = M_PASS;
-                    } else {
-                        /* nothing to type on an open network: join now */
-                        w_draw_msg("joining", ssid);
-                        if (wifi_join(ssid, "") == 0) return 0;
-                        mode = M_DONE;
-                    }
-                    break;
-                }
-            }
-            continue;
-        }
-
-        if (mode == M_SSID || mode == M_PASS) {
-            char *buf = (mode == M_SSID) ? ssid : pw;
-            size_t cap = (mode == M_SSID) ? sizeof ssid : sizeof pw;
-            char title[120];
-            if (mode == M_SSID) snprintf(title, sizeof title, "NETWORK NAME");
-            else                snprintf(title, sizeof title, "PASSWORD FOR %.50s", ssid);
-            w_draw_text(title, buf, mode == M_SSID ? "NEXT" : "JOIN");
-
-            int x, y;
-            if (!wait_tap(&x, &y)) return -1;
-            size_t len = strlen(buf);
-
-            if (x >= 20 && x < 150 && y >= W_BOT && y < W_BOT + 54) { shift = !shift; continue; }
-            if (x >= 160 && x < 280 && y >= W_BOT && y < W_BOT + 54) {
-                if (len) buf[len - 1] = 0;
-                continue;
-            }
-            if (x >= 290 && x < 430 && y >= W_BOT && y < W_BOT + 54) { buf[0] = 0; continue; }
-            if (y >= W_BOT2 && y < W_BOT2 + 54) {
-                if (x >= 20 && x < 300) { mode = M_LIST; continue; }
-                if (x >= 310 && x < 580) {
-                    if (mode == M_SSID) {
-                        if (!ssid[0]) { snprintf(g_wifi_err, sizeof g_wifi_err, "type the network name first"); continue; }
-                        pw[0] = 0;
-                        mode = M_PASS;
-                        continue;
-                    }
-                    w_draw_msg("joining", ssid);
-                    if (wifi_join(ssid, pw) == 0) return 0;
-                    mode = M_DONE;
-                    continue;
-                }
-            }
-            char ch;
-            if (w_key_at(x, y, &ch)) {
-                if (len + 1 < cap) {
-                    buf[len] = shift ? (char)toupper((unsigned char)ch) : ch;
-                    buf[len + 1] = 0;
-                }
-            }
-            continue;
-        }
-
-        if (mode == M_DONE) {
-            w_draw_fail();
-            int x, y;
-            if (!wait_tap(&x, &y)) return -1;
-            if (y >= 660 && y < 710) {
-                if (x >= 20 && x < 270) { mode = M_PASS; continue; }
-                if (x >= 300 && x < 580) { mode = M_LIST; g_wifi_err[0] = 0; wifi_scan(); continue; }
-            }
-            continue;
-        }
-    }
-}
-
-/* ---- sleeping ---------------------------------------------------------
- * What powerd would have done, done here: paint a sleep screen, ask the kernel
- * to suspend, and put the board back when the machine wakes. Writing "mem" to
- * /sys/power/state is the whole suspend; the write returns when a wake source
- * -- the power button, among others -- has fired.
- */
-
-#ifndef EK_HOST
-
-/* Seconds since boot, from /proc/uptime; -1 if it cannot be read. */
-static double up_secs(void) {
-    FILE *f = fopen("/proc/uptime", "r");
-    if (!f) return -1;
-    double v = -1;
-    if (fscanf(f, "%lf", &v) != 1) v = -1;
-    fclose(f);
-    return v;
-}
-
-static int pwr_suspend(char *err, size_t n) {
-    int fd = open(PWR_STATE, O_WRONLY);
-    if (fd < 0) {
-        snprintf(err, n, "could not open %s: %s", PWR_STATE, strerror(errno));
-        return -1;
-    }
-    errno = 0;
-    ssize_t w = write(fd, "mem", 3);
-    int e = errno;
-    close(fd);
-    if (w != 3) {
-        snprintf(err, n, "could not suspend: %s",
-                 e ? strerror(e) : "the write was short");
-        return -1;
-    }
-    return 0;
-}
-
-static void draw_sleep(void) {
-    ek_clear(EK_PAPER);
-    ek_text_scale(196, 300, "ASLEEP", EK_INK, 4);
-    ek_text(132, 420, "press the power button to wake it up", EK_INK);
-    ek_text(156, 452, "the game carries on where it was", EK_INK);
-}
-
-/* Sleep until woken, then redraw. The caller redraws the board afterwards. */
-static void sleep_now(void) {
-    char err[200] = "";
-
-    pwr_drain(200);
-
-    draw_sleep();
-    ek_force_full();
-    ek_flush();
-
-    double t0 = up_secs();
-    if (pwr_suspend(err, sizeof err) != 0) {
-        fprintf(stderr, "chess: %s\n", err);
-        set_status("could not sleep - %s", err);
-        ek_force_full();
-        present();
-        return;
-    }
-    double t1 = up_secs();
-    if (t0 >= 0 && t1 >= 0 && t1 > t0)
-        fprintf(stderr, "chess: asleep for %.1f s\n", t1 - t0);
-
-    /* The press that woke the machine wrote to the log too; throw that away or
-     * the game goes straight back to sleep. */
-    pwr_drain(800);
-
-    /* The panel still holds the sleep screen: one full pass wipes it. */
-    ek_force_full();
-    present();
-
-    /* The radio is down while the machine is asleep and the association does
-     * not always come back by itself. Rejoin before the next question goes to
-     * the model, rather than losing a move to a dead network. */
-    if (wifi_status() != 0) {
-        char buf[256] = "";
-        set_status("back - rejoining wi-fi");
-        present();
-        if (run_sh("sh " WIFI_SCRIPT " auto", buf, sizeof buf) != 0)
-            fprintf(stderr, "chess: wi-fi did not come back: %.200s\n", buf);
-        else
-            fprintf(stderr, "chess: wi-fi rejoined\n");
-    }
-}
-
-/* Called from the event loop. 1 when a press has just been handled. */
-static int pwr_poll(void) {
-    int hits = pwr_presses();
-    if (hits > 0) {
-        fprintf(stderr, "chess: power button pressed\n");
-        pwr_latch = 1;
-    } else if (hits < 0)
-        return 0;                            /* already reported: no log, no key */
-    if (!pwr_latch) return 0;
-    pwr_latch = 0;
-    sleep_now();
-    return 1;
-}
-#endif  /* !EK_HOST */
 
 /* ---- taps ------------------------------------------------------------- */
 
@@ -1944,10 +1278,6 @@ static int square_at(int x, int y, int *out) {
     int r = 7 - (y - BOARD_Y) / SQ_PX;
     *out = SQ(f, r);
     return 1;
-}
-
-static int in_box(int x, int y, int bx, int by, int bw, int bh) {
-    return x >= bx && x < bx + bw && y >= by && y < by + bh;
 }
 
 /* The human's move. Returns 1 if Black now has to answer. */
@@ -1993,25 +1323,12 @@ static void do_promo(int type) {
     promo_from = promo_to = -1;
 }
 
-/* Returns 1 when the screen should be drawn again. */
+/* Returns 1 when the screen should be drawn again.
+ * -2 means Black has to answer (a move, or RETRY from the menu). */
 static int handle_tap(int x, int y) {
-    if (in_box(x, y, 496, 2, 96, 22)) {
-        wifi_setup();
-        return 1;
-    }
-    if (over) {
-        if (in_box(x, y, BTNS[0].x, BTN_Y, BTNS[0].w, BTN_H)) { new_game(); return 1; }
-        if (in_box(x, y, BTNS[2].x, BTN_Y, BTNS[2].w, BTN_H)) { stop_req = 1; return 1; }
-        return 0;
-    }
-
-    if (in_box(x, y, BTNS[2].x, BTN_Y, BTNS[2].w, BTN_H)) { stop_req = 1; return 1; }
-    if (in_box(x, y, BTNS[0].x, BTN_Y, BTNS[0].w, BTN_H)) { new_game(); return 1; }
-    if (in_box(x, y, BTNS[1].x, BTN_Y, BTNS[1].w, BTN_H)) {
-        if (P.stm == BLACK && !api_busy) return -2;   /* ask again */
-        set_status("the computer does not owe you a move");
-        return 1;
-    }
+    int kf = kframe_tap(x, y);
+    if (kf != 0) return kf;
+    if (over) return 0;
 
     if (promo_from >= 0) {
         static const int types[4] = { QUEEN, ROOK, BISHOP, KNIGHT };
@@ -2171,11 +1488,11 @@ static int selftest(void) {
     want(strcmp(san, "Nf3") == 0, 1, "g1f3 is Nf3");
 
     /* the power key: only KEY_POWER from the key device counts */
-    want(count_pwr_records("<6>pmic: PWRON1 event\n<6>pmic: PWRON1 release\n"), 2,
+    want(kframe_count_pwr_records("<6>pmic: PWRON1 event\n<6>pmic: PWRON1 release\n"), 2,
          "both records of one press are counted");
-    want(count_pwr_records("<6>pmic: CHGINS event\n<6>pmic: PWRON2 event\n"), 0,
+    want(kframe_count_pwr_records("<6>pmic: CHGINS event\n<6>pmic: PWRON2 event\n"), 0,
          "charger and other pmic lines are not the button");
-    want(count_pwr_records("<7>whitney-button: unknown key\n"), 0,
+    want(kframe_count_pwr_records("<7>whitney-button: unknown key\n"), 0,
          "another kernel record is not the power button");
     {
         /* A ring buffer turning over: 300 bytes of old text, new text appended,
@@ -2186,16 +1503,16 @@ static int selftest(void) {
         memcpy(prev + 400, "<6>pmic: PWRON1 event\n", 22);
         memcpy(cur, prev + 300, 700);                       /* dropped 300 */
         memcpy(cur + 700, "<6>usb 1-1: new high speed USB device\n", 37);
-        int grew = pwr_log_grew(prev, cur, 1000);
+        int grew = kframe_pwr_log_grew(prev, cur, 1000);
         want(grew, 300, "the log says exactly how many bytes it grew by");
-        want(count_pwr_records(cur + 1000 - grew), 0,
+        want(kframe_count_pwr_records(cur + 1000 - grew), 0,
              "a press from before the last look is not a new press");
         memcpy(prev, cur, 1000);
         memcpy(cur, prev + 100, 900);                        /* dropped 100 */
         memcpy(cur + 900, "<6>pmic: PWRON1 event\n", 22);
-        grew = pwr_log_grew(prev, cur, 1000);
+        grew = kframe_pwr_log_grew(prev, cur, 1000);
         want(grew, 100, "a press that scrolls an old line out still counts");
-        want(count_pwr_records(cur + 1000 - grew), 1, "the new press is found");
+        want(kframe_count_pwr_records(cur + 1000 - grew), 1, "the new press is found");
     }
 
     /* SAN of a castle and of a capture */
@@ -2251,6 +1568,53 @@ static int selftest(void) {
     return fails;
 }
 
+/* ---- the shared menu -------------------------------------------------- */
+
+enum { CHESS_NEW = 1, CHESS_RETRY = 2 };
+
+static const kframe_item CHESS_ITEMS[] = {
+    { "NEW",   CHESS_NEW },
+    { "RETRY", CHESS_RETRY },
+};
+
+static void kf_status(const char *msg) { set_status("%s", msg); }
+static void kf_quit(void) { stop_req = 1; }
+
+static int on_chess_item(int id) {
+    if (id == CHESS_NEW) { new_game(); return 1; }
+    if (id == CHESS_RETRY) {
+        if (over) {
+            set_status("the game is over - tap NEW");
+            return 1;
+        }
+        if (P.stm == BLACK && !api_busy) return -2;
+        set_status("the computer does not owe you a move");
+        return 1;
+    }
+    fprintf(stderr, "chess: menu item %d is not one of ours\n", id);
+    return 1;
+}
+
+static int open_frame(void) {
+    kframe_cfg kf;
+    memset(&kf, 0, sizeof kf);
+    kf.title = "CHESS";
+    kf.items = CHESS_ITEMS;
+    kf.nitems = 2;
+    kf.on_item = on_chess_item;
+    kf.on_quit = kf_quit;
+    kf.repaint = present;
+    kf.status = kf_status;
+    kf.stop = &stop_req;
+    kf.shot_req = &shot_req;
+    kf.shot_path = SHOT_PATH;
+    if (kframe_init(&kf) != 0) {
+        fprintf(stderr, "chess: the shared menu would not start\n");
+        return -1;
+    }
+    return 0;
+}
+
 /* ---- main ------------------------------------------------------------- */
 
 static const char *conf_default(void) {
@@ -2277,10 +1641,13 @@ static void usage(void) {
             "  --no-wifi     do not check wi-fi on start\n"
             "  --wifi-shot F write a wi-fi screen (PGM) and exit: F then\n"
             "                list|name|pass|fail, default list\n"
+            "  --menu-shot F write the shared menu (PGM) and exit\n"
             "\n"
-            "The power button puts the Kindle to sleep and wakes it again; the\n"
-            "position is kept. A press during the model's turn cancels that\n"
-            "question and asks it again after the wake.\n",
+            "The top-right button opens the shared menu: QUIT (tap twice),\n"
+            "VOLUME, WIFI, then this game's NEW and RETRY. The power button\n"
+            "puts the Kindle to sleep and wakes it again; the position is kept.\n"
+            "A press during the model's turn cancels that question and asks it\n"
+            "again after the wake.\n",
             conf_default());
 }
 
@@ -2288,7 +1655,7 @@ int main(int argc, char **argv) {
     unsigned flags = EK_TAKEOVER;
     int do_test = 0, api_check = 0, fake = 0, autoplay = -1;
     int no_wifi = 0, force_wifi = 0, wifi_only = 0;
-    const char *dump_path = NULL, *wifi_shot = NULL;
+    const char *dump_path = NULL, *wifi_shot = NULL, *menu_shot = NULL;
     const char *wifi_shot_what = "list";
     const char *conf_path = conf_default();
 
@@ -2311,6 +1678,7 @@ int main(int argc, char **argv) {
             wifi_shot = argv[++i];
             if (i + 1 < argc && argv[i + 1][0] != '-') wifi_shot_what = argv[++i];
         }
+        else if (!strcmp(argv[i], "--menu-shot") && i + 1 < argc) menu_shot = argv[++i];
         else if (!strcmp(argv[i], "--no-takeover")) flags &= ~EK_TAKEOVER;
         else if (!strcmp(argv[i], "--help")) { usage(); return 0; }
         else { usage(); return 2; }
@@ -2327,6 +1695,8 @@ int main(int argc, char **argv) {
     sigaction(SIGHUP, &sa, NULL);
     sa.sa_handler = on_shot_signal;
     sigaction(SIGUSR1, &sa, NULL);
+
+    if (open_frame() != 0) return 1;
 
     if (ek_open(flags) != 0) {
         fprintf(stderr, "chess: the screen would not open\n");
@@ -2359,30 +1729,30 @@ int main(int argc, char **argv) {
     /* --wifi-only: the menu's WIFI button. Same screens, no board: join a
      * network (or skip), then hand the panel back. */
     if (wifi_only) {
-        if (wifi_setup() != 0)
-            fprintf(stderr, "chess: wifi setup left the unit offline (%s)\n",
-                    g_wifi_err[0] ? g_wifi_err : "nothing chosen");
+        if (kframe_wifi_setup() != 0)
+            fprintf(stderr, "chess: wifi setup left the unit offline\n");
         ek_close();
         return 0;
     }
 
     new_game();
 
+    if (menu_shot) {
+        kframe_show_menu();
+        kframe_paint();
+        ek_flush();
+        if (ek_dump_pgm(menu_shot, 1) != 0) {
+            fprintf(stderr, "chess: could not write %s\n", menu_shot);
+            ek_close();
+            return 1;
+        }
+        ek_close();
+        return 0;
+    }
+
     /* A picture of a wi-fi screen, for checking the layout. */
     if (wifi_shot) {
-        if (!strcmp(wifi_shot_what, "list")) {
-            wifi_scan();
-            w_draw_list();
-        } else if (!strcmp(wifi_shot_what, "name")) {
-            w_draw_text("NETWORK NAME", "garden", "NEXT");
-        } else if (!strcmp(wifi_shot_what, "pass")) {
-            w_draw_text("PASSWORD FOR PRNet84", "Alotbsol1", "JOIN");
-        } else if (!strcmp(wifi_shot_what, "fail")) {
-            snprintf(g_wifi_err, sizeof g_wifi_err,
-                     "could not join PRNet84 (out of range, or the password was refused)");
-            w_draw_fail();
-        } else {
-            fprintf(stderr, "chess: --wifi-shot wants list, name, pass or fail\n");
+        if (kframe_wifi_shot(wifi_shot_what) != 0) {
             ek_close();
             return 2;
         }
@@ -2401,11 +1771,10 @@ int main(int argc, char **argv) {
     if (!no_wifi) {
         int need = force_wifi;
 #ifndef EK_HOST
-        if (!need) need = wifi_status() != 0;
+        if (!need) need = kframe_wifi_status() != 0;
 #endif
-        if (need && wifi_setup() != 0)
-            fprintf(stderr, "chess: still offline (%s)\n",
-                    g_wifi_err[0] ? g_wifi_err : "nothing chosen");
+        if (need && kframe_wifi_setup() != 0)
+            fprintf(stderr, "chess: still offline\n");
     }
 
     if (do_test) {
@@ -2498,7 +1867,7 @@ int main(int argc, char **argv) {
         }
         if (shot_req) { shot_req = 0; ek_dump_pgm(SHOT_PATH, 1); }
         if (stop_req) break;
-        if (pwr_poll()) {
+        if (kframe_pwr_poll()) {
             /* Back from sleep with Black still to move: ask again, because the
              * press cancelled the question that was in flight. */
             if (!over && P.stm == BLACK) play_ai();

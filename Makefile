@@ -120,8 +120,8 @@ all: xcom-host
 
 # ---- chess: you are white, DeepSeek plays black over its API --------------
 
-chess-host: src/chess.c $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
-	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/chess.c $(ENGINE)/eink.c -lm
+chess-host: src/chess.c src/kframe.c src/kframe.h $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/chess.c src/kframe.c $(ENGINE)/eink.c -lm
 
 # The device build: static musl, no libcurl, the game runs the device's own
 # curl for the API call.
@@ -168,7 +168,7 @@ tetris-test: tetris-host
 	$(PY) tools/check_pgm.py /tmp/tetris-open.pgm /tmp/tetris-drop.pgm /tmp/tetris-play.pgm
 	$(PY) tools/check_tetris.py /tmp/tetris-open.pgm /tmp/tetris-play.pgm
 
-chess-kindle: src/chess.c $(ENGINE)/eink.c $(ENGINE)/eink.h
+chess-kindle: src/chess.c src/kframe.c src/kframe.h $(ENGINE)/eink.c $(ENGINE)/eink.h
 	docker run --rm -u "$$(id -u):$$(id -g)" \
 	  -v "$$(pwd):/src" \
 	  -v /home/brendan/jailbreak-kindle:/jb \
@@ -176,16 +176,25 @@ chess-kindle: src/chess.c $(ENGINE)/eink.c $(ENGINE)/eink.h
 	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
 	    -ffunction-sections -fdata-sections \
 	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
-	    -o chess src/chess.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -o chess src/chess.c src/kframe.c /jb/kindle-tools/fbdaemon/engine/eink.c \
 	    -static -no-pie -Wl,--gc-sections -lm \
 	    && arm-linux-musleabi-strip chess'
 
 # Rules, notation and the screen. No API needed: --fake-ai plays both sides.
 chess-test: chess-host
 	./chess-host --selftest --no-takeover
-	./chess-host --fake-ai --auto 8 --no-takeover --dump /tmp/chess-mid.pgm
-	printf 'tap 62 96\ntap 62 232\n' | ./chess-host --no-takeover --dump /tmp/chess-sel.pgm
-	$(PY) tools/check_pgm.py /tmp/chess-mid.pgm /tmp/chess-sel.pgm
+	./chess-host --fake-ai --auto 8 --no-takeover --no-wifi --dump /tmp/chess-mid.pgm
+	printf 'tap 62 96\ntap 62 232\n' | ./chess-host --no-takeover --no-wifi --dump /tmp/chess-sel.pgm
+	./chess-host --no-takeover --no-wifi --menu-shot /tmp/chess-menu.pgm
+	printf 'tap 560 10\ntap 300 174\n' | ./chess-host --no-takeover --no-wifi --dump /tmp/chess-vol.pgm \
+	    >/tmp/chess-vol.out 2>/tmp/chess-vol.err
+	grep -q 'kframe: menu open' /tmp/chess-vol.err
+	grep -q 'kframe: volume:' /tmp/chess-vol.err
+	printf 'tap 560 10\ntap 300 110\ntap 300 110\n' | ./chess-host --no-takeover --no-wifi \
+	    >/tmp/chess-quit.out 2>/tmp/chess-quit.err
+	grep -q 'kframe: quit armed' /tmp/chess-quit.err
+	grep -q 'kframe: quit confirmed' /tmp/chess-quit.err
+	$(PY) tools/check_pgm.py /tmp/chess-mid.pgm /tmp/chess-sel.pgm /tmp/chess-menu.pgm /tmp/chess-vol.pgm
 
 
 # sprites.h is baked from the bold art in bold/ plus the patterns inside the
