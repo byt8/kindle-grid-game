@@ -551,6 +551,22 @@ Check the screen of a game you cannot see (`kill -USR1 <pid of chess>` writes
 `/tmp/chess-shot.pgm`). `--wifi-only` opens the wi-fi screens and exits without
 a board (what the menu's WIFI button uses).
 
+Where the piece art actually lands in its square:
+
+```bash
+python3 tools/chess_bg_replace.py /tmp/chess-shot.pgm out.png --board --zoom 2 --grid
+python3 tools/chess_piece_offsets.py /tmp/chess-shot.pgm   # per-piece dx,dy table
+python3 tools/chess_tile_offsets.py                        # centring inside the baked tile
+python3 tools/chess_board_ascii.py /tmp/chess-shot.pgm     # terminal view, no viewer
+```
+
+`chess_bg_replace.py` rebuilds the board with the squares painted out (the
+dark-square dither and borders are subtracted), so only the sprites remain and
+`--grid` marks the true square centres with a cross. Each piece's ink is centred
+on its square to **within 1 px** (worst bounding-box offset 1.0 px, measured on a
+`--fake-ai --auto 8` dump); the `mass` column reads up to +5 px low because the
+wide base of a piece carries most of the ink. That is the art, not a bug.
+
 ### Boot straight into the game
 
 On the Kindle:

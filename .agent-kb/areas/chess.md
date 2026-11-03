@@ -132,6 +132,37 @@ make chess-kindle          # static ARM musl, docker kfb-build, 83 KB
 ./run-chess-on-kindle.sh [IP] [--args]     # push + take screen + run + restore
 ```
 
+### Piece placement checked against a real grab (2026-11-03)
+
+The user reported the sprite coordinates "off slightly". Measured, not eyeballed:
+
+- `tools/chess_bg_replace.py IN.pgm OUT.png [--zoom N] [--grid] [--board]`
+  rebuilds the board as flat paper with only piece ink left. A pixel counts as
+  piece ink when it differs from what the plain board would draw there — paper,
+  the Bayer-4 dither inside dark squares (`ek_dither_rect(..., 3)`, bayer4[y&3][x&3] < 6)
+  and the 1px square borders — so the dither is subtracted instead of being read
+  as ink. `--grid` draws the 9 grid lines and a cross at every true square
+  centre. Geometry (SQ_PX 68, BOARD_X 28, BOARD_Y 64) is parsed out of
+  `src/chess.c`, so it follows any layout change.
+- `tools/chess_piece_offsets.py IN.pgm` prints per-piece ink bbox and ink mass
+  centre versus the square centre.
+- `tools/chess_tile_offsets.py` reads `src/chess_pieces.h` directly: every baked
+  tile's ink bbox and its centring error inside the 52px tile (worst 0.5 px —
+  the bake is fine).
+- `tools/chess_board_ascii.py IN.pgm [--step N]` prints the ink as ASCII, for
+  boxes with no image viewer.
+
+**Result:** pieces are centred within **1.0 px** (worst bbox offset over a
+`--fake-ai --auto 8` dump). The `mass` centre reads up to +5 px low because a
+piece's wide base holds most of its ink — that is the art, not a placement bug.
+Do not "fix" it by shifting draw_piece; if the art looks low, change the art.
+The picture is `chess-bg-replaced.png` (board crop, 2x, grid) with
+`chess-grab-raw.png` beside it.
+
+**Gotcha:** the first version of the offset tool counted the dark-square dither
+as ink, which showed every empty dark square as a "64x64 piece" and hid the real
+numbers. Always subtract the background before measuring.
+
 ## Facts learned the hard way
 
 - **Setup bugs look like engine bugs.** Perft depth 1 returning 34 instead of 20
