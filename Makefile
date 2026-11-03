@@ -208,6 +208,13 @@ chess-test: chess-host engine-test
 	printf 'clock = 60\n' > /tmp/chess-clock-test.conf
 	./chess-host --no-takeover --no-wifi --conf /tmp/chess-clock-test.conf --menu-shot /tmp/chess-menu-timer.pgm
 	$(PY) tools/check_pgm.py /tmp/chess-menu.pgm /tmp/chess-menu-timer.pgm
+	# After a move, BOTH squares are cleaned, each as its own box that bleeds
+	# into the grid line: one box spanning them left a line down the middle of
+	# every square it crossed (the "erroneous lines" on glass).
+	./chess-host --fake-ai --auto 1 --no-takeover --no-wifi --trace-refresh \
+	    >/tmp/chess-refresh.out 2>/dev/null
+	test "$$(grep -c 'clean box:' /tmp/chess-refresh.out)" = 2
+	grep -q 'refresh: rects=2' /tmp/chess-refresh.out
 
 
 # sprites.h is baked from the bold art in bold/ plus the patterns inside the

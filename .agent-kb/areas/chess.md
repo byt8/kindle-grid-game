@@ -61,9 +61,12 @@ that definitively wipes a mangled screen — submits a full-screen region with
 comment says the same: one GC16 cleanup "to clear DU ghosting".
 
 **The fix, shipped (shared constituent edited with the user's go-ahead):**
-`ek_full_refresh(x,y,w,h)` in the engine (`eink.c` + `eink.h`) — a one-shot flag
-consumed by the next `ek_flush()`, which then submits **one**
-`UPDATE_MODE_FULL` + `WFM_GC16` update. It is generic and opt-in: nothing else
+`ek_full_refresh(x,y,w,h)` in the engine (`eink.c` + `eink.h`) — a queued box
+consumed by the next `ek_flush()`, which then submits one
+`UPDATE_MODE_FULL` + `WFM_GC16` update **per box**. Originally the queue held a
+single box, so the second call in one frame overwrote the first and a chess move
+only ever cleaned the square it arrived on; the vacated square was left to the
+ordinary partial and kept its ghost. It is generic and opt-in: nothing else
 in the engine reads it, so xcom/tetris/rockman/pvz/calib/brogue behave exactly
 as before (all host binaries rebuilt clean to prove it). Design points:
 
@@ -74,16 +77,35 @@ as before (all host binaries rebuilt clean to prove it). Design points:
 - It resets `since_full`/`since_soft`/`ghost_have` like any other clean, copies
   the shadow for the pushed rect, and clears itself, so the following flush is
   an ordinary partial again.
-- Chess now calls it from `present()` over the union of the two squares a move
-  touched: `clean_mark(from,to)` sets `clean_next` and the pair, and `present()`
-  turns those into a box via `sq_x_y()`. All four move sites
+- Chess now calls it from `present()` **once per square** a move touched, never
+  as a box spanning both: `clean_mark(from,to)` sets `clean_next` and the pair,
+  `present()` turns each into its own box via `sq_x_y()`. All four move sites
   (`human_move`/`do_promo`/`play_ai`/`--fake-ai` batch) use `clean_mark`.
+- **Why one box per square (the "erroneous lines" on glass):** a full-mode
+  update cannot cancel the panel's charge right up to its own boundary, so it
+  leaves a soft line where it stops. A box spanning two squares left that line
+  down the middle of every square it crossed (worst on the diagonal — the
+  long thin box). Square by square, both lines fall on the board's own black
+  grid stroke and disappear.
+- Each square's box additionally **bleeds `CLEAN_BLEED` = 3 px** on every side
+  into the grid line, so the artefact sits in the middle of the stroke rather
+  than at its edge. Safe because the sprite is inset 8 px inside a 72 px square
+  and the grid is 3 px, so a 3 px bleed cannot reach a neighbouring piece.
+- `--trace-refresh` prints `clean box: x,y wxh` per box and the flush's
+  `rects=`/`px=` — the only way a host build can show what the panel was asked
+  for, since `EK_HOST` stubs `submit_update` away.
 - `tests/full_refresh_check.c` (`make engine-test`, wired into `chess-test`)
   pins the contract: a plain flush stays partial, the full refresh is 1 rect of
-  GC16 clipped to the changed tiles, it happens once, and an untouched box
-  pushes nothing. Host cannot prove the glass — **the panel check is still
-  owed**: build `make chess-kindle`, `./run-chess-on-kindle.sh 192.168.0.66`,
-  play a move and see whether the old square finally comes up clean.
+  GC16 clipped to the changed tiles, it happens once, an untouched box pushes
+  nothing, and **two boxes queued in one frame both go out** (`two boxes:
+  rects=2`). Verified the two-box assertion fails (`rects=1`) against the old
+  single-slot storage.
+- `chess-test` also greps a `--fake-ai --auto 1 --trace-refresh` run for
+  exactly 2 `clean box:` lines and `refresh: rects=2`, so a move's two squares
+  cannot silently collapse back into one.
+- Host cannot prove the glass: `EK_HOST` stubs `submit_update` away, so a
+  screenshot from `/tmp/chess-shot.pgm` shows the canvas, not the panel's
+  charge artefact. The seam only shows in a photo of the screen.
 - Waveform is still overridable with `ek_waveform()` (it goes through
   `grey_capable`, so a grey canvas never gets DU/GL16_FAST).
 

@@ -994,10 +994,25 @@ static int  over;                 /* 0 playing, otherwise game_state() */
 static int  promo_from = -1, promo_to = -1;
 static int  api_busy;
 static int  clean_next;           /* a move just landed: full-refresh the moved squares */
+static int  trace_refresh;        /* --trace-refresh: print each flush's box */
 static int  clean_from, clean_to;  /* the two squares that must be refreshed on glass */
 
 /* Mark a square pair for a genuine (not partial-mode) panel refresh. */
 static void clean_mark(int from, int to) { clean_next = 1; clean_from = from; clean_to = to; }
+/* Refresh one board square on glass, bleeding a few px into the black grid
+ * line around it. A full-mode update cannot cancel the panel's charge right up
+ * to its own boundary, so it leaves a soft line there; the grid line is the
+ * board's own ink, so the line is invisible inside it. 3 px is half the gap
+ * between one square's ink and the next, which puts the artefact in the middle
+ * of the grid stroke rather than at its edge. */
+#define CLEAN_BLEED 3
+static void clean_square(int x, int y) {
+    if (trace_refresh)
+        printf("clean box: %d,%d %dx%d\n", x - CLEAN_BLEED, y - CLEAN_BLEED,
+               SQ_PX + 2 * CLEAN_BLEED, SQ_PX + 2 * CLEAN_BLEED);
+    ek_full_refresh(x - CLEAN_BLEED, y - CLEAN_BLEED,
+                    SQ_PX + 2 * CLEAN_BLEED, SQ_PX + 2 * CLEAN_BLEED);
+}
 static void sq_x_y(int sq, int *x, int *y) {
     *x = BOARD_X + FILE_OF(sq) * SQ_PX;
     *y = BOARD_Y + (7 - RANK_OF(sq)) * SQ_PX;
@@ -1265,11 +1280,21 @@ static void present(void) {
         int fx, fy, tx, ty;
         sq_x_y(clean_from, &fx, &fy);
         sq_x_y(clean_to, &tx, &ty);
-        int x0 = fx < tx ? fx : tx, y0 = fy < ty ? fy : ty;
-        int x1 = (fx > tx ? fx : tx) + SQ_PX, y1 = (fy > ty ? fy : ty) + SQ_PX;
-        ek_full_refresh(x0, y0, x1 - x0, y1 - y0);
+        /* One box per square, never a box spanning both. The panel cannot
+         * cancel charge right up to the edge of an update, so each box leaves
+         * a line where it stops; a box that ran from one square to the other
+         * left its line down the middle of every square it crossed (worst of
+         * all on the diagonal). Square by square, both lines land on the
+         * board's own black grid lines and disappear. */
+        clean_square(fx, fy);
+        clean_square(tx, ty);
     }
-    ek_flush();
+    ek_stats st = ek_flush();
+    /* One line per flush, so a test can see the refresh boxes without a
+     * framebuffer to read back. Silent unless asked for. */
+    if (trace_refresh)
+        printf("refresh: rects=%d px=%ld wfm=%s\n",
+               st.rects, st.px, ek_waveform_name(st.wfm));
 }
 
 /* ---- taps ------------------------------------------------------------- */
@@ -1732,6 +1757,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--selftest")) do_test = 1;
         else if (!strcmp(argv[i], "--apicheck")) api_check = 1;
         else if (!strcmp(argv[i], "--fake-ai")) fake = 1;
+        else if (!strcmp(argv[i], "--trace-refresh")) trace_refresh = 1;
         else if (!strcmp(argv[i], "--auto") && i + 1 < argc) {
             char *end = NULL;
             long v = strtol(argv[++i], &end, 10);

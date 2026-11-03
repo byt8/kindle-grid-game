@@ -91,10 +91,14 @@ state too, so it answers quickly when you are short of time.
 
 Tapping a piece shows only a highlight ring: legal-move dots are deliberately
 not drawn. A moved piece used to leave a faint ghost on its old square; the
-engine now has `ek_full_refresh()`, which sends one genuine `UPDATE_MODE_FULL`
-GC16 over just the tiles that changed, and chess calls it on the two squares a
-move touches. `make engine-test` checks that contract on the PC — host mode
-stubs the panel ioctls, so the on-glass result still needs one look on a device.
+engine now has `ek_full_refresh()`, which sends genuine `UPDATE_MODE_FULL` GC16
+over just the tiles that changed. A move cleans **each of its two squares as a
+separate box**, never one box spanning them: a full-mode update leaves a line
+where it stops, and a spanning box drew that line through every square it
+crossed. Each box also bleeds 3 px into the grid stroke, so the line lands
+inside the board's own ink. `make engine-test` and `make chess-test` check that
+contract on the PC (`--trace-refresh` prints the boxes) — host mode stubs the
+panel ioctls, so the on-glass result still needs one look on a device.
 
 **Play Tetris on the Kindle:**
 
