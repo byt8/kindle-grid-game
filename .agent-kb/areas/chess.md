@@ -305,6 +305,11 @@ game would eat the device's `dmesg` and destroy the evidence of its own waking.
 - A write failure to `/sys/power/state` shows on the status line and stderr and
   is never swallowed.
 
+**Sandbox caveat:** from inside this workspace shell (WSL `172.22.x.x` NAT) the
+Kindle LAN `192.168.0.x` is unreachable — pings to `.66`/`.63` time out, so a
+`run-chess-on-kindle.sh` handoff has to be started by the user from their own
+network. Code/binary work, host renders and `make chess-test` all verify here.
+
 **Devices:** two Kindles answer on the LAN - `.66` (serial B010260121322E2D, the
 Touch the game is built for) and `.63`. `jailbreak-kindle/.kfb-secrets` sets
 `KINDLE_IP=192.168.0.63`, so always pass the address:
