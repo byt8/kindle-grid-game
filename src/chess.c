@@ -993,6 +993,7 @@ static char hist_san[1024];       /* the last few moves, for the screen */
 static int  over;                 /* 0 playing, otherwise game_state() */
 static int  promo_from = -1, promo_to = -1;
 static int  api_busy;
+static int  clean_next;           /* a move just landed: GC16-wipe the moved squares */
 static volatile int stop_req;
 static volatile int shot_req;      /* SIGUSR1: save a picture of the screen */
 #define SHOT_PATH "/tmp/chess-shot.pgm"
@@ -1137,6 +1138,7 @@ static int play_ai(void) {
     make_move(&P, &m, &u);
     snprintf(remark, sizeof remark, "%s", say);
     sel = -1;
+    clean_next = 1;
     check_over();
     clock_restart();
     if (!over) set_status("your turn");
@@ -1251,6 +1253,14 @@ static void present(void) {
     }
     ek_text(12, 740, "top right opens quit, volume, wi-fi", EK_INK);
     kframe_paint();
+    /* A half-move redraws the from/to squares but the previous sprite's mid-grey
+     * tones leave a faint ghost under DU/partial refreshes. Force the next flush
+     * to GC16-clean exactly the region that has been moving, instead of waiting
+     * for the engine's every-30-dirty-frames soft clean. */
+    if (clean_next) {
+        clean_next = 0;
+        ek_force_full();
+    }
     ek_flush();
 }
 
@@ -1281,6 +1291,7 @@ static int human_move(int from, int to) {
         make_move(&P, &list[i], &u);
         sel = -1;
         nlegal = 0;
+        clean_next = 1;
         check_over();
         clock_restart();
         if (!over) set_status("the computer is thinking ...");
@@ -1300,6 +1311,7 @@ static void do_promo(int type) {
             promo_from = promo_to = -1;
             sel = -1;
             nlegal = 0;
+            clean_next = 1;
             check_over();
             clock_restart();
             if (!over) set_status("the computer is thinking ...");
@@ -1865,6 +1877,7 @@ int main(int argc, char **argv) {
                     note_move(&P, &list[0]);
                     undo u;
                     make_move(&P, &list[0], &u);
+                    clean_next = 1;
                     if (P.stm == WHITE && !fake) set_status("your turn");
                     check_over();
                 } else {

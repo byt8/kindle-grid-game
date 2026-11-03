@@ -88,6 +88,10 @@ drawn at the top right of the board, the clock only runs while it is that
 side's turn, and running out of time loses the game. The LLM is told the clock
 state too, so it answers quickly when you are short of time.
 
+After each move the board's `present()` forces one GC16 clean of the moved
+squares (`ek_force_full()`), so a moved sprite cannot leave a faint ghost on its
+old square under the grey layer.
+
 **Play Tetris on the Kindle:**
 
 ```bash

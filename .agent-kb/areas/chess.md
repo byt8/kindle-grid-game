@@ -36,6 +36,22 @@ pieces are just the same tile scaled down at draw time.
   piece on a light and a dark square at panel grey/scale. Rerun the baker to
   regenerate the header if the art changes; chess.c and the Makefile stay put.
 
+### Sprite ghosting after a move (grey tones linger)
+
+After a half-move the from/to squares can keep a faint piece silhouette. Cause:
+with the grey layer on, every chess flush is already a GC16 **partial** over the
+diff, and a partial GC16 parks the pigment halfway only where it re-drives — the
+pixels a moved sprite leaves behind are never re-driven, so Pearl residue stays.
+The engine's designed anti-dote is `ek_force_full()`: it makes the **next flush
+GC16-clean exactly the accumulated moving region** (verified on host: a 1-rect
+flush reports `full=0 wfm=GC16`), instead of waiting for the every-30-dirty-frames
+soft clean (chess only flushes ≈1 rect per move, so 30 dirty frames is many moves
+away). `src/chess.c` now sets a `clean_next` flag wherever a half-move lands
+(`human_move`, `do_promo`, `play_ai`, the `--fake-ai` batch) and the board's
+`present()` calls `ek_force_full()` before its flush when it is set. This is the
+same "big change -> clean" idea xcom's `clean_next`/`end_turn` uses; the host
+cannot show the ghost (it has no Pearl), only the driver numbers.
+
 ### THE `ek_mono` grey killer (found on device)
 
 After the sprites landed, the device showed **flat black/white** pieces while the
