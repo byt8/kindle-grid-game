@@ -26,6 +26,7 @@ make rockman-kindle              # Rockman -> ./rockman (no key needed)
 make pvz-kindle                   # PvZ -> ./pvz      (no key needed)
 make brogue-kindle                # Brogue -> ./brogue-kindle-app
 make calib                        # Calib tuner -> ./calib
+make engine-test                  # PC check of the shared engine's full-refresh API
 ```
 
 **Play Brogue or run the calib tuner on the Kindle** (same push-and-run pattern):
@@ -89,10 +90,11 @@ side's turn, and running out of time loses the game. The LLM is told the clock
 state too, so it answers quickly when you are short of time.
 
 Tapping a piece shows only a highlight ring: legal-move dots are deliberately
-not drawn. A moved piece can still leave a faint ghost on its old square — the
-first attempt (`ek_force_full()` per move) did not fix it, because that only
-sends a *partial-mode* GC16 and the engine never issues a real full refresh
-after the first paint. Open item, see `.agent-kb/areas/chess.md`.
+not drawn. A moved piece used to leave a faint ghost on its old square; the
+engine now has `ek_full_refresh()`, which sends one genuine `UPDATE_MODE_FULL`
+GC16 over just the tiles that changed, and chess calls it on the two squares a
+move touches. `make engine-test` checks that contract on the PC — host mode
+stubs the panel ioctls, so the on-glass result still needs one look on a device.
 
 **Play Tetris on the Kindle:**
 

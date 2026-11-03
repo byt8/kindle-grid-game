@@ -11,7 +11,7 @@ HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
         tetris tetris-host tetris-test tetris-kindle sudoku sudoku-host sudoku-test sudoku-kindle \
         menu-host menu-kindle menu-test rockman-data rockman-host rockman-test rockman-kindle rockman \
         pvz-host pvz pvz-test calib calib-host calib-kindle calib-test \
-        brogue-host brogue brogue-test brogue-kindle clean
+        brogue-host brogue brogue-test brogue-kindle engine-test clean
 
 # ---- rockman data: regenerate from the commented VIC-20 disassembly --------
 
@@ -180,8 +180,14 @@ chess-kindle: src/chess.c src/kframe.c src/kframe.h $(ENGINE)/eink.c $(ENGINE)/e
 	    -static -no-pie -Wl,--gc-sections -lm \
 	    && arm-linux-musleabi-strip chess'
 
+# The shared engine's ek_full_refresh() contract (host only: it pins the region
+# arithmetic and the one-shot behaviour, not what the glass does).
+engine-test:
+	$(HOSTCC) $(HOSTCFLAGS) -o engine-test tests/full_refresh_check.c $(ENGINE)/eink.c -lm
+	./engine-test
+
 # Rules, notation and the screen. No API needed: --fake-ai plays both sides.
-chess-test: chess-host
+chess-test: chess-host engine-test
 	./chess-host --selftest --no-takeover
 	./chess-host --fake-ai --auto 8 --no-takeover --no-wifi --dump /tmp/chess-mid.pgm
 	printf 'tap 62 96\ntap 62 232\n' | ./chess-host --no-takeover --no-wifi --dump /tmp/chess-sel.pgm

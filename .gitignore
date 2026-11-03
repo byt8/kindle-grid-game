@@ -49,3 +49,6 @@ __pycache__/
 /calib-host
 /echo-probe
 /previews/
+
+# host-side engine contract check binary
+engine-test

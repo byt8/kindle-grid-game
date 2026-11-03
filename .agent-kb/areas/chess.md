@@ -36,7 +36,7 @@ pieces are just the same tile scaled down at draw time.
   piece on a light and a dark square at panel grey/scale. Rerun the baker to
   regenerate the header if the art changes; chess.c and the Makefile stay put.
 
-### Sprite ghosting after a move (grey tones linger) — STILL OPEN
+### Sprite ghosting after a move (grey tones linger) — FIXED, awaiting panel check
 
 After a half-move the from/to squares can keep a faint piece silhouette (the
 user confirmed it on the panel after the first fix attempt).
@@ -60,15 +60,32 @@ that definitively wipes a mangled screen — submits a full-screen region with
 `UPDATE_MODE_FULL` + `WFM_GC16`. Same as first paint. The engine's own policy
 comment says the same: one GC16 cleanup "to clear DU ghosting".
 
-**The fix (needs a shared-constituent change, go-ahead required):** add a
-generic API to `jailbreak-kindle/kindle-tools/fbdaemon/engine/eink.c`, e.g.
-`ek_full_refresh()` — flag that makes the next flush submit its rects (or the
-panel) with `UPDATE_MODE_FULL`, default behaviour of every existing caller
-unchanged. Chess's `present()` then calls it from `clean_next` instead of
-`ek_force_full()`. No consumer named, pure option. Engine note: while writing,
-consider whether the ghost-clean branch itself should use FULL mode when the
-ghost region is small (it is what that branch is for), but that would change
-xcom/tetris/rockman behaviour — keep it opt-in via the new API first.
+**The fix, shipped (shared constituent edited with the user's go-ahead):**
+`ek_full_refresh(x,y,w,h)` in the engine (`eink.c` + `eink.h`) — a one-shot flag
+consumed by the next `ek_flush()`, which then submits **one**
+`UPDATE_MODE_FULL` + `WFM_GC16` update. It is generic and opt-in: nothing else
+in the engine reads it, so xcom/tetris/rockman/pvz/calib/brogue behave exactly
+as before (all host binaries rebuilt clean to prove it). Design points:
+
+- Only the requested box goes out, and inside it only the 8x8 tiles that
+  actually changed — a full-mode update is the expensive flashing one, so
+  `region` is clipped to the dirty bounds. Nothing dirty in the box ⇒ no update
+  at all (checked, not assumed).
+- It resets `since_full`/`since_soft`/`ghost_have` like any other clean, copies
+  the shadow for the pushed rect, and clears itself, so the following flush is
+  an ordinary partial again.
+- Chess now calls it from `present()` over the union of the two squares a move
+  touched: `clean_mark(from,to)` sets `clean_next` and the pair, and `present()`
+  turns those into a box via `sq_x_y()`. All four move sites
+  (`human_move`/`do_promo`/`play_ai`/`--fake-ai` batch) use `clean_mark`.
+- `tests/full_refresh_check.c` (`make engine-test`, wired into `chess-test`)
+  pins the contract: a plain flush stays partial, the full refresh is 1 rect of
+  GC16 clipped to the changed tiles, it happens once, and an untouched box
+  pushes nothing. Host cannot prove the glass — **the panel check is still
+  owed**: build `make chess-kindle`, `./run-chess-on-kindle.sh 192.168.0.66`,
+  play a move and see whether the old square finally comes up clean.
+- Waveform is still overridable with `ek_waveform()` (it goes through
+  `grey_capable`, so a grey canvas never gets DU/GL16_FAST).
 
 **Not the cause:** the software side is correct — `present()` does
 `ek_clear(EK_PAPER)` (which resets the grey layer to 255 everywhere, eink.c:478)

@@ -993,7 +993,15 @@ static char hist_san[1024];       /* the last few moves, for the screen */
 static int  over;                 /* 0 playing, otherwise game_state() */
 static int  promo_from = -1, promo_to = -1;
 static int  api_busy;
-static int  clean_next;           /* a move just landed: GC16-wipe the moved squares */
+static int  clean_next;           /* a move just landed: full-refresh the moved squares */
+static int  clean_from, clean_to;  /* the two squares that must be refreshed on glass */
+
+/* Mark a square pair for a genuine (not partial-mode) panel refresh. */
+static void clean_mark(int from, int to) { clean_next = 1; clean_from = from; clean_to = to; }
+static void sq_x_y(int sq, int *x, int *y) {
+    *x = BOARD_X + FILE_OF(sq) * SQ_PX;
+    *y = BOARD_Y + (7 - RANK_OF(sq)) * SQ_PX;
+}
 static volatile int stop_req;
 static volatile int shot_req;      /* SIGUSR1: save a picture of the screen */
 #define SHOT_PATH "/tmp/chess-shot.pgm"
@@ -1138,7 +1146,7 @@ static int play_ai(void) {
     make_move(&P, &m, &u);
     snprintf(remark, sizeof remark, "%s", say);
     sel = -1;
-    clean_next = 1;
+    clean_mark(m.from, m.to);
     check_over();
     clock_restart();
     if (!over) set_status("your turn");
@@ -1247,15 +1255,19 @@ static void present(void) {
     ek_text(12, 740, "top right opens quit, volume, wi-fi", EK_INK);
     kframe_paint();
     /* A half-move leaves a faint ghost of the moved piece on its old square.
-     * ek_force_full() merges the moving region into one GC16 clean on the next
-     * flush -- but note the engine submits that with UPDATE_MODE_PARTIAL, and a
-     * partial-mode GC16 does NOT lift the residue on this panel (verified: the
-     * ghost survived this call on device). A real UPDATE_MODE_FULL is only sent
-     * by the engine's first paint; chess needs a full-refresh engine API to
-     * finish this fix (see .agent-kb/areas/chess.md, "Sprite ghosting"). */
+     * Every ordinary flush the engine sends is UPDATE_MODE_PARTIAL, and a
+     * partial-mode GC16 does not lift that residue on this panel (verified on
+     * device). ek_full_refresh() asks the engine for a real UPDATE_MODE_FULL
+     * over the squares that just changed -- only the part of that box that
+     * differs goes out, so the flash stays local. */
     if (clean_next) {
         clean_next = 0;
-        ek_force_full();
+        int fx, fy, tx, ty;
+        sq_x_y(clean_from, &fx, &fy);
+        sq_x_y(clean_to, &tx, &ty);
+        int x0 = fx < tx ? fx : tx, y0 = fy < ty ? fy : ty;
+        int x1 = (fx > tx ? fx : tx) + SQ_PX, y1 = (fy > ty ? fy : ty) + SQ_PX;
+        ek_full_refresh(x0, y0, x1 - x0, y1 - y0);
     }
     ek_flush();
 }
@@ -1287,7 +1299,7 @@ static int human_move(int from, int to) {
         make_move(&P, &list[i], &u);
         sel = -1;
         nlegal = 0;
-        clean_next = 1;
+        clean_mark(list[i].from, list[i].to);
         check_over();
         clock_restart();
         if (!over) set_status("the computer is thinking ...");
@@ -1307,7 +1319,7 @@ static void do_promo(int type) {
             promo_from = promo_to = -1;
             sel = -1;
             nlegal = 0;
-            clean_next = 1;
+            clean_mark(list[i].from, list[i].to);
             check_over();
             clock_restart();
             if (!over) set_status("the computer is thinking ...");
@@ -1873,7 +1885,7 @@ int main(int argc, char **argv) {
                     note_move(&P, &list[0]);
                     undo u;
                     make_move(&P, &list[0], &u);
-                    clean_next = 1;
+                    clean_mark(list[0].from, list[0].to);
                     if (P.stm == WHITE && !fake) set_status("your turn");
                     check_over();
                 } else {
