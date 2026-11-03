@@ -55,6 +55,20 @@ Amazon UI. Same e-ink engine as the games, same takeover rules.
   refused: Resource busy` (the `menu` process holds the grab). Fixed in
   `tools/kindle-run.sh`: a live menu means stop that session, and `restore()`
   does `initctl start menu` instead of the stock-reader restore.
+- **Exit always comes back to the menu, not the Amazon store.** [changed
+  2026-11-03 .63] `restore()` used to start the launcher only if a menu session
+  was running when the game started (`menu_was=1`). A game started from the PC
+  never touched the menu, and a `.menu-stop` left by an earlier session kept the
+  job down, so the exit fell through to `restore-kindle.sh` → Amazon's reader,
+  which opens on its own store. That was the reported "quitting goes to the
+  bookstore". Now `restore()` clears `/mnt/us/.menu-stop` and starts the `menu`
+  job whenever `/mnt/us/menu` and `/mnt/us/menu-boot.sh` exist; the reader
+  restore survives only as the last resort when upstart refuses the job, because
+  the menu pulls the panel out from under a live reader (stops the mirror, keeps
+  the Amazon UI hidden). Verified on .63: quit → `menu start/running`, `cvm`
+  empty, `menu-after-quit.png` in the repo root. Push the runner to every
+  `/mnt/us/$GAME-run.sh` — `cat local | ssh 'for … do cat > …'` eats stdin on the
+  first iteration and leaves the rest empty; copy one good file with `cp`.
 - **Never SIGTERM the menu to take the panel.** [ran 2026-11-02 .63] `menu.c`
   used to treat SIGTERM as the KINDLE button (exit 0 + `ek_close()` →
   `release_ui()` starts the framework). menu-boot.sh then ran

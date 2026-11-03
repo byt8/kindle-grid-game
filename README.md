@@ -198,6 +198,14 @@ touch device — and hands the panel back to it when you quit, so this works fro
 the PC whatever is on screen. A run that never starts prints the runner's own
 error (touch device refused, …) instead of claiming the game exited.
 
+**Quitting always returns to the launcher menu, never Amazon's UI.** The runner
+clears a stale `/mnt/us/.menu-stop` and starts the `menu` job on the way out, so
+this holds even for a game started from the PC that never touched the menu. The
+Amazon reader (which opens on its own store) comes back only if upstart refuses
+the menu job — the last resort so the panel is never left dead. Both must never
+run at once: the menu stops the mirror and keeps the Amazon UI hidden, pulling
+the panel out from under a live reader.
+
 To see what the Kindle is showing: `jailbreak-kindle/kindle-tools/fb-shot.sh
 out.png` (it wants `KINDLE_IP`, e.g. `KINDLE_IP=192.168.0.66`), then read it as
 text with `python3 tools/show_png_ascii.py out.png` — no image viewer needed.

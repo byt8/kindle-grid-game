@@ -66,26 +66,33 @@ restore() {
     # and the session exits instead of coming back.
     rm -f /mnt/us/.menu-handoff
 
-    if [ "$menu_was" = 1 ]; then
-        # This device boots into the launcher session, so the state to hand back
-        # is that session and not the stock reader: the menu job stops the
-        # mirror, takes the panel and keeps the Amazon UI hidden -- exactly how
-        # we found it. The reader restore below would fight it, so it runs only
-        # if upstart refuses to start the launcher, in which case the panel must
-        # not be left dead.
-        say "giving the panel back to the launcher session (menu)"
-        /sbin/initctl start menu >/dev/null 2>&1
-        i=0
-        while ! /sbin/initctl status menu 2>/dev/null | grep -q 'start/running' && [ $i -lt 5 ]; do
-            i=$((i + 1))
-            sleep 1
-        done
+    if [ -x /mnt/us/menu ] && [ -f /mnt/us/menu-boot.sh ]; then
+        # Hand the panel back to the launcher session, not the stock reader.
+        # This is not conditional on having found a menu running on arrival:
+        # a game started from the PC never touched the menu, and a .menu-stop
+        # left behind by an earlier session keeps the job down -- both used to
+        # send this exit down the reader path, and Amazon's reader opens on its
+        # own store. The menu is where a game gets chosen, so it is the screen
+        # the panel comes back to. The reader restore below still exists, but
+        # only for a device that cannot run the launcher at all: the menu job
+        # pulls the panel out from under the reader (it stops the mirror and
+        # keeps the Amazon UI hidden), so starting both would leave them
+        # fighting over the glass.
+        rm -f /mnt/us/.menu-stop
+        if ! /sbin/initctl status menu 2>/dev/null | grep -q 'start/running'; then
+            say "giving the panel back to the launcher session (menu)"
+            /sbin/initctl start menu >/dev/null 2>&1
+            i=0
+            while ! /sbin/initctl status menu 2>/dev/null | grep -q 'start/running' && [ $i -lt 5 ]; do
+                i=$((i + 1))
+                sleep 1
+            done
+        fi
         if /sbin/initctl status menu 2>/dev/null | grep -q 'start/running'; then
             return 0
         fi
         say "ERROR: the launcher (menu job) would not restart; falling back to"
         say "       restoring the stock reader so the panel is not left dead"
-        menu_was=0
     fi
 
     if [ -x /mnt/us/fbdaemon/restore-kindle.sh ]; then
