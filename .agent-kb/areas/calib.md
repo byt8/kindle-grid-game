@@ -35,6 +35,27 @@ engine `eink.c`, `EK_HOST` PC build, `EK_TAKEOVER` device build).
 - **TAPLAG (screen 3)** — a spot jumps to a new row every 1.5 s; tap the
   instant you see it. `last: N us` shows the measured `(tap_ek_ms −
   taplag_at) * 1000` reaction on the glass too.
+- **CHESS (screen 5)** — the real `src/chess.c` board (`SQ_PX 68`,
+  `BOARD_X 28`, `BOARD_Y 64`) with the real baked sprites from
+  `chess_pieces.h`. No rules: tap a piece, tap a square, it moves; `ch_moves`
+  and the last move gap (`ch_gap`) are printed. Chips **SIZE / OFS X / OFS Y /
+  WFM / FULL** tune the sprite and the flush live, `-`/`+`/QUIT/NEXT as usual.
+  This exists so a size or centring change is found on the glass, then baked
+  back into `chess.c`.
+  - `apply_screen_policy(5)` copies chess's engine setup: `ek_ghost(4,30)`,
+    `ek_policy(180,6,35)`, `ek_wait_updates(1)`, **`ek_mono(0)`**. Never
+    `ek_mono(1)` here — it sets `EPDC_FLAG_FORCE_MONOCHROME` and flattens the
+    grey sprite to black/white on the device; the host build cannot show that.
+  - `main()` calls `ek_grey_enable()` *before* any draw on this screen and exits
+    non-zero if it returns non-zero. No dither fallback by design.
+  - **FULL chip** wraps a move in one `ek_full_refresh()` over the two squares.
+    It is chess's `clean_mark`: the engine clips it to the tiles that changed
+    and sends `UPDATE_MODE_FULL` once. Verified on the host — FULL on shows
+    `flush wfm=3 rects=1 tiles=106 px=13600 full=0` (one rect, two squares);
+    FULL off shows `rects=6 tiles=70 px=8960` (ordinary partials).
+  - Screen order is NEXT: 1 tuner → 2 ghost → 3 taplag → 5 chess → 4 RX.
+  - `draw_screen(5)` must be reachable from `--probe`, and `advance_screen()`
+    needs a forward declaration (the chess tap handler calls it).
 
 `--host-stdin` reads `tap X Y` lines like the games for a PC smoke-test;
 `--speed N` sets the starting drop interval. `--probe` prints
