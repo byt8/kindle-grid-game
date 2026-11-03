@@ -29,5 +29,8 @@ Station mode only (for the routerless ad-hoc link see `areas/peer-wifi.md`).
 - [ran 2026-11-03 `make wifi-test`] script suite 6/6, screen suite 5/5. The pre-fix script fails case 2 of the screen suite too, so the regression is caught.
 - [ran 2026-11-03 `make chess-test`] still green — the keyboard change did not disturb the other screens.
 
+- [ran 2026-11-03 push to .63] `./run-chess-on-kindle.sh 192.168.0.63` rebuilt and pushed. Device md5s match the host build exactly: `/mnt/us/chess` = `2c1977fd…`, `/mnt/us/chess-wifi.sh` = `310573a2…`. `chess-wifi.sh status` on the glass returned `state=COMPLETED ssid=PRNet84 ip=192.168.0.63`, so the rewritten `join` path's parsing works against the real `wpa_cli`. Game running, pid confirmed via `/proc/<pid>/cmdline`, `kill -USR1` grab has 15 distinct grey levels (grey layer healthy, not the `ek_mono` flat 0/255 failure).
+
 ## Open
-- The fixed script and binary are **not yet pushed**. `./run-chess-on-kindle.sh` reuses an existing `./chess` unless rebuilt, so run `make chess-kindle` first. No real join has been done on the glass since the fix.
+- A **real join** (typing a password on the glass into a network that is not already configured) is still unproven — the deployment only confirmed `status`. Next step: on the device, WI-FI → join an unconfigured SSID and watch the message.
+- `./run-chess-on-kindle.sh` reuses an existing `./chess` unless src is newer; run `make chess-kindle` first if unsure.

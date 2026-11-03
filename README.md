@@ -78,7 +78,15 @@ advances you to the next one.
 ```
 
 The script rebuilds `./chess` before it copies. A push of an old `./chess` looks
-like nothing changed. On the glass the three bottom buttons are gone. The new
+like nothing new. Confirm it landed:
+
+```bash
+K="-i ~/.ssh/kindle_touch_ed25519 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
+ssh $K root@192.168.0.63 'md5sum /mnt/us/chess /mnt/us/chess-wifi.sh; pidof chess'  # compare with `md5sum chess`
+ssh $K root@192.168.0.63 'kill -USR1 <pid>'   # grab -> /tmp/chess-shot.pgm (15 grey levels = healthy)
+```
+
+On the glass the three bottom buttons are gone. The new
 control is the small button at the **top right**: **QUIT** (tap twice),
 **VOLUME**, **WIFI**, then **NEW**, **RETRY** and **TIMER**. Only chess has this menu.
 
