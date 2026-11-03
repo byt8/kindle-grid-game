@@ -327,6 +327,14 @@ calib-test: calib-host
 	grep -q 'rx ink wfm=1' /tmp/calib-rx.log
 	$(PY) tools/check_pgm.py /tmp/calib-clock.pgm /tmp/calib-ghost.pgm /tmp/calib-taplag.pgm /tmp/calib-rx.pgm
 	$(PY) -c 'import sys;d=open("/tmp/calib-clock.pgm","rb").read();p=b"P5\n600 800\n255\n";assert d.startswith(p);pix=d[len(p):];assert len(pix)==600*800;print("calib: clock/ghost/taplag/rx pgm ok")'
+	# Every screen must be reachable by tapping NEXT. The tuner (1) draws its
+	# own knob rows instead of the shared button strip and shipped with no
+	# NEXT at all, so the chess screen could not be opened on the glass.
+	# Chain: 1 --tap NEXT--> 2 --NEXT--> 3 --NEXT--> 5 (chess).
+	printf 'tap 120 529\ntap 500 675\ntap 500 675\n' | ./calib-host --no-takeover --screen 1 --host-stdin --steps 40 --dump /tmp/calib-chain.pgm > /dev/null
+	./calib-host --no-takeover --screen 5 --dump /tmp/calib-chess.pgm < /dev/null
+	$(PY) tools/check_calib_chain.py /tmp/calib-chain.pgm /tmp/calib-chess.pgm
+
 
 # --- BrogueCE for the Kindle Touch ----------------------------------------
 

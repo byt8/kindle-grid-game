@@ -129,6 +129,27 @@ motion, grey only for still art, 4) CLEAN 30 only when ghosting shows (drop 20/1
 if trails persist), 5) WAIT stays ON (OFF makes GAP lie), 6) bake what the tuner
 chose into the game.
 
+## Navigation: the tuner was a dead end (fixed 2026-11-03)
+
+The screen order is documented above as "1 tuner → 2 ghost → 3 taplag → 5 chess
+→ 4 RX", but screen 1's own button rows were **full** (two rows of three:
+`- QUIT +` / `SPEED CLEAN WFM`), so it drew no NEXT and `hit_tuner()` had no
+path off the screen. Every other screen had one. The result on the glass: start
+on the tuner (or NEXT onto it from RX) and the chess screen could never be
+reached at all — which reads as "old calib with no new section", not as a
+navigation bug. Diagnosed by confirming `/mnt/us/calib` md5 matched the local
+build and `strings` contained the new messages, then reading the button tables.
+
+Fix: `T_NEXT` added to the tuner enum, its own bar at (0,500,250x58) above the
+two rows (nothing else draws there: the value rows end at y≈500, the reference
+well is x≥470), drawn and hit-tested, wired to `advance_screen()`.
+Verified on host with `printf 'tap ...\n' | ./calib-host --host-stdin`:
+tap (120,529) → GHOST, then NEXT×3 → chess.
+
+Rule to keep: **any screen that draws `for (i=0..4) draw_btn(i)` gets NEXT for
+free; a screen with a custom button row must add its own, and a host tap-chain
+test is the only thing that catches a missing one.**
+
 ## Open / next
 
 - [ran 2026-11-02 @192.168.0.66 port 22 open] `make calib && ./run-calib-on-kindle.sh 192.168.0.66` pushed and the app took the panel (fb0 600x800, touch event3). User said **"du seems to work well"** — DU is the right motion waveform. Next: bake DU into the games' motion flushes (tetris already auto-picks DU when nothing forces grey), and read the two RX ms numbers only if the beat still needs tuning.

@@ -142,8 +142,16 @@ static int gap_n = 0, gap_i = 0;
 
 /* ---- button hit ---------------------------------------------------------- */
 
-/* TUNER buttons: two rows of three, same bboxes as the games' bottom row. */
-enum { T_MINUS = 0, T_QUIT, T_PLUS, T_SPEED, T_CLEAN, T_WFM };
+/* TUNER buttons: two rows of three, same bboxes as the games' bottom row.
+ *
+ * The second row is full, so NEXT gets its own bar above it: without one the
+ * tuner was a dead end (no path from screen 1 to 2/3/5 at all) -- found on the
+ * glass 2026-11-03, where the chess screen could never be reached. */
+enum { T_MINUS = 0, T_QUIT, T_PLUS, T_SPEED, T_CLEAN, T_WFM, T_NEXT };
+#define TUNER_NEXT_X 0
+#define TUNER_NEXT_Y 500
+#define TUNER_NEXT_W 250
+#define TUNER_NEXT_H 58
 #define CHIP_Y 30
 #define CHIP_H 46
 static int chip_wait(int x, int y) { return x >= 20 && x < 210 && y >= CHIP_Y && y < CHIP_Y + CHIP_H; }
@@ -151,6 +159,9 @@ static int chip_mono(int x, int y) { return x >= 230 && x < 400 && y >= CHIP_Y &
 
 static int hit_tuner(int x, int y) {
     int col = -1;
+    if (x >= TUNER_NEXT_X && x < TUNER_NEXT_X + TUNER_NEXT_W &&
+        y >= TUNER_NEXT_Y && y < TUNER_NEXT_Y + TUNER_NEXT_H)
+        return T_NEXT;
     if (x >= BTN_X1 && x < BTN_X1 + BTN_W) col = 0;
     else if (x >= BTN_X2 && x < BTN_X2 + BTN_W) col = 1;
     else if (x >= BTN_X3 && x < BTN_X3 + BTN_W) col = 2;
@@ -241,6 +252,10 @@ static void draw_tuner(void) {
      * (which run to ~x=448 at scale 2) never touch it */
     ek_rect(470, 48, 110, 470, EK_INK);
     ek_fill_rect(482, block_y, 44, 44, EK_INK);
+    /* NEXT: the tuner's only way off this screen (see T_NEXT). */
+    ek_rect(TUNER_NEXT_X, TUNER_NEXT_Y, TUNER_NEXT_W, TUNER_NEXT_H, EK_INK);
+    ek_text_scale(TUNER_NEXT_X + 12, TUNER_NEXT_Y + (TUNER_NEXT_H - 16) / 2,
+                  "NEXT", EK_INK, 1);
     /* buttons */
     static const char *tl[6] = {"-", "QUIT", "+", "SPEED", "CLEAN", "WFM"};
     for (int i = 0; i < 6; i++) {
@@ -715,6 +730,9 @@ static void tap_tuner(int x, int y) {
     case T_SPEED: sel = 0; break;   /* selecting a knob never disturbs the beat */
     case T_CLEAN: sel = 1; break;
     case T_WFM:   sel = 2; break;
+    case T_NEXT:
+        advance_screen();
+        return;
     default: return;
     }
     /* Only a real SPEED change re-anchors the metronome. Selecting a knob or

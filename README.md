@@ -5,7 +5,7 @@ Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack
 Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
 Rockman: dig dirt, grab diamonds, don't let the rocks fall on you.
 Plants vs Pixels: five-lane plant defence — grow sunflowers, shoot peas, hold the lawn.
-**Calib:** opens on two black squares that step together. The left one is the grey zap (it blinks). The right one is plain ink (it jumps). The time each zap took is printed underneath. That is the choice. NEXT opens the tuner.
+**Calib:** opens on two black squares that step together. The left one is the grey zap (it blinks). The right one is plain ink (it jumps). The time each zap took is printed underneath. That is the choice. NEXT opens the tuner. Screens run **RX → TUNER → GHOST → TAPLAG → CHESS**, NEXT on every one (the tuner's NEXT is a bar at the bottom left, above its two knob rows).
 **SimCity port (in progress):** OpenSimCity/Micropolis core on the 600x800 e-ink panel.
 **Brogue (in progress):** the classic roguelike from BrogueCE on the 600x800 e-ink panel — 100x34 text grid on the bottom 408 px, permanent 12-button bar on top, true 16-level grey (walls of darkness, lit glyphs) via the engine's grey layer.
 **Peer link:** two Kindles talk to each other directly over ad-hoc wifi — no router, no internet. Games and messaging over the same link later.
@@ -122,11 +122,13 @@ make calib
 ./run-calib-on-kindle.sh 192.168.0.66
 ```
 
-Left square blinks (grey zap, GC16). Right square jumps (plain ink, DU). The milliseconds under each square are how long that zap took. **QUIT** gives the Kindle back. **NEXT** opens the tuner: SPEED, CLEAN, WFM (AUTO / DU / GC16F / GL16F / GC16), WAIT, MONO. Pick **DU** if the right square is the one you want. The other NEXT screens are the old smear test, the **chess pieces**, and the tap test.
+Left square blinks (grey zap, GC16). Right square jumps (plain ink, DU). The milliseconds under each square are how long that zap took. **QUIT** gives the Kindle back. **NEXT** opens the tuner: SPEED, CLEAN, WFM (AUTO / DU / GC16F / GL16F / GC16), WAIT, MONO. Pick **DU** if the right square is the one you want. From the tuner, **NEXT** (the bar at the bottom left) goes on to the ghost-screen smear test, then the **chess pieces**, then the tap test — then back to RX.
 
 The RX screen needs a **1-bit canvas** to force DU, and the chess-pieces screen needs the grey layer to draw its sprites. The grey layer cannot be turned off again, so once you have been to the chess screen RX is skipped for the rest of that run (it says so on stderr). Restart the app to get RX back.
 
 **The chess pieces screen.** Same board and same baked sprites as the chess game, but no rules — tap a piece, tap a square, it moves. Chips: **SIZE** (piece size), **OFS X / OFS Y** (nudge the sprite off the square centre), **WFM** (waveform), **FULL** (redraw the two touched squares as one full-mode refresh instead of partials — the anti-ghost trick chess uses), **NEXT**. Turn **SIZE** down and the piece gets smaller than its square, which makes any centring error obvious.
+
+**Getting there:** screens are `4 RX → 1 TUNER → 2 GHOST → 3 TAPLAG → 5 CHESS`. The **tuner** draws its own knob rows instead of the shared button strip, so its NEXT is a separate bar at the **bottom left**. (It had no NEXT at all before 2026-11-03, which made the chess screen unreachable — if you ever see a tuner with only two rows of knobs and no NEXT, that is the old build.) Jump straight to one screen with `--screen N`:
 
 ```bash
 ./calib-host --no-takeover --screen 5 --dump /tmp/calib-chess.pgm < /dev/null
