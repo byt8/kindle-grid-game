@@ -198,6 +198,16 @@ panel). **WIFI** reuses chess's wi-fi screens (join a
 network, it remembers it). **KINDLE** hands the screen back to the Amazon
 reader.
 
+**The Amazon books app is already switched off.** The "books" UI is a Java/OSGi
+framework (`/usr/java/bin/cvm`) started only by the upstart `framework` job;
+the kernel never runs it. The marker file `/mnt/us/DONT_START_FRAMEWORK`
+(created by the boot setup, shown by `./install-all-on-kindle.sh`) makes
+`framework` skip `cvm` entirely, so the device boots straight into this menu
+and `cvm` stays dead. See `.agent-kb/areas/reader-removal.md` for the full
+boot chain and the options if you actually want to delete the book files
+(not recommended — deleting jars on the read-only root buys nothing and a
+firmware update repaints it).
+
 **Fresh Kindle, everything at once** (jailbroken + ssh, then one run):
 
 ```bash
