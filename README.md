@@ -521,6 +521,9 @@ Kindle's own trust store is older than DeepSeek's certificate.
 | File | What it is |
 |---|---|
 | `src/chess.c` | the whole game: rules, drawing, touch, wi-fi screen |
+| `chess-art/*.png` | per-piece RGBA source art for the baked sprites |
+| `tools/bake_chess_sprites.py` | bakes `chess-art/*.png` into `src/chess_pieces.h` |
+| `src/chess_pieces.h` | generated 4-bpp piece tiles + `ch_at()` accessor (do not edit) |
 | `tools/chess-wifi.sh` | scan / join / remember, over `wpa_cli` |
 | `tools/chess-boot.conf` | (superseded by `menu-boot.conf`) the old direct-to-chess boot job |
 | `tools/menu-boot.conf` | upstart job that boots the Kindle into the launcher menu |

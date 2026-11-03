@@ -22,6 +22,7 @@
  */
 #include "eink.h"
 #include "kframe.h"
+#include "chess_pieces.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -948,124 +949,35 @@ static int api_move(const pos *p, const char *history, move *out, char *say, siz
 #define BOARD_END (BOARD_Y + 8 * SQ_PX)
 #define COMMENT_Y (BOARD_END + 8)
 
-/* shape helpers: everything is drawn in a 0..100 box and scaled */
-static int g_ox, g_oy, g_size, g_ink;
-
-static int sx(int v) { return g_ox + v * g_size / 100; }
-static int sy(int v) { return g_oy + v * g_size / 100; }
-
-static void s_rect(int x0, int y0, int x1, int y1) {
-    ek_fill_rect(sx(x0), sy(y0), (x1 - x0) * g_size / 100, (y1 - y0) * g_size / 100, g_ink);
-}
-
-static void s_circle(int cx, int cy, int r) {
-    ek_fill_circle(sx(cx), sy(cy), r * g_size / 100, g_ink);
-}
-
-static void s_poly(const int *xs, const int *ys, int n) {
-    int top = 1000, bot = -1000;
-    int px[16], py[16];
-    for (int i = 0; i < n; i++) {
-        px[i] = sx(xs[i]);
-        py[i] = sy(ys[i]);
-        if (py[i] < top) top = py[i];
-        if (py[i] > bot) bot = py[i];
-    }
-    for (int y = top; y <= bot; y++) {
-        int lo = 10000, hi = -10000;
-        for (int i = 0; i < n; i++) {
-            int j = (i + 1) % n;
-            int y0 = py[i], y1 = py[j];
-            if (y0 == y1) continue;
-            if (y < (y0 < y1 ? y0 : y1) || y > (y0 < y1 ? y1 : y0)) continue;
-            int x = px[i] + (y - y0) * (px[j] - px[i]) / (y1 - y0);
-            if (x < lo) lo = x;
-            if (x > hi) hi = x;
-        }
-        if (hi >= lo) ek_hline(lo, y, hi - lo + 1, g_ink);
-    }
-}
-
-static void shape(int type) {
-    static const int pawn_x[] = { 38, 62, 72, 28 };
-    static const int pawn_y[] = { 62, 62, 86, 86 };
-    static const int knight_x[] = { 28, 28, 38, 34, 42, 54, 66, 68, 74, 74 };
-    static const int knight_y[] = { 88, 62, 44, 32, 18, 14, 22, 36, 50, 88 };
-    static const int bishop_x[] = { 50, 62, 66, 34, 38 };
-    static const int bishop_y[] = { 26, 48, 76, 76, 48 };
-    static const int skirt_x[] = { 34, 66, 72, 28 };
-    static const int skirt_y[] = { 50, 50, 86, 86 };
-
+/* The baked sprite art (chess_pieces.h). The sprite id follows the pvz/xcom
+ * convention: white pieces are ids CHS_W* and black CHS_B*. */
+static int piece_sprite(int type, int black) {
     switch (type) {
-    case PAWN:
-        s_circle(50, 30, 14);
-        s_poly(pawn_x, pawn_y, 4);
-        s_rect(24, 86, 76, 93);
-        break;
-    case ROOK:
-        s_rect(22, 86, 78, 93);
-        s_rect(34, 46, 66, 86);
-        s_rect(30, 38, 70, 47);
-        s_rect(30, 24, 42, 39);
-        s_rect(44, 24, 56, 39);
-        s_rect(58, 24, 70, 39);
-        break;
-    case KNIGHT:
-        s_poly(knight_x, knight_y, 10);
-        s_rect(26, 86, 74, 93);
-        break;
-    case BISHOP:
-        s_rect(26, 86, 74, 93);
-        s_rect(34, 76, 66, 86);
-        s_poly(bishop_x, bishop_y, 5);
-        s_circle(50, 22, 7);
-        break;
-    case QUEEN:
-        s_rect(24, 86, 76, 93);
-        s_poly(skirt_x, skirt_y, 4);
-        s_rect(34, 38, 66, 52);
-        s_rect(26, 32, 74, 40);
-        s_circle(26, 30, 6);
-        s_circle(38, 26, 6);
-        s_circle(50, 24, 6);
-        s_circle(62, 26, 6);
-        s_circle(74, 30, 6);
-        break;
-    case KING:
-        s_rect(24, 86, 76, 93);
-        s_poly(skirt_x, skirt_y, 4);
-        s_rect(34, 38, 66, 52);
-        s_rect(38, 30, 62, 38);
-        s_rect(46, 10, 54, 34);
-        s_rect(38, 16, 62, 24);
-        break;
-    default:
-        break;
+    case PAWN:   return black ? CHS_BPAWN   : CHS_WPAWN;
+    case ROOK:   return black ? CHS_BROOK   : CHS_WROOK;
+    case KNIGHT: return black ? CHS_BKNIGHT : CHS_WKNIGHT;
+    case BISHOP: return black ? CHS_BBISHOP : CHS_WBISHOP;
+    case QUEEN:  return black ? CHS_BQUEEN  : CHS_WQUEEN;
+    case KING:   return black ? CHS_BKING   : CHS_WKING;
+    default:     return -1;
     }
 }
 
 static void draw_piece(int type, int black, int x, int y, int size) {
-    int fill = black ? EK_INK : EK_PAPER;
-    int rim = black ? EK_PAPER : EK_INK;
-    /* two rings of rim: a 1-pixel outline of a white piece on a white square
-     * is nearly invisible on this panel, and e-ink ghosting eats thin lines */
-    static const int off[12][2] = {
-        {-1,0},{1,0},{0,-1},{0,1},
-        {-2,0},{2,0},{0,-2},{0,2},
-        {-1,-1},{1,-1},{-1,1},{1,1}
-    };
-    for (int i = 0; i < 12; i++) {
-        g_ox = x + off[i][0];
-        g_oy = y + off[i][1];
-        g_size = size;
-        g_ink = rim;
-        shape(type);
+    int id = piece_sprite(type, black);
+    if (id < 0) return;
+    /* The blit is one grey pixel at a time, honouring the grey layer
+     * exactly like xcom/pvz sprites. */
+    for (int dy = 0; dy < size; dy++) {
+        int sy = dy * CHESS_TILE / size;
+        for (int dx = 0; dx < size; dx++) {
+            int sx = dx * CHESS_TILE / size;
+            int v = ch_at(id, sx, sy);
+            if (v == 0) continue;
+            int level = (v - CHESS_PAPER) * 15 / (CHESS_TONE_MAX - 1);
+            ek_grey_rect(x + dx, y + dy, 1, 1, level);
+        }
     }
-    g_ox = x;
-    g_oy = y;
-    g_size = size;
-    g_ink = fill;
-    shape(type);
 }
 
 /* ---- game state ------------------------------------------------------- */
@@ -1842,6 +1754,10 @@ int main(int argc, char **argv) {
     }
     ek_mono(1);
     ek_wait_updates(1);
+    /* The piece art is real greys, so the grey layer is wanted; if it is
+     * missing the engine dithered, which still reads fine on the pieces. */
+    if (ek_grey_enable() != 0)
+        fprintf(stderr, "chess: no grey layer memory, dithering instead\n");
     ek_waveform(0);
     ek_ghost(4, 30);
     ek_policy(180, 6, 35);

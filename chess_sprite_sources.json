@@ -1,0 +1,17 @@
+{
+  "comment": "Chess piece sprites. Each entry bakes one piece sprite from a source PNG. All pawns share pawn_1, etc. Baked by tools/bake_chess_sprites.py into src/chess_pieces.h (the game draws via ch_at() itself, no .c). Row order here is the sprite id order (white 0..5, black 6..11), which matches chess.c's chess_sprite() PAWN..KING mapping.",
+  "pieces": [
+    { "color": "white", "type": "pawn",   "file": "chess-art/white_pawn_1.png" },
+    { "color": "white", "type": "rook",   "file": "chess-art/white_rook_1.png" },
+    { "color": "white", "type": "knight", "file": "chess-art/white_knight_2.png" },
+    { "color": "white", "type": "bishop", "file": "chess-art/white_bishop_3.png" },
+    { "color": "white", "type": "queen",  "file": "chess-art/white_queen_4.png" },
+    { "color": "white", "type": "king",   "file": "chess-art/white_king_5.png" },
+    { "color": "black", "type": "pawn",   "file": "chess-art/black_pawn_1.png" },
+    { "color": "black", "type": "rook",   "file": "chess-art/black_rook_1.png" },
+    { "color": "black", "type": "knight", "file": "chess-art/black_knight_2.png" },
+    { "color": "black", "type": "bishop", "file": "chess-art/black_bishop_3.png" },
+    { "color": "black", "type": "queen",  "file": "chess-art/black_queen_4.png" },
+    { "color": "black", "type": "king",   "file": "chess-art/black_king_5.png" }
+  ]
+}

@@ -12,7 +12,25 @@ Quit, volume, wi-fi and the power-key sleep are the shared shell in
 `src/kframe.c` (see `areas/kframe.md`). The hamburger is the top-right corner.
 NEW, RETRY and TIMER are chess's own rows under the shared ones.
 
-## Chess clock
+## Baked piece sprites
+
+The pieces are **not** drawn from code shape primitives any more: `chess-art/*.png`
+(RGBA source images, one per piece) are baked by `tools/bake_chess_sprites.py`
+into `src/chess_pieces.h` — a 52x52 tile per piece, 4 bits/pixel (0 transparent,
+1 paper, 2..9 = grey level+1), plus the `ch_at(id,x,y)` accessor. `src/chess.c`
+draws each piece one grey pixel at a time via `ch_at` + `ek_grey_rect`, and
+`main()` calls `ek_grey_enable()` (same pattern as xcom/pvz), so captured/promotion
+pieces are just the same tile scaled down at draw time.
+
+- The baker is **alpha-masked, not luminance-thresholded** (the pvz baker would
+  fail on white pieces, whose only ink is dark shading): the silhouette comes
+  from the PNG alpha channel, then the shading is the pixels' luminance
+  normalised per piece so white and black get the same contrast. `ALPHA_CUT=100`.
+- The consumer draws inline via `ch_at()`; the older separate
+  `chess_blit_piece()` .c output was removed as dead (nothing compiled it).
+- `bake_chess_sprites.py [--preview out.png]` also writes a preview sheet of every
+  piece on a light and a dark square at panel grey/scale. Rerun the baker to
+  regenerate the header if the art changes; chess.c and the Makefile stay put.
 
 The TIMER row in the shared menu cycles `TIMER_CHOICES[] = {0, 60, 180, 300,
 600, 900, 1800}` seconds per side (chess.com's set: off, 1, 3, 5, 10, 15,
