@@ -79,3 +79,12 @@ updated: 2026-11-01
 ## Open
 - Reboot `.63` and capture the very first frame to visually confirm the new kernel logo.
 - Taking `splash` out of `/etc/upstart/x.conf` (the way to drop the later poster and the bar) is not tried. That would not remove the kernel frame.
+
+## Progress bar unload (SOLVED 2026-11-03)
+- The boot progress bar is blanket's `splash` module, walked 0→90 by `splash.conf` (`splash_progress` → LIPC `bootSplashProgress` on `com.lab126.hal.splash`), loaded by the `x` job (`LXINIT_REQUIRED_BLANKET_MODULES="splash"`, `lxinit blanket -t "splash screensaver langpicker"`).
+- **Stock cleanup chain**: `framework_setup.conf` runs `f_blanket_unload_module splash` + `lipc-send-event -r 5 com.lab126.hal bootSplashCleanup`. With `DONT_START_FRAMEWORK` the framework never runs, so this never happens and the bar layer stays registered.
+- The e-ink engine `take_over_ui()` (shared `jailbreak-kindle/kindle-tools/fbdaemon/engine/eink.c`, used by every game + menu) stops ONLY `pillow` and `framework` — it never touches blanket, so the menu's black→white GC16 frame erases the bar's pixels but blanket re-paints them while the splash module stays loaded.
+- **Fix (this project only, no shared-code edit)**: `tools/clear-boot-splash.sh` runs the same two stock calls raw via lipc (blanket unload `splash` + `bootSplashCleanup`), called from `menu-boot.sh` right before `/mnt/us/menu` starts. Installed on `.63` as `/mnt/us/clear-boot-splash.sh`.
+- **Verified live on 192.168.0.63 2026-11-03**: before → `lipc-get-prop com.lab126.blanket load -s` = `langpicker usb screensaver splash`; after the two calls → `langpicker usb screensaver` (splash gone), both rc=0. Idempotent: unload of a not-loaded module is a no-op rc=0. `menu-boot.log` shows `unloading the boot splash layer (blanket splash module)` before `eink: UI taken over`.
+- Raw lipc works without sourcing `blanket_functions` (which needs `f_log` and fails standalone with `f_log: not found`). Use `lipc-set-prop com.lab126.blanket unload -s splash` + `lipc-send-event -r 5 com.lab126.hal bootSplashCleanup`.
+- The device busybox has NO `base64` and NO `grep -E`, and scp is broken (sftp-server missing). Transfer files over `ssh 'cat > file'` stdin pipes; pull binary dumps with `ssh 'dd if=FILE' > local`.

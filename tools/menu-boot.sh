@@ -161,6 +161,11 @@ while :; do
     # panel). The runners of the games stop/restart powerd per game; this loop
     # covers the menu phases between them. restore_ui() starts it again.
     /sbin/initctl stop powerd >> "$LOG" 2>&1 || say "could not stop powerd for the menu"
+    if [ -x /mnt/us/clear-boot-splash.sh ]; then
+        say "unloading the boot splash layer (blanket splash module)"
+        sh /mnt/us/clear-boot-splash.sh >> "$LOG" 2>&1 || \
+            say "clear-boot-splash.sh rc=$? (splash module may already be gone)"
+    fi
     /mnt/us/menu >> "$LOG" 2>&1
     rc=$?
     /sbin/initctl start powerd >> "$LOG" 2>&1 || say "could not restart powerd after the menu"

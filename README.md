@@ -648,7 +648,7 @@ stock, writes only the changed bytes, re-verifies, and does not auto-reboot.
 The uImage data CRC (`dcrc` at +24) and header CRC (`hcrc` at +4) both have to
 be recomputed, which the builder does.
 
-To skip the picture, take `splash` out of the two lines in `/etc/upstart/x.conf`.
+To skip the boot POSTER entirely, take `splash` out of the two lines in `/etc/upstart/x.conf`.
 Not tried yet. Do not `killall blanket` — the Kindle reboots into repair mode.
 Games never stop the `x` job: stopping X makes restore-kindle.sh restart it on
 exit, which makes blanket redraw the boot splash (the flicker after QUIT). They
@@ -656,6 +656,18 @@ take the screen with the engine's `EK_TAKEOVER` (framework + pillow only), and
 the shared runner (`tools/kindle-run.sh`) stops powerd before each game so the
 power key cannot raise the screen saver over the board — same clean start/stop
 as XCOM for every game.
+
+The PROGRESS BAR that keeps showing over the menu after boot is fixed properly:
+it is blanket's `splash` module (the `x` job loads it, splash.conf walks it
+0→90). Stock cleanup only runs from the disabled framework's
+`framework_setup.conf` (`f_blanket_unload_module splash` +
+`lipc-send-event -r 5 com.lab126.hal bootSplashCleanup`), and the engine's
+takeover never touches blanket — so the menu used to draw its white frame
+*under* the bar. `tools/clear-boot-splash.sh` repeats those two stock lipc
+calls (raw, no `f_log` dependency), and `menu-boot.sh` runs it right before the
+menu takes the panel. Verified live on .63: blanket modules go from
+`langpicker usb screensaver splash` to `langpicker usb screensaver`, rc=0,
+idempotent.
 
 ### Language strings (the "Kindle starts up" text)
 
