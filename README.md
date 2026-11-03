@@ -122,7 +122,14 @@ make calib
 ./run-calib-on-kindle.sh 192.168.0.66
 ```
 
-Left square blinks (grey zap, GC16). Right square jumps (plain ink, DU). The milliseconds under each square are how long that zap took. **QUIT** gives the Kindle back. **NEXT** opens the tuner: SPEED, CLEAN, WFM (AUTO / DU / GC16F / GL16F / GC16), WAIT, MONO. Pick **DU** if the right square is the one you want. Two more NEXT screens are the old smear test and the tap test.
+Left square blinks (grey zap, GC16). Right square jumps (plain ink, DU). The milliseconds under each square are how long that zap took. **QUIT** gives the Kindle back. **NEXT** opens the tuner: SPEED, CLEAN, WFM (AUTO / DU / GC16F / GL16F / GC16), WAIT, MONO. Pick **DU** if the right square is the one you want. The other NEXT screens are the old smear test, the **chess pieces**, and the tap test.
+
+**The chess pieces screen.** Same board and same baked sprites as the chess game, but no rules — tap a piece, tap a square, it moves. Chips: **SIZE** (piece size), **OFS X / OFS Y** (nudge the sprite off the square centre), **WFM** (waveform), **FULL** (redraw the two touched squares as one full-mode refresh instead of partials — the anti-ghost trick chess uses), **NEXT**. Turn **SIZE** down and the piece gets smaller than its square, which makes any centring error obvious.
+
+```bash
+./calib-host --no-takeover --screen 5 --dump /tmp/calib-chess.pgm < /dev/null
+python3 tools/pgm2png.py /tmp/calib-chess.pgm calib-chess-screen.png
+```
 
 **The motion ladder — consistent motion, in numbered steps.** The tuner's gate is
 `GAP ≈ SPEED`: when the measured drop gap stays within ~60 ms of the speed you
