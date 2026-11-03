@@ -27,6 +27,7 @@ make pvz-kindle                   # PvZ -> ./pvz      (no key needed)
 make brogue-kindle                # Brogue -> ./brogue-kindle-app
 make calib                        # Calib tuner -> ./calib
 make engine-test                  # PC check of the shared engine's full-refresh API
+make wifi-test                    # wi-fi joining + the on-screen keyboard (PC only)
 ```
 
 **Play Brogue or run the calib tuner on the Kindle** (same push-and-run pattern):
@@ -605,8 +606,6 @@ minutes for Wi-Fi and starts anyway if it never comes up, because the game draws
 its own Wi-Fi screen. One game per boot (`/tmp/chess.started`); after QUIT, start
 it again over ssh or reboot. Progress is in `/mnt/us/chess-boot.log`.
 
-### Wi-fi without the Kindle UI
-
 ### The launcher menu boot job
 
 `tools/menu-boot.conf` (installed as `/etc/upstart/menu.conf`) is what makes the
@@ -620,12 +619,24 @@ games). Progress is in `/mnt/us/menu-boot.log`.
 
 The game draws its own screen: scan, tap a network, type the password on a drawn
 keyboard, result saved to `/mnt/us/wifi.conf` so the next boot joins by itself.
+Two symbol pages (12 keys) sit between the letters and the buttons, because real
+passwords are full of `@ . - _ ! # $ %` and the letter rows cannot type them.
+SHIFT is one capital then back to small, and says ON while it is armed.
 
 ```
 sh /mnt/us/chess-wifi.sh status          # state / ssid / ip, exit 0 when online
 sh /mnt/us/chess-wifi.sh join SSID PSK   # joins and remembers
 sh /mnt/us/chess-wifi.sh auto            # rejoin what was remembered
 ```
+
+Joining removes any older saved entry for that network name first: a stale
+open-network entry for the same SSID makes `wpa_supplicant` refuse the join, which
+on the glass looked like "connection failed" with the right password. If a join
+does fail, the screen says which stage failed (password refused, or no such
+network) instead of one general message.
+
+Pictures of the screens: `wifi-keyboard.png` (letters), `wifi-keyboard-sym.png`
+(symbol page, SHIFT on).
 
 ### Boot and device pictures
 
@@ -750,6 +761,12 @@ words are painted into the kernel picture, not read from this catalog.
 
 ## When it goes wrong
 
+**Wi-fi says "connection failed" with the right password** — an older saved entry
+for the same network name (an open-network one) makes the join fail. It is removed
+before a new one is added now, so re-run `sh /mnt/us/chess-wifi.sh join SSID PSK`.
+Both halves of this are tested on the PC: `make wifi-test` (the script against a
+stand-in `wpa_cli`, and the real screens walked by taps).
+
 **The Kindle still shows the old sprites** — the device is running the binary from
 the last push. `make kindle`, then push again; rebuilding on this PC alone changes
 nothing on the panel.
@@ -800,6 +817,9 @@ A `sound: no clip words/x.pcm` line means the game said a word with no file: run
 ## On this computer
 
 ```bash
+make wifi-test                                   # wi-fi script + the tap-driven screens
+./chess-host --wifi-shot /tmp/w.pgm pass         # draw the password screen
+./chess-host --wifi-shot /tmp/w.pgm sym          # symbol page, SHIFT on
 ./xcom-host --selftest                           # check the rules
 ./xcom-host --mission 2 --seed 5 --dump /tmp/m2.pgm   # open board 2 of the campaign
 ./xcom-host --auto 2 --no-takeover               # let the computer play 2 turns

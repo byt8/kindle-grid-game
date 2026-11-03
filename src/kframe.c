@@ -24,7 +24,13 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define WIFI_SCRIPT "/mnt/us/chess-wifi.sh"   /* historical name; every app uses it */
+/* historical name; every app uses it. KFRAME_WIFI_SCRIPT is for the host build,
+ * where the test drives the screens against a stand-in on this PC. */
+#ifdef KFRAME_WIFI_SCRIPT
+#define WIFI_SCRIPT KFRAME_WIFI_SCRIPT
+#else
+#define WIFI_SCRIPT "/mnt/us/chess-wifi.sh"
+#endif
 
 #define PWR_STATE        "/sys/power/state"
 #define PWR_LOG_READ_ALL 3
@@ -275,8 +281,8 @@ static void vol_set(int pct) {
 #define W_KEY   56
 #define W_KB_Y  150
 #define W_ROW_H 50
-#define W_BOT   (W_KB_Y + 4 * 60)
-#define W_BOT2  (W_KB_Y + 4 * 60 + 64)
+#define W_BOT   (W_KB_Y + 4 * 60 + 64)
+#define W_BOT2  (W_KB_Y + 4 * 60 + 128)
 
 typedef struct { char ssid[64]; int sig; int secure; } wnet;
 static wnet g_nets[W_MAX];
@@ -405,6 +411,14 @@ static int wait_tap(int *x, int *y) {
 
 static const char *KB[4] = { "1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm" };
 
+/* Wi-fi passwords are full of the characters the letter rows cannot produce.
+ * Without these rows the only reachable "password" was the letters and digits
+ * the user could see -- which the access point then refused, looking exactly
+ * like a broken join. Two pages, toggled by the &123 / abc key. */
+static const char *SYM[2] = { "@.-_!#$%&*", "+=/?;:,()" };
+#define W_SYM     2
+#define W_SYM_Y   (W_KB_Y + 4 * 60)
+
 static void w_entry(const char *value, int y) {
     ek_rect(20, y, 560, 40, EK_INK);
     ek_rect(21, y + 1, 558, 38, EK_INK);
@@ -412,26 +426,41 @@ static void w_entry(const char *value, int y) {
     ek_text(30 + (int)strlen(value) * 8, y + 12, "_", EK_INK);
 }
 
-static void w_keyboard(const char *bottom_right) {
+static void w_keyboard(const char *bottom_right, int shift, int sym) {
     for (int r = 0; r < 4; r++) {
         int len = (int)strlen(KB[r]);
         for (int i = 0; i < len; i++) {
             int x = W_KB_X + i * W_KEY;
             int y = W_KB_Y + r * 60;
             char label[2] = { KB[r][i], 0 };
+            if (shift) label[0] = (char)toupper((unsigned char)label[0]);
             ek_fill_rect(x, y, W_KEY - 4, 54, EK_PAPER);
             ek_rect(x, y, W_KEY - 4, 54, EK_INK);
             ek_text(x + (W_KEY - 4 - 8) / 2, y + 19, label, EK_INK);
         }
     }
-    box(20,  W_BOT, 130, 54, "SHIFT");
+    /* the symbol row: same key size, so a tap lands the same way */
+    int slen = (int)strlen(SYM[sym]);
+    for (int i = 0; i < slen; i++) {
+        int x = W_KB_X + i * W_KEY;
+        char label[2] = { SYM[sym][i], 0 };
+        ek_fill_rect(x, W_SYM_Y, W_KEY - 4, 54, EK_PAPER);
+        ek_rect(x, W_SYM_Y, W_KEY - 4, 54, EK_INK);
+        ek_text(x + (W_KEY - 4 - 8) / 2, W_SYM_Y + 19, label, EK_INK);
+    }
+    /* SHIFT says whether it is on: a silent caps state mistypes the first
+     * character of every password, and nothing on the screen shows it. */
+    box(20,  W_BOT, 130, 54, shift ? "SHIFT ON" : "SHIFT");
     box(160, W_BOT, 120, 54, "DEL");
     box(290, W_BOT, 140, 54, "CLEAR");
+    /* both symbol pages are one row, so the button says which page is up
+     * rather than pretending to switch to symbols that are already there. */
+    box(440, W_BOT, 140, 54, sym ? "SYM 2/2" : "SYM 1/2");
     box(20,  W_BOT2, 280, 54, "BACK");
     box(310, W_BOT2, 270, 54, bottom_right);
 }
 
-static int w_key_at(int x, int y, char *out) {
+static int w_key_at(int x, int y, int sym, char *out) {
     for (int r = 0; r < 4; r++) {
         int len = (int)strlen(KB[r]);
         for (int i = 0; i < len; i++) {
@@ -440,6 +469,14 @@ static int w_key_at(int x, int y, char *out) {
                 *out = KB[r][i];
                 return 1;
             }
+        }
+    }
+    int slen = (int)strlen(SYM[sym]);
+    for (int i = 0; i < slen; i++) {
+        int kx = W_KB_X + i * W_KEY;
+        if (x >= kx && x < kx + W_KEY - 4 && y >= W_SYM_Y && y < W_SYM_Y + 54) {
+            *out = SYM[sym][i];
+            return 1;
         }
     }
     return 0;
@@ -473,12 +510,13 @@ static void w_draw_list(void) {
     ek_flush();
 }
 
-static void w_draw_text(const char *title, const char *value, const char *bottom_right) {
+static void w_draw_text(const char *title, const char *value, const char *bottom_right,
+                        int shift, int sym) {
     ek_clear(EK_PAPER);
     ek_text(12, 12, title, EK_INK);
     ek_text(12, 34, "tap the letters, then the button at the bottom", EK_INK);
     w_entry(value, 70);
-    w_keyboard(bottom_right);
+    w_keyboard(bottom_right, shift, sym);
     ek_flush();
 }
 
@@ -497,6 +535,7 @@ int kframe_wifi_setup(void) {
     int mode = M_LIST;
     char ssid[64] = "", pw[64] = "";
     int shift = 0;
+    int sym = 0;        /* which symbol page the keyboard is showing */
     int secure = 1;
 
     g_wifi_err[0] = 0;
@@ -542,7 +581,7 @@ int kframe_wifi_setup(void) {
             char title[120];
             if (mode == M_SSID) snprintf(title, sizeof title, "NETWORK NAME");
             else                snprintf(title, sizeof title, "PASSWORD FOR %.50s", ssid);
-            w_draw_text(title, buf, mode == M_SSID ? "NEXT" : "JOIN");
+            w_draw_text(title, buf, mode == M_SSID ? "NEXT" : "JOIN", shift, sym);
 
             int x, y;
             if (!wait_tap(&x, &y)) return -1;
@@ -554,6 +593,7 @@ int kframe_wifi_setup(void) {
                 continue;
             }
             if (x >= 290 && x < 430 && y >= W_BOT && y < W_BOT + 54) { buf[0] = 0; continue; }
+            if (x >= 440 && x < 580 && y >= W_BOT && y < W_BOT + 54) { sym = !sym; continue; }
             if (y >= W_BOT2 && y < W_BOT2 + 54) {
                 if (x >= 20 && x < 300) { mode = M_LIST; continue; }
                 if (x >= 310 && x < 580) {
@@ -577,10 +617,13 @@ int kframe_wifi_setup(void) {
                 }
             }
             char ch;
-            if (w_key_at(x, y, &ch)) {
+            if (w_key_at(x, y, sym, &ch)) {
                 if (len + 1 < cap) {
                     buf[len] = shift ? (char)toupper((unsigned char)ch) : ch;
                     buf[len + 1] = 0;
+                    /* one capital, then back to small: typing "Alotbsol1"
+                     * should not need remembering to turn SHIFT off. */
+                    shift = 0;
                 }
             }
             continue;
@@ -605,15 +648,18 @@ int kframe_wifi_shot(const char *what) {
         wifi_scan();
         w_draw_list();
     } else if (!strcmp(what, "name")) {
-        w_draw_text("NETWORK NAME", "garden", "NEXT");
+        w_draw_text("NETWORK NAME", "garden", "NEXT", 0, 0);
     } else if (!strcmp(what, "pass")) {
-        w_draw_text("PASSWORD FOR PRNet84", "Alotbsol1", "JOIN");
+        w_draw_text("PASSWORD FOR PRNet84", "Alotbsol1", "JOIN", 0, 0);
+    } else if (!strcmp(what, "sym")) {
+        /* the symbol page with SHIFT on, so both states get a picture */
+        w_draw_text("PASSWORD FOR PRNet84", "a@b.c", "JOIN", 1, 1);
     } else if (!strcmp(what, "fail")) {
         snprintf(g_wifi_err, sizeof g_wifi_err,
                  "could not join PRNet84 (out of range, or the password was refused)");
         w_draw_fail();
     } else {
-        fprintf(stderr, "kframe: wifi shot wants list, name, pass or fail (got %s)\n", what);
+        fprintf(stderr, "kframe: wifi shot wants list, name, pass, sym or fail (got %s)\n", what);
         return -1;
     }
     return 0;

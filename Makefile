@@ -217,6 +217,13 @@ chess-test: chess-host engine-test
 	grep -q 'refresh: rects=2' /tmp/chess-refresh.out
 
 
+# The wi-fi screens the user actually taps: the keyboard has to be able to type
+# a real password, and the reason a join failed has to reach the glass. Runs on
+# this PC against a stand-in wifi script (see tests/wifi-screen-test.sh).
+wifi-test:
+	sh tests/wifi-test.sh
+	sh tests/wifi-screen-test.sh
+
 # sprites.h is baked from the bold art in bold/ plus the patterns inside the
 # baker. The generated sheets are committed, so this rule needs no network.
 src/sprites.h: tools/bake_bold_sprites.py bold_sprite_sources.json \
