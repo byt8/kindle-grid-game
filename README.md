@@ -78,7 +78,14 @@ advances you to the next one.
 The script rebuilds `./chess` before it copies. A push of an old `./chess` looks
 like nothing changed. On the glass the three bottom buttons are gone. The new
 control is the small button at the **top right**: **QUIT** (tap twice),
-**VOLUME**, **WIFI**, then **NEW** and **RETRY**. Only chess has this menu.
+**VOLUME**, **WIFI**, then **NEW**, **RETRY** and **TIMER**. Only chess has this menu.
+
+The **TIMER** row in the menu sets a chess clock for the next game (tap to
+cycle: off → 1 min → 3 min → 10 min → 30 min). The choice is written back into
+`chess.conf`, so it survives a reboot. The remaining time for both sides is
+drawn at the top right of the board, the clock only runs while it is that
+side's turn, and running out of time loses the game. The LLM is told the clock
+state too, so it answers quickly when you are short of time.
 
 **Play Tetris on the Kindle:**
 

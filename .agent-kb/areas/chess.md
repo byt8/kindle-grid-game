@@ -10,7 +10,24 @@ moves come back. `chess.conf` holds the real key and is gitignored.
 Black and writes one line of trash talk under the board. Tap-to-pick/tap-to-move.
 Quit, volume, wi-fi and the power-key sleep are the shared shell in
 `src/kframe.c` (see `areas/kframe.md`). The hamburger is the top-right corner.
-NEW and RETRY are chess's own rows under the shared ones.
+NEW, RETRY and TIMER are chess's own rows under the shared ones.
+
+## Chess clock
+
+The TIMER row in the shared menu cycles `TIMER_CHOICES[] = {0, 60, 180, 600,
+1800}` seconds per side; the choice is persisted as `clock = N` in
+`chess.conf` (survives a reboot), and `timer_label_set()` renders
+`TIMER: off / 1 min / 3 min / 10 min / 30 min`. `clock_show()` draws
+`W m:ss  B m:ss` top right of the board; `clock_poke()` ticks only the side to
+move while no menu is open (and not while the LLM owes a reply — the model's
+wait is not burned against you), `clock_restart()` hands the clock over after a
+move, and a zeroed clock ends the game (over 6/7: "ran out of time"). The
+prompt sent to DeepSeek includes the remaining time for both sides so the model
+plays faster when you are short. Tapping TIMER mid-game resets both clocks and
+carries on from the current position. `make chess-test` opens the menu, taps
+TIMER, and greps `kframe: app item 3`; the clock=60 menu shot must differ from
+the plain one. On host the status line "clock set …" is not echoed (`--no-wifi`
+has no API), so the test keys on the item dispatch, not the message.
 
 ## Commands that matter
 

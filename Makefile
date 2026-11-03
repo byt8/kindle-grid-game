@@ -195,6 +195,13 @@ chess-test: chess-host
 	grep -q 'kframe: quit armed' /tmp/chess-quit.err
 	grep -q 'kframe: quit confirmed' /tmp/chess-quit.err
 	$(PY) tools/check_pgm.py /tmp/chess-mid.pgm /tmp/chess-sel.pgm /tmp/chess-menu.pgm /tmp/chess-vol.pgm
+	# the TIMER row lives in the shared menu: open it and cycle TIMER once
+	printf 'tap 560 10\ntap 300 428\n' | ./chess-host --no-takeover --no-wifi --conf /tmp/chess-clock-test.conf \
+	    >/tmp/chess-timer.out 2>/tmp/chess-timer.err
+	grep -q 'kframe: app item 3' /tmp/chess-timer.err
+	printf 'clock = 60\n' > /tmp/chess-clock-test.conf
+	./chess-host --no-takeover --no-wifi --conf /tmp/chess-clock-test.conf --menu-shot /tmp/chess-menu-timer.pgm
+	$(PY) tools/check_pgm.py /tmp/chess-menu.pgm /tmp/chess-menu-timer.pgm
 
 
 # sprites.h is baked from the bold art in bold/ plus the patterns inside the

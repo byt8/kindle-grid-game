@@ -585,6 +585,11 @@ static void conf_defaults(void) {
 #endif
 }
 
+static int  clock_alloc_ms;     /* per side, ms; 0 = no clock */
+static char g_conf_path[256];   /* where the clock choice is persisted */
+static const int TIMER_CHOICES[] = { 0, 60, 180, 600, 1800 };   /* seconds per side */
+static int  clock_set = 0;      /* index into TIMER_CHOICES that clock_alloc_ms matches */
+
 static char *trim(char *s) {
     while (*s == ' ' || *s == '\t') s++;
     char *e = s + strlen(s);
@@ -608,9 +613,18 @@ static int conf_load(const char *path) {
         else if (!strcmp(k, "model")) snprintf(CFG.model, sizeof CFG.model, "%s", v);
         else if (!strcmp(k, "url")) snprintf(CFG.url, sizeof CFG.url, "%s", v);
         else if (!strcmp(k, "ca")) snprintf(CFG.ca, sizeof CFG.ca, "%s", v);
+        else if (!strcmp(k, "clock")) clock_alloc_ms = atoi(v) * 1000;  /* per side, ms */
         else fprintf(stderr, "chess: unknown setting '%s' in %s\n", k, path);
     }
     fclose(f);
+    int best = 0, best_d = 1 << 30;
+    for (int i = 0; i < (int)(sizeof TIMER_CHOICES / sizeof TIMER_CHOICES[0]); i++) {
+        int d = clock_alloc_ms - TIMER_CHOICES[i] * 1000;
+        if (d < 0) d = -d;
+        if (d < best_d) { best_d = d; best = i; }
+    }
+    clock_set = best;
+    clock_alloc_ms = TIMER_CHOICES[best] * 1000;
     return 0;
 }
 
@@ -844,6 +858,10 @@ static int parse_reply(const pos *p, char *reply, move *out, char *say, size_t s
     return 0;
 }
 
+/* per-side countdown, ms, one of them ticking while it is that side's turn */
+static int clk_ms[2];
+static uint32_t clk_last_ms;      /* the last poll's timestamp; 0 before first tick */
+
 /* Ask for the next move. Returns 0 and fills both buffers, or -1 with err. */
 static int api_move(const pos *p, const char *history, move *out, char *say, size_t sayn,
                     char *err, size_t en) {
@@ -875,15 +893,26 @@ static int api_move(const pos *p, const char *history, move *out, char *say, siz
         "Line one: MOVE: <your move in UCI, for example e7e5 or e7e8q>. "
         "Line two: SAY: <one line of friendly trash talk, at most 18 words, no quotes>.";
 
+    const char *clockline = "";
+    char clk_txt[160];
+    if (clock_alloc_ms) {
+        int w = (clk_ms[WHITE] + 999) / 1000, b = (clk_ms[BLACK] + 999) / 1000;
+        snprintf(clk_txt, sizeof clk_txt,
+                 "Chess clock is on. You (Black) have %d:%02d left; White has %d:%02d. "
+                 "Play faster when your time is short.\n",
+                 b / 60, b % 60, w / 60, w % 60);
+        clockline = clk_txt;
+    }
     char prompt[4096];
     snprintf(prompt, sizeof prompt,
              "You are Black. It is your turn.\n"
              "FEN: %s\n"
              "Moves so far: %s\n"
              "%s"
+             "%s"
              "Legal moves for Black (UCI): %s\n"
              "Pick one of those legal moves.",
-             fen, history[0] ? history : "(none)", board, legal);
+             fen, history[0] ? history : "(none)", board, clockline, legal);
 
     char jsys[1024], jprompt[6144], json[8192];
     json_escape(sys, jsys, sizeof jsys);
@@ -1118,10 +1147,49 @@ static void new_game(void) {
     over = 0;
     promo_from = promo_to = -1;
     api_busy = 0;
+    clk_ms[WHITE] = clk_ms[BLACK] = clock_alloc_ms;
+    clk_last_ms = 0;
     set_status("your turn - you are white");
 }
 
 static void present(void);
+
+/* A side's clock runs only while it is that side's turn and no menu is open.
+ * Returns 1 when someone has run out of time. */
+static char clk_buf[64];
+
+static void clock_poke(void) {
+    if (!clock_alloc_ms || over) return;
+    uint32_t now = ek_ms();
+    if (kframe_covering()) { clk_last_ms = now; return; }
+    if (!clk_last_ms) { clk_last_ms = now; return; }
+    int side = P.stm;
+    int64_t dt = (int64_t)now - (int64_t)clk_last_ms;
+    clk_last_ms = now;
+    if (dt <= 0) return;
+    if (dt > clk_ms[side]) clk_ms[side] = 0;
+    else clk_ms[side] -= (int)dt;
+    if (clk_ms[side] == 0) {
+        clk_ms[WHITE] = clk_ms[BLACK] = 0;
+        over = (side == BLACK) ? 6 : 7;    /* 6 black lost on time; 7 white lost */
+        set_status(side == BLACK ? "black ran out of time - you win" :
+                                   "you ran out of time - the computer wins");
+    }
+}
+
+static void clock_restart(void) {   /* a move was made: only the other side's clock runs now */
+    clk_last_ms = 0;
+    if (!clock_alloc_ms || over) return;
+    int side = P.stm;
+    if (clk_ms[side] <= 0) {
+        over = (side == BLACK) ? 6 : 7;
+    }
+}
+
+static void clock_show(void) {      /* "W 4:32  B 3:00" into clk_buf (mm:ss, or zero) */
+    int w = (clk_ms[WHITE] + 999) / 1000, b = (clk_ms[BLACK] + 999) / 1000;
+    snprintf(clk_buf, sizeof clk_buf, "W %d:%02d  B %d:%02d", w / 60, w % 60, b / 60, b % 60);
+}
 
 /* Ask the API for Black's move and play it. Nothing is played unless the API
  * answers with a legal move. */
@@ -1158,6 +1226,7 @@ static int play_ai(void) {
     snprintf(remark, sizeof remark, "%s", say);
     sel = -1;
     check_over();
+    clock_restart();
     if (!over) set_status("your turn");
     return 0;
 }
@@ -1248,6 +1317,10 @@ static void present(void) {
     ek_text(64, 8, "- against", EK_INK);
     ek_text(136, 8, CFG.model, EK_INK);
     ek_text(12, 28, status, EK_INK);
+    if (clock_alloc_ms) {
+        clock_show();
+        ek_text(EK_W - (int)strlen(clk_buf) * 8 - 12, 28, clk_buf, EK_INK);
+    }
     if (over) {
         ek_text(12, 46, "open the menu (top right) and tap NEW", EK_INK);
     } else if (api_busy) {
@@ -1297,6 +1370,7 @@ static int human_move(int from, int to) {
         sel = -1;
         nlegal = 0;
         check_over();
+        clock_restart();
         if (!over) set_status("the computer is thinking ...");
         return 1;
     }
@@ -1315,6 +1389,7 @@ static void do_promo(int type) {
             sel = -1;
             nlegal = 0;
             check_over();
+            clock_restart();
             if (!over) set_status("the computer is thinking ...");
             return;
         }
@@ -1570,11 +1645,52 @@ static int selftest(void) {
 
 /* ---- the shared menu -------------------------------------------------- */
 
-enum { CHESS_NEW = 1, CHESS_RETRY = 2 };
+enum { CHESS_NEW = 1, CHESS_RETRY = 2, CHESS_TIMER = 3 };
+
+static char timer_label[32];
+static int clock_set;   /* which TIMER_CHOICES is active */
+
+static void timer_label_set(void) {
+    int s = clock_set < 0 ? TIMER_CHOICES[0] : TIMER_CHOICES[clock_set];
+    if (s <= 0) snprintf(timer_label, sizeof timer_label, "TIMER: off");
+    else if (s % 60 == 0) snprintf(timer_label, sizeof timer_label, "TIMER: %d min", s / 60);
+    else snprintf(timer_label, sizeof timer_label, "TIMER: %d s", s);
+}
+
+/* Write the clock choice into the conf file: a "clock = N" line is added or
+ * rewritten, anything else in the file is left alone. */
+static void persist_clock_choice(void) {
+    if (!g_conf_path[0]) return;
+    int want = clock_set < 0 ? 0 : TIMER_CHOICES[clock_set];
+    char tmp[300];
+    snprintf(tmp, sizeof tmp, "%s.tmp", g_conf_path);
+    FILE *in = fopen(g_conf_path, "r");
+    FILE *out = fopen(tmp, "w");
+    if (!out) { if (in) fclose(in); return; }
+    char line[512];
+    int wrote = 0;
+    if (in) {
+        while (fgets(line, sizeof line, in)) {
+            char *s = trim(line);
+            if (s[0] && s[0] != '#' && strncmp(s, "clock", 5) == 0 &&
+                (s[5] == ' ' || s[5] == '=' || s[5] == '\t')) {
+                fprintf(out, "clock = %d\n", want);
+                wrote = 1;
+            } else {
+                fputs(line, out);
+            }
+        }
+        fclose(in);
+    }
+    if (!wrote) fprintf(out, "clock = %d\n", want);
+    fclose(out);
+    rename(tmp, g_conf_path);
+}
 
 static const kframe_item CHESS_ITEMS[] = {
     { "NEW",   CHESS_NEW },
     { "RETRY", CHESS_RETRY },
+    { timer_label, CHESS_TIMER },
 };
 
 static void kf_status(const char *msg) { set_status("%s", msg); }
@@ -1591,16 +1707,35 @@ static int on_chess_item(int id) {
         set_status("the computer does not owe you a move");
         return 1;
     }
+    if (id == CHESS_TIMER) {
+        clock_set = (clock_set + 1) % (int)(sizeof TIMER_CHOICES / sizeof TIMER_CHOICES[0]);
+        clock_alloc_ms = TIMER_CHOICES[clock_set] * 1000;
+        timer_label_set();
+        clk_ms[WHITE] = clk_ms[BLACK] = clock_alloc_ms;
+        clk_last_ms = 0;
+        persist_clock_choice();
+        set_status(clock_alloc_ms ? "clock set - new game uses it" :
+                                   "clock off - new game is untimed");
+        if (!over) {
+            /* a clock change while a game is in play resets the clocks
+             * and carries on from the current position */
+            api_busy = 0;
+            sel = -1;
+            check_over();
+        }
+        return 1;
+    }
     fprintf(stderr, "chess: menu item %d is not one of ours\n", id);
     return 1;
 }
 
 static int open_frame(void) {
+    timer_label_set();
     kframe_cfg kf;
     memset(&kf, 0, sizeof kf);
     kf.title = "CHESS";
     kf.items = CHESS_ITEMS;
-    kf.nitems = 2;
+    kf.nitems = (int)(sizeof CHESS_ITEMS / sizeof CHESS_ITEMS[0]);
     kf.on_item = on_chess_item;
     kf.on_quit = kf_quit;
     kf.repaint = present;
@@ -1683,6 +1818,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--help")) { usage(); return 0; }
         else { usage(); return 2; }
     }
+    g_conf_path[0] = 0;
+    (void)snprintf(g_conf_path, sizeof g_conf_path, "%s", conf_path);
 
     if (conf_load(conf_path) != 0)
         fprintf(stderr, "chess: no config at %s (the api needs one)\n", conf_path);
@@ -1829,8 +1966,10 @@ int main(int argc, char **argv) {
                 ek_close();
                 return 2;
             }
+            clock_poke();
             int act = handle_tap(x, y);
             if (act == -2) play_ai();
+            clock_poke();
             present();
         }
     }
@@ -1867,6 +2006,8 @@ int main(int argc, char **argv) {
         }
         if (shot_req) { shot_req = 0; ek_dump_pgm(SHOT_PATH, 1); }
         if (stop_req) break;
+        clock_poke();
+        if (over == 6 || over == 7) { got = 1; }   /* time lost: repaint with the message */
         if (kframe_pwr_poll()) {
             /* Back from sleep with Black still to move: ask again, because the
              * press cancelled the question that was in flight. */
