@@ -1,6 +1,6 @@
 # calib
 
-Status: **built, host-tested — not yet run on a device.** Opens on the RX
+Status: **runs on `.63` (2026-11-03).** Opens on the RX
 screen: the same black square stepped on one beat, left with GC16, right with
 DU, both times printed on the glass. NEXT is the tuner.
 
@@ -72,6 +72,9 @@ make calib-test          # host selftest + tuner PGM check (check_pgm)
 ```
 
 ## Facts learned the hard way
+
+- [fixed 2026-11-03, verified on `.63`] **The app aborted after one RX step and the Kindle fell back to the reader.** `calib.log` said `calib: ink flush failed: wanted wfm 1 and pixels, got wfm 2 rects 4`, then `app exited rc=1` and `restore-kindle` restarted framework -- the "crashes then drops to the book screen" the user saw. Cause: `ek_grey_enable()` ran in `main()` for every screen, and `eink.c`'s `grey_capable()` clamps every non-GC16 waveform to GC16 while a grey canvas exists, so RX's forced DU came back as GC16 (wfm 2) and RX's own check aborted the program. **Never enable the grey layer for RX**: DU is 1-bit by nature. It is now allocated by `apply_screen_policy(5)` (chess) and only there.
+- **`ek_grey_enable()` cannot be undone** (no matching disable), so once the chess screen has allocated the layer RX cannot be measured in the same run. `advance_screen()` skips RX with a stderr message instead of walking into the abort. Restart the app to get RX back.
 
 - [verified 2026-11-02 src/calib.c, jailbreak-kindle/.../eink.c] **Grey motion cannot look even.** GC16 / GC16F / GL16F are a multi-zap that parks the pigment halfway. That zap is the blink. DU (waveform id 1) is one push, black or white, and is what this engine already uses for motion when the caller does not force a grey mode. A2 (id 4, the named animation waveform) is not wired in `ek_waveform_by_name`. It lives in the shared engine. Do not add it without a yes.
 - [verified 2026-11-02 eink.c `st.us = ek_ms() - t0`] **`ek_stats.us` is milliseconds** despite the name. The tuner used to print it divided by 1000, so FLASH was always 0. It prints the number directly now.

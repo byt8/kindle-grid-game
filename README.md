@@ -124,6 +124,8 @@ make calib
 
 Left square blinks (grey zap, GC16). Right square jumps (plain ink, DU). The milliseconds under each square are how long that zap took. **QUIT** gives the Kindle back. **NEXT** opens the tuner: SPEED, CLEAN, WFM (AUTO / DU / GC16F / GL16F / GC16), WAIT, MONO. Pick **DU** if the right square is the one you want. The other NEXT screens are the old smear test, the **chess pieces**, and the tap test.
 
+The RX screen needs a **1-bit canvas** to force DU, and the chess-pieces screen needs the grey layer to draw its sprites. The grey layer cannot be turned off again, so once you have been to the chess screen RX is skipped for the rest of that run (it says so on stderr). Restart the app to get RX back.
+
 **The chess pieces screen.** Same board and same baked sprites as the chess game, but no rules — tap a piece, tap a square, it moves. Chips: **SIZE** (piece size), **OFS X / OFS Y** (nudge the sprite off the square centre), **WFM** (waveform), **FULL** (redraw the two touched squares as one full-mode refresh instead of partials — the anti-ghost trick chess uses), **NEXT**. Turn **SIZE** down and the piece gets smaller than its square, which makes any centring error obvious.
 
 ```bash

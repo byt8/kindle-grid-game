@@ -119,6 +119,13 @@ static int rx_fail;             /* a forced waveform did not come back */
 static int rx_n;                /* pairs completed */
 static int rx_y1, rx_y2;
 static int rx_grey_ms = -1, rx_ink_ms = -1;
+/* The grey layer is only needed by the chess screen (screen 5). It must NOT be
+ * on for RX: eink.c's grey_capable() clamps every non-GC16 waveform to GC16
+ * while a grey canvas exists, so a forced DU comes back as GC16 and RX's own
+ * "did the waveform I asked for come back?" check aborts the app. That is what
+ * dropped the whole program to the reader after one step (2026-11-03). */
+static int grey_on;             /* ek_grey_enable() has allocated the layer */
+static int ch_grey_fail;        /* ek_grey_enable() returned -1             */
 static int ghost2_on = 0;
 static int ghost2_y;
 static uint32_t ghost_at;
@@ -180,13 +187,25 @@ static void ch_draw(void);
  * each square is one waveform, on purpose. Other screens use tetris's. */
 static void apply_screen_policy(int s) {
     if (s == 4) {
+        /* RX forces DU. A grey canvas makes eink.c submit GC16 instead, so
+         * the RX comparison cannot be made once the layer is allocated:
+         * say so plainly rather than letting the flush check look like a bug. */
+        if (grey_on)
+            fprintf(stderr, "calib: the grey layer is allocated, so DU cannot be "
+                            "forced; restart the app for the RX screen\n");
         ek_ghost(0, 0);
         ek_wait_updates(1);
         ek_mono(1);
     } else if (s == 5) {
         /* Exactly chess.c's engine setup. No ek_mono(1) ever: it forces
          * EPDC_FLAG_FORCE_MONOCHROME and collapses the sprite's grey levels
-         * to flat black/white on the real panel (host cannot show this). */
+         * to flat black/white on the real panel (host cannot show this).
+         * The layer is allocated here and only here, so the RX screen keeps
+         * its plain DU: chess's blit is the only consumer of ek_grey_rect(). */
+        if (!grey_on) {
+            if (ek_grey_enable() != 0) ch_grey_fail = 1;
+            else grey_on = 1;
+        }
         ek_ghost(4, 30);
         ek_policy(180, 6, 35);
         ek_wait_updates(1);
@@ -482,7 +501,6 @@ static int ch_ofsx = 0;          /* nudge on top of the centring      */
 static int ch_ofsy = 0;
 static int ch_wfmi = 2;          /* index into wfm[]; 2 = GC16F       */
 static int ch_full = 1;          /* ek_full_refresh() the squares a move touched */
-static int ch_grey_fail;         /* ek_grey_enable() returned -1       */
 static int ch_moves;
 static uint32_t ch_move_at;
 static int ch_gap;               /* ms between the last two moves      */
@@ -711,7 +729,15 @@ static void advance_screen(void) {
     else if (screen == 1) screen = 2;
     else if (screen == 2) screen = 3;
     else if (screen == 3) screen = 5;
-    else screen = 4;
+    else if (grey_on) {
+        /* RX forces DU, and eink.c clamps a forced DU to GC16 for as long as a
+         * grey canvas exists. ek_grey_enable() cannot be undone, so once the
+         * chess screen has allocated it RX cannot be measured in this run.
+         * Skip it with a reason instead of flashing an abort on the glass. */
+        fprintf(stderr, "calib: skipping RX, the chess screen left the grey layer "
+                        "on and RX needs a 1-bit canvas to force DU\n");
+        screen = 1;
+    } else screen = 4;
     step_n = 0;
     step_at = 0;
     knob_gap = 0;
@@ -847,13 +873,8 @@ int main(int argc, char **argv) {
         ek_restore_ui();
         return 1;
     }
-    /* The chess screen blits real grey sprites, so the grey layer must be on
-     * before anything is drawn. chess.c opts in the same way, and it is a hard
-     * failure there too: a dither fallback would silently change the art. */
-    if (ek_grey_enable() != 0) {
-        fprintf(stderr, "calib: the grey layer did not allocate\n");
-        ch_grey_fail = 1;
-    }
+    /* The grey layer is enabled by apply_screen_policy(5), not here: the RX
+     * screen needs a 1-bit canvas or the engine refuses to submit DU at all. */
     ch_reset();
     ek_mono(knob_mono);
     ek_wait_updates(knob_wait);
@@ -869,6 +890,7 @@ int main(int argc, char **argv) {
         if (dump_path) { if (ek_dump_pgm(dump_path, 1) != 0) { rc = 1; goto out; } }
         step_ghost(); present();
         step_taplag(); present();
+        apply_screen_policy(5);   /* the grey layer is screen 5's, not main's */
         ch_draw(); present();
         rc = 0; goto out;
     }
