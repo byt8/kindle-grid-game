@@ -36,6 +36,19 @@ pieces are just the same tile scaled down at draw time.
   piece on a light and a dark square at panel grey/scale. Rerun the baker to
   regenerate the header if the art changes; chess.c and the Makefile stay put.
 
+### THE `ek_mono` grey killer (found on device)
+
+After the sprites landed, the device showed **flat black/white** pieces while the
+host looked perfect. Cause: a `ek_mono(1)` call left over in `main()` from the
+older 1-bit draw code. The engine (`eink.c:952`) sets
+`EPDC_FLAG_FORCE_MONOCHROME` on every update whenever `force_mono` is set, and
+the e-ink controller then collapses the grey layer's 16 levels to one bit.
+The **host simulator does not model FORCE_MONOCHROME**, so host runs cannot
+catch it — the failure only shows on the actual panel. Fix was deleting the
+call; xcom/pvz never call `ek_mono`. Live check: `kill -USR1 <chess pid>` dumps
+`/tmp/chess-shot.pgm`; a healthy grey draw has 15 distinct values
+(0,34,51,...238,255), the broken one is just 0/255.
+
 The TIMER row in the shared menu cycles `TIMER_CHOICES[] = {0, 60, 180, 300,
 600, 900, 1800}` seconds per side (chess.com's set: off, 1, 3, 5, 10, 15,
 30 min); the choice is persisted as `clock = N` in

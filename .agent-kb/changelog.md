@@ -13,6 +13,13 @@
 - 2026-11-02 — tetris — **Drop timing fixed: pieces fall on a fixed beat, not flush-jittered.** `drop_at = now + drop_ms()` moved the deadline by however long the previous `present()` blocked (~250-330 ms full refresh), so drops drifted late after taps and GC16 cleans. Now `drop_at += drop_ms()` in the device loop — drops exactly `drop_ms()` apart, step drawn by the completing present, one move per settled refresh. Level scaling untouched. `make tetris-test` green, ARM rebuilt, deployed to 192.168.0.66 and running.
 # Changelog
 
+## 2026-11-03 — chess sprites: fixed flat black/white on device
+Found and removed a leftover `ek_mono(1)` in src/chess.c main(): it forces
+EPDC_FLAG_FORCE_MONOCHROME on every update and the controller collapses the
+grey layer's 16 tones to 1 bit. Host simulator does not model it, so only the
+device showed the bug. Verified live: /tmp/chess-shot.pgm from `kill -USR1`
+now has 15 distinct grey values.
+
 Newest first. One line per task. Current truth is in `areas/`, not here.
 
 - 2026-11-03 — boot-splash — **The boot progress bar that lingers over the menu is FIXED.** Root cause: the bar is blanket's `splash` module (loaded by the `x` job, walked 0→90 by splash.conf). Stock cleanup = `framework_setup.conf`'s `f_blanket_unload_module splash` + `lipc-send-event -r 5 com.lab126.hal bootSplashCleanup` — which never runs with the framework disabled, and the e-ink engine's `take_over_ui()` only stops `pillow`/`framework`, never blanket, so the menu's white frame erased pixels but blanket kept re-painting them. Fix, project-side only (no shared-engine edit): `tools/clear-boot-splash.sh` repeats the two stock lipc calls raw (blanket `unload -s splash` + bootSplashCleanup; raw lipc works where sourcing `blanket_functions` fails on `f_log`), called from `menu-boot.sh` right before `/mnt/us/menu`. Verified live on .63: modules `langpicker usb screensaver splash` → `langpicker usb screensaver`, both rc=0, idempotent, log shows `unloading the boot splash layer`. Deployed to /mnt/us/clear-boot-splash.sh on .63 and session restarted supervised (menu start/running).

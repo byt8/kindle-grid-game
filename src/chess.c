@@ -1752,10 +1752,14 @@ int main(int argc, char **argv) {
         ek_restore_ui();
         return 1;
     }
-    ek_mono(1);
     ek_wait_updates(1);
     /* The piece art is real greys, so the grey layer is wanted; if it is
-     * missing the engine dithered, which still reads fine on the pieces. */
+     * missing the engine dithered, which still reads fine on the pieces.
+     * Deliberately no ek_mono(1) here: it sets EPDC_FLAG_FORCE_MONOCHROME
+     * on every update and the controller collapses the 16 grey levels to
+     * one bit — the flat black/white this sprite work replaced (seen on
+     * device; the host simulator does not model FORCE_MONOCHROME, which
+     * is why host runs cannot catch it). xcom and pvz never call ek_mono. */
     if (ek_grey_enable() != 0)
         fprintf(stderr, "chess: no grey layer memory, dithering instead\n");
     ek_waveform(0);
