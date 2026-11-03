@@ -28,6 +28,12 @@
  *              the instant you see it. Logs the wall-time the jump went out,
  *              the wall-time your tap registered, and the gap.  This is the
  *              number that says "I saw it after X ms and tapped".
+ *   CHESS   -- the real chess board, at chess.c's own geometry, with the real
+ *              baked piece sprites. Tap a piece and tap a square to move it;
+ *              four chips tune the sprite live (SIZE, PAD, OFS, FULL) and the
+ *              flush cost of every move is printed. This is where you find the
+ *              piece size/offset that reads on the glass, then bake it back
+ *              into src/chess.c.
  *
  * QUIT (bottom-right) + a confirm gives the panel back, like the games.
  *
@@ -44,6 +50,8 @@
 #include <unistd.h>
 
 #include "eink.h"
+/* The real baked piece art, so what you tweak here is what chess draws. */
+#include "chess_pieces.h"
 
 /* ---- layout (same shape as tetris: a well area + a row of buttons) ------- */
 
@@ -166,6 +174,7 @@ static void draw_tuner(void);
 static void draw_ghost(void);
 static void draw_taplag(void);
 static void draw_rx(void);
+static void ch_draw(void);
 
 /* Screen 4 must not let the engine swap in its own GL16/GC16 cadence:
  * each square is one waveform, on purpose. Other screens use tetris's. */
@@ -174,6 +183,14 @@ static void apply_screen_policy(int s) {
         ek_ghost(0, 0);
         ek_wait_updates(1);
         ek_mono(1);
+    } else if (s == 5) {
+        /* Exactly chess.c's engine setup. No ek_mono(1) ever: it forces
+         * EPDC_FLAG_FORCE_MONOCHROME and collapses the sprite's grey levels
+         * to flat black/white on the real panel (host cannot show this). */
+        ek_ghost(4, 30);
+        ek_policy(180, 6, 35);
+        ek_wait_updates(1);
+        ek_mono(0);
     } else {
         ek_ghost(6, 30);
         ek_wait_updates(knob_wait);
@@ -188,6 +205,7 @@ static void draw_screen(int s) {
     case 2: draw_ghost(); break;
     case 3: draw_taplag(); break;
     case 4: draw_rx(); break;
+    case 5: ch_draw(); break;
     }
 }
 
@@ -435,6 +453,224 @@ static int rx_hit(int x, int y) {
     return -1;
 }
 
+/* ---- CHESS: the real board, the real sprites, live sprite knobs ---------- */
+/* Geometry and draw are copied from src/chess.c on purpose: the number you
+ * find here is the number chess will use. SQ_PX/BOARD_X/BOARD_Y are chess's. */
+
+#define SQ_PX    68
+#define BOARD_X  28
+#define BOARD_Y  64
+#define BOARD_END (BOARD_Y + 8 * SQ_PX)
+
+enum { PAWN = 1, KNIGHT, BISHOP, ROOK, QUEEN, KING };
+
+/* bottom keypad: three rows of three, right under the board */
+#define CB_W 186
+#define CB_H 52
+#define CB_Y1 612
+#define CB_Y2 668
+#define CB_Y3 724
+enum { C_MINUS = 0, C_QUIT, C_PLUS, C_SIZE, C_OFSX, C_OFSY, C_WFM, C_FULL, C_NEXT };
+static const char *C_LABEL[9] = {
+    "-", "QUIT", "+", "SIZE", "OFS X", "OFS Y", "WFM", "FULL", "NEXT",
+};
+
+static int ch_bd[64];            /* +type white, -type black, 0 empty */
+static int ch_sel = -1;          /* selected square, -1 = none        */
+static int ch_size = 52;         /* drawn piece size, px (chess: 52)  */
+static int ch_ofsx = 0;          /* nudge on top of the centring      */
+static int ch_ofsy = 0;
+static int ch_wfmi = 2;          /* index into wfm[]; 2 = GC16F       */
+static int ch_full = 1;          /* ek_full_refresh() the squares a move touched */
+static int ch_grey_fail;         /* ek_grey_enable() returned -1       */
+static int ch_moves;
+static uint32_t ch_move_at;
+static int ch_gap;               /* ms between the last two moves      */
+static int ch_flash;             /* ms cost of the last flush          */
+static int ch_last_wfm;          /* waveform the engine really submitted */
+static int ch_csel = 0;          /* 0=SIZE 1=OFSX 2=OFSY 3=WFM        */
+
+static void ch_reset(void) {
+    static const int back[8] = {ROOK, KNIGHT, BISHOP, QUEEN, KING, BISHOP, KNIGHT, ROOK};
+    memset(ch_bd, 0, sizeof ch_bd);
+    for (int f = 0; f < 8; f++) {
+        ch_bd[f] = back[f];                     /* rank 1, white */
+        ch_bd[8 + f] = PAWN;
+        ch_bd[48 + f] = -PAWN;
+        ch_bd[56 + f] = -back[f];               /* rank 8, black */
+    }
+    ch_sel = -1;
+}
+
+static int ch_sprite(int type, int black) {
+    switch (type) {
+    case PAWN:   return black ? CHS_BPAWN   : CHS_WPAWN;
+    case ROOK:   return black ? CHS_BROOK   : CHS_WROOK;
+    case KNIGHT: return black ? CHS_BKNIGHT : CHS_WKNIGHT;
+    case BISHOP: return black ? CHS_BBISHOP : CHS_WBISHOP;
+    case QUEEN:  return black ? CHS_BQUEEN  : CHS_WQUEEN;
+    case KING:   return black ? CHS_BKING   : CHS_WKING;
+    default:     return -1;
+    }
+}
+
+/* Same blit as chess.c's draw_piece: one grey pixel at a time, tile scaled
+ * to `size`, art centred inside the square plus the OFS nudge. */
+static void ch_piece(int type, int black, int sqx, int sqy) {
+    int id = ch_sprite(type, black);
+    if (id < 0) return;
+    int size = ch_size;
+    if (size > SQ_PX) size = SQ_PX;
+    int ox = sqx + (SQ_PX - size) / 2 + ch_ofsx;
+    int oy = sqy + (SQ_PX - size) / 2 + ch_ofsy;
+    for (int dy = 0; dy < size; dy++) {
+        int sy = dy * CHESS_TILE / size;
+        for (int dx = 0; dx < size; dx++) {
+            int sx = dx * CHESS_TILE / size;
+            int v = ch_at(id, sx, sy);
+            if (v == 0) continue;
+            int level = (v - CHESS_PAPER) * 15 / (CHESS_TONE_MAX - 1);
+            ek_grey_rect(ox + dx, oy + dy, 1, 1, level);
+        }
+    }
+}
+
+static void ch_sq_xy(int sq, int *x, int *y) {
+    *x = BOARD_X + (sq & 7) * SQ_PX;
+    *y = BOARD_Y + (7 - (sq >> 3)) * SQ_PX;
+}
+
+static int ch_sq_at(int x, int y) {
+    if (x < BOARD_X || x >= BOARD_X + 8 * SQ_PX) return -1;
+    if (y < BOARD_Y || y >= BOARD_END) return -1;
+    return (7 - (y - BOARD_Y) / SQ_PX) * 8 + (x - BOARD_X) / SQ_PX;
+}
+
+static void advance_screen(void);   /* NEXT on the chess screen */
+
+static void ch_draw(void) {
+    char buf[72];
+    ek_clear(EK_PAPER);
+
+    /* top bar 0..64, exactly the strip chess leaves free above the board */
+    ek_text_scale(0, 0, "CHESS SPRITE CALIB", EK_INK, 2);
+    snprintf(buf, sizeof buf, "SIZE %d OFS %+d/%+d WFM %s%s",
+             ch_size, ch_ofsx, ch_ofsy, wfm[ch_wfmi].name, ch_full ? " FULL" : "");
+    ek_text_scale(0, 34, buf, EK_INK, 1);
+    snprintf(buf, sizeof buf, "GAP %d FLASH %d", ch_gap, ch_flash);
+    ek_text_scale(0, 48, buf, EK_INK, 1);
+    if (ch_grey_fail)
+        ek_text_scale(300, 48, "GREY LAYER FAILED: DITHERED", EK_INK, 1);
+    else {
+        snprintf(buf, sizeof buf, "MOVE %d wfm %d", ch_moves, ch_last_wfm);
+        ek_text_scale(380, 48, buf, EK_INK, 1);
+    }
+
+    /* board: dark squares dithered, 1px borders, like chess.c */
+    for (int r = 0; r < 8; r++)
+        for (int f = 0; f < 8; f++) {
+            int x = BOARD_X + f * SQ_PX, y = BOARD_Y + (7 - r) * SQ_PX;
+            if ((f + r) & 1) ek_dither_rect(x, y, SQ_PX, SQ_PX, 3);
+            else ek_fill_rect(x, y, SQ_PX, SQ_PX, EK_PAPER);
+            ek_rect(x, y, SQ_PX, SQ_PX, EK_INK);
+        }
+    /* selection: the same triple ring chess draws */
+    if (ch_sel >= 0) {
+        int x, y;
+        ch_sq_xy(ch_sel, &x, &y);
+        ek_rect(x, y, SQ_PX, SQ_PX, EK_INK);
+        ek_rect(x + 1, y + 1, SQ_PX - 2, SQ_PX - 2, EK_INK);
+        ek_rect(x + 2, y + 2, SQ_PX - 4, SQ_PX - 4, EK_INK);
+    }
+    for (int sq = 0; sq < 64; sq++) {
+        int pc = ch_bd[sq];
+        if (!pc) continue;
+        int x, y;
+        ch_sq_xy(sq, &x, &y);
+        ch_piece(pc > 0 ? pc : -pc, pc < 0, x, y);
+    }
+
+    for (int i = 0; i < 9; i++) {
+        int x = (i % 3 == 0) ? 0 : (i % 3 == 1) ? 206 : 412;
+        int y = i < 3 ? CB_Y1 : i < 6 ? CB_Y2 : CB_Y3;
+        int on = (i == C_SIZE && ch_csel == 0) || (i == C_OFSX && ch_csel == 1) ||
+                 (i == C_OFSY && ch_csel == 2) || (i == C_WFM && ch_csel == 3) ||
+                 (i == C_FULL && ch_full);
+        ek_rect(x, y, CB_W, CB_H, EK_INK);
+        if (on) ek_rect(x + 3, y + 3, CB_W - 6, CB_H - 6, EK_INK);
+        ek_text_scale(x + 12, y + (CB_H - 16) / 2, C_LABEL[i], EK_INK, 1);
+    }
+}
+
+static int ch_cell(int x, int y) {
+    int col = x < 206 ? 0 : x < 412 ? 1 : 2;
+    if (y >= CB_Y1 && y < CB_Y1 + CB_H) return col;
+    if (y >= CB_Y2 && y < CB_Y2 + CB_H) return 3 + col;
+    if (y >= CB_Y3 && y < CB_Y3 + CB_H) return 6 + col;
+    return -1;
+}
+
+static void tap_chess(int x, int y) {
+    int b = ch_cell(x, y);
+    if (b >= 0) {
+        switch (b) {
+        case C_QUIT:
+            running = 0;
+            return;
+        case C_MINUS:
+            if (ch_csel == 0) { if (ch_size > 36) ch_size -= 2; }
+            else if (ch_csel == 1) { if (ch_ofsx > -8) ch_ofsx--; }
+            else if (ch_csel == 2) { if (ch_ofsy > -8) ch_ofsy--; }
+            else ch_wfmi = (ch_wfmi + WFM_N - 1) % WFM_N;
+            break;
+        case C_PLUS:
+            if (ch_csel == 0) { if (ch_size < SQ_PX) ch_size += 2; }
+            else if (ch_csel == 1) { if (ch_ofsx < 8) ch_ofsx++; }
+            else if (ch_csel == 2) { if (ch_ofsy < 8) ch_ofsy++; }
+            else ch_wfmi = (ch_wfmi + 1) % WFM_N;
+            break;
+        case C_SIZE: ch_csel = 0; break;
+        case C_OFSX: ch_csel = 1; break;
+        case C_OFSY: ch_csel = 2; break;
+        case C_WFM:  ch_csel = 3; break;
+        case C_FULL: ch_full = !ch_full; break;
+        case C_NEXT:
+            advance_screen();
+            return;
+        default:
+            return;
+        }
+        ch_draw();
+        return;
+    }
+    /* a tap on the board: pick up, then put down. No rules -- this is a
+     * sprite/eye test, not a game, and moving a piece anywhere is the point. */
+    int sq = ch_sq_at(x, y);
+    if (sq < 0) return;
+    if (ch_sel < 0) { if (ch_bd[sq]) ch_sel = sq; }
+    else if (sq == ch_sel) ch_sel = -1;
+    else {
+        uint32_t now = ek_ms();
+        if (ch_move_at) ch_gap = (int)(now - ch_move_at);
+        ch_move_at = now;
+        ch_bd[sq] = ch_bd[ch_sel];
+        ch_bd[ch_sel] = 0;
+        if (ch_full) {
+            /* chess's clean_mark: one genuine UPDATE_MODE_FULL over the two
+             * squares, clipped by the engine to what actually differs. */
+            int x1, y1, x2, y2;
+            ch_sq_xy(ch_sel, &x1, &y1);
+            ch_sq_xy(sq, &x2, &y2);
+            int bx = x1 < x2 ? x1 : x2, by = y1 < y2 ? y1 : y2;
+            ek_full_refresh(bx, by, (x1 > x2 ? x1 : x2) + SQ_PX - bx,
+                            (y1 > y2 ? y1 : y2) + SQ_PX - by);
+        }
+        ch_moves++;
+        ch_sel = -1;
+    }
+    ch_draw();
+}
+
 /* ---- per-tap actions ------------------------------------------------------ */
 
 static void tap_tuner(int x, int y) {
@@ -474,6 +710,7 @@ static void advance_screen(void) {
     if (screen == 4) screen = 1;
     else if (screen == 1) screen = 2;
     else if (screen == 2) screen = 3;
+    else if (screen == 3) screen = 5;
     else screen = 4;
     step_n = 0;
     step_at = 0;
@@ -488,6 +725,7 @@ static void advance_screen(void) {
 static void tap_screen(int x, int y) {
     int b;
     if (screen == 1) { tap_tuner(x, y); return; }
+    if (screen == 5) { tap_chess(x, y); return; }
     if (screen == 4) b = rx_hit(x, y);
     else b = hit(x, y);
     if (b < 0) return;
@@ -535,6 +773,15 @@ static void present(void) {
         st = ek_flush();
         ek_waveform(0);
         knob_flash_us = (int)st.us; /* milliseconds; the field is named us */
+    } else if (screen == 5) {
+        /* CHESS: the WFM knob forces a waveform, 0 = let the engine pick.
+         * A grey canvas is clamped to GC16 by grey_capable(), so a forced
+         * DU does not sneak in where the sprites would lose their tones. */
+        ek_waveform(ch_wfmi ? wfm[ch_wfmi].id : 0);
+        st = ek_flush();
+        ek_waveform(0);
+        ch_flash = (int)st.us;
+        ch_last_wfm = st.wfm;
     } else {
         st = ek_flush();
     }
@@ -557,7 +804,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--speed") && i + 1 < argc) knob_speed = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--screen") && i + 1 < argc) {
             screen = atoi(argv[++i]);
-            if (screen < 1 || screen > 4) { fprintf(stderr, "calib: screen must be 1..4\n"); return 2; }
+            if (screen < 1 || screen > 5) { fprintf(stderr, "calib: screen must be 1..5\n"); return 2; }
         }
         else if (!strcmp(argv[i], "--steps") && i + 1 < argc) {
             steps_left = atoi(argv[++i]);
@@ -567,7 +814,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--host-stdin")) host_stdin = 1;
 #endif
         else {
-            fprintf(stderr, "usage: calib [--probe] [--no-takeover] [--speed N] [--screen 1..4] [--steps N]\n");
+            fprintf(stderr, "usage: calib [--probe] [--no-takeover] [--speed N] [--screen 1..5] [--steps N]\n");
             return 2;
         }
     }
@@ -600,6 +847,14 @@ int main(int argc, char **argv) {
         ek_restore_ui();
         return 1;
     }
+    /* The chess screen blits real grey sprites, so the grey layer must be on
+     * before anything is drawn. chess.c opts in the same way, and it is a hard
+     * failure there too: a dither fallback would silently change the art. */
+    if (ek_grey_enable() != 0) {
+        fprintf(stderr, "calib: the grey layer did not allocate\n");
+        ch_grey_fail = 1;
+    }
+    ch_reset();
     ek_mono(knob_mono);
     ek_wait_updates(knob_wait);
     /* same policy shape as tetris until a screen applies its own */
@@ -614,6 +869,7 @@ int main(int argc, char **argv) {
         if (dump_path) { if (ek_dump_pgm(dump_path, 1) != 0) { rc = 1; goto out; } }
         step_ghost(); present();
         step_taplag(); present();
+        ch_draw(); present();
         rc = 0; goto out;
     }
 
