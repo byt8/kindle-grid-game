@@ -11,11 +11,12 @@ The consumer (src/chess.c) draws sprites itself via ch_at() and the grey
 layer, so no separate blit .c is emitted.
 
 Each piece bakes to a CHESS_TILE x CHESS_TILE tile (52 px = the on-board draw
-size). 4 bits per pixel: 0 transparent, 1 paper, 2..9 an ink whose value minus
-1 is the engine's 0..15 grey level. The shading inside the silhouette is the
-art's luminance, normalised per piece so both white and black pieces get the
-same contrast. Captured/promotion sprites (drawn smaller) are scaled down at
-draw time from this 52 px tile.
+size). 4 bits per pixel: 0 transparent, 1 paper, 2..15 an ink; the stored
+value minus 1 is rescaled to the engine's 0..15 grey level at draw time, so
+the art keeps almost the full grey range the panel can show. The shading
+inside the silhouette is the art's luminance, normalised per piece so both
+white and black pieces get the same contrast. Captured/promotion sprites
+(drawn smaller) are scaled down at draw time from this 52 px tile.
 
 Usage: bake_chess_sprites.py [--preview out.png]
 """
@@ -32,8 +33,8 @@ OUT_H = ROOT / "src" / "chess_pieces.h"
 TILE = 52
 FIT_W = FIT_H = 52          # bounding box for the piece, aspect preserved
 TRANSPARENT, PAPER = 0, 1
-TONE_MAX = 9                # paper(1) .. ink(9)
-INKS = TONE_MAX - PAPER     # 8 ink levels
+TONE_MAX = PAPER + 14       # paper(1) .. ink(15); a nibble cannot hold 16
+INKS = TONE_MAX - PAPER     # 14 ink levels, rescaled to 0..15 at draw
 ALPHA_CUT = 100
 
 GREY_RAMP = (255, 238, 221, 204, 187, 170, 153, 136,
@@ -215,8 +216,8 @@ def main():
         blob = pack(t)
         H.append("    {" + ",".join(f"0x{b:02x}" for b in blob) + "},")
     H.append("};")
-    H.append("/* 4 bits per pixel: 0 transparent, 1 paper, 2..9 an ink whose")
-    H.append(" * value minus 1 is the engine's 0..15 grey level. */")
+    H.append("/* 4 bits per pixel: 0 transparent, 1 paper, 2..15 an ink;")
+    H.append(" * value minus 1 rescales to the engine's 0..15 grey level. */")
     H.append("static int ch_at(int id, int x, int y) {")
     H.append("    int i = y * CHESS_TILE + x;")
     H.append("    if (id < 0 || id >= CHESS_COUNT || i < 0 || i >= CHESS_TILE * CHESS_TILE)")

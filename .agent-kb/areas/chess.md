@@ -17,7 +17,8 @@ NEW, RETRY and TIMER are chess's own rows under the shared ones.
 The pieces are **not** drawn from code shape primitives any more: `chess-art/*.png`
 (RGBA source images, one per piece) are baked by `tools/bake_chess_sprites.py`
 into `src/chess_pieces.h` — a 52x52 tile per piece, 4 bits/pixel (0 transparent,
-1 paper, 2..9 = grey level+1), plus the `ch_at(id,x,y)` accessor. `src/chess.c`
+1 paper, 2..15 ink, value minus 1 rescaled to the engine's 0..15 grey level),
+plus the `ch_at(id,x,y)` accessor. `src/chess.c`
 draws each piece one grey pixel at a time via `ch_at` + `ek_grey_rect`, and
 `main()` calls `ek_grey_enable()` (same pattern as xcom/pvz), so captured/promotion
 pieces are just the same tile scaled down at draw time.
@@ -26,6 +27,9 @@ pieces are just the same tile scaled down at draw time.
   fail on white pieces, whose only ink is dark shading): the silhouette comes
   from the PNG alpha channel, then the shading is the pixels' luminance
   normalised per piece so white and black get the same contrast. `ALPHA_CUT=100`.
+- The bake uses the **full grey range the engine's layer takes**: 14 ink levels
+  (TONE_MAX 15 — a 4-bit nibble cannot hold 16), rescaled to 0..15 at draw time
+  in `draw_piece`. Older bakes crushed art to 8 levels.
 - The consumer draws inline via `ch_at()`; the older separate
   `chess_blit_piece()` .c output was removed as dead (nothing compiled it).
 - `bake_chess_sprites.py [--preview out.png]` also writes a preview sheet of every
