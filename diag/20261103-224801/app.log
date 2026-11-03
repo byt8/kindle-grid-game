@@ -1,0 +1,35 @@
+brogue[0.000] brogue starting (pid 14722): diagnostics quiet, SIGUSR1 = screen grab
+initctl: Unknown instance: 
+initctl: Unknown instance: 
+eink: UI taken over (cvm gone, pillowd gone)
+eink: fb0 mxc_epdc_fb 600x800 bpp=8 stride=608 rotate=1
+eink: touch /dev/input/event3 0..4095,0..4095 -> 600x800
+brogue[1.462] panel: bar 0..392, game window 392..799, cell 6x12
+brogue[1.463] touch ABS_X range 0..4095 (fuzz 0 flat 0 res 0)
+brogue[1.465] touch ABS_Y range 0..4095 (fuzz 0 flat 0 res 0)
+brogue[6.745] pausing: 90 delays so far, this one 50 ms
+brogue[11.778] pausing: 178 delays so far, this one 50 ms
+brogue[16.826] pausing: 267 delays so far, this one 50 ms
+brogue[21.855] pausing: 356 delays so far, this one 50 ms
+brogue[26.901] pausing: 444 delays so far, this one 50 ms
+brogue[31.931] pausing: 532 delays so far, this one 50 ms
+brogue[36.969] pausing: 621 delays so far, this one 50 ms
+brogue[41.973] pausing: 709 delays so far, this one 50 ms
+brogue[47.016] pausing: 797 delays so far, this one 50 ms
+brogue[52.040] pausing: 886 delays so far, this one 50 ms
+brogue[57.079] pausing: 975 delays so far, this one 50 ms
+brogue[62.088] pausing: 1064 delays so far, this one 50 ms
+brogue[67.133] pausing: 1153 delays so far, this one 50 ms
+brogue[72.171] pausing: 1242 delays so far, this one 50 ms
+brogue[77.179] pausing: 1331 delays so far, this one 50 ms
+brogue[82.186] pausing: 1420 delays so far, this one 50 ms
+brogue[87.192] pausing: 1509 delays so far, this one 50 ms
+brogue[92.201] pausing: 1598 delays so far, this one 50 ms
+brogue[97.232] pausing: 1687 delays so far, this one 50 ms
+brogue[102.237] pausing: 1774 delays so far, this one 50 ms
+brogue[107.280] pausing: 1862 delays so far, this one 50 ms
+brogue[112.293] pausing: 1950 delays so far, this one 50 ms
+brogue[117.299] pausing: 2039 delays so far, this one 50 ms
+brogue[122.342] pausing: 2128 delays so far, this one 50 ms
+brogue[127.357] pausing: 2215 delays so far, this one 50 ms
+Terminated

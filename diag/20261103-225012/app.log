@@ -1,0 +1,26 @@
+brogue[0.000] brogue starting (pid 19465): diagnostics quiet, SIGUSR1 = screen grab
+initctl: Unknown instance: 
+initctl: Unknown instance: 
+eink: UI taken over (cvm gone, pillowd gone)
+eink: fb0 mxc_epdc_fb 600x800 bpp=8 stride=608 rotate=1
+eink: touch /dev/input/event3 0..4095,0..4095 -> 600x800
+brogue[1.412] panel: bar 0..392, game window 392..799, cell 6x12
+brogue[1.413] touch ABS_X range 0..4095 (fuzz 0 flat 0 res 0)
+brogue[1.415] touch ABS_Y range 0..4095 (fuzz 0 flat 0 res 0)
+brogue[6.679] pausing: 89 delays so far, this one 50 ms
+brogue[7.735] wrote /tmp/brogue-shot.pgm
+brogue[11.713] pausing: 174 delays so far, this one 50 ms
+brogue[16.763] pausing: 263 delays so far, this one 50 ms
+brogue[21.813] pausing: 352 delays so far, this one 50 ms
+brogue[26.841] pausing: 440 delays so far, this one 50 ms
+brogue[30.787] wrote /tmp/brogue-shot.pgm
+brogue[31.889] pausing: 527 delays so far, this one 50 ms
+brogue[36.901] pausing: 614 delays so far, this one 50 ms
+brogue[41.934] pausing: 702 delays so far, this one 50 ms
+brogue[46.975] pausing: 789 delays so far, this one 50 ms
+brogue[52.026] pausing: 878 delays so far, this one 50 ms
+brogue[57.073] pausing: 966 delays so far, this one 50 ms
+brogue[62.098] pausing: 1054 delays so far, this one 50 ms
+brogue[67.152] pausing: 1141 delays so far, this one 50 ms
+brogue[72.202] pausing: 1228 delays so far, this one 50 ms
+Terminated

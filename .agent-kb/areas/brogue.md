@@ -1,6 +1,40 @@
 # brogue
 
-Status: **runs on the device and takes the panel. Taps do nothing, so QUIT on the glass does not give the screen back.** Kill `brogue-kindle-app` over ssh; the runner's restore trap then starts the menu. Do not SIGTERM `menu` to get the panel (see areas/menu.md). Host preview and the ARM binary both build.
+Status: **runs on the device, draws the main menu on the glass, and animates it.** Start it with `./tools/brogue-diag.sh [--debug] <ip>`; the log is in `diag/<stamp>/app.log` and a picture of the canvas in `diag/<stamp>/shot.png`. Whether a *tap* advances the game is still unproven (no tap-injection tool exists yet) — the pause-interrupt path is written and logs `pause interrupted`, but nobody has tapped it through. Do not SIGTERM `menu` to get the panel (see areas/menu.md). Host preview, the ARM binary and the symbol build all build.
+
+## 2026-11-03 night — why "Brogue doesn't work": three real faults, all fixed
+
+Found with `make brogue-debug` (unstripped ARM, `-g`) + a SIGSEGV/SIGBUS/SIGILL/SIGFPE
+handler in `kfb-device.c` that prints the fault address, then `addr2line`. The
+device has **no usable `dmesg` and no core files**, so this is the only way to
+name a crash on it.
+
+1. **Stack corruption → segfault at startup** (`kfb_gameLoop`, fault addr `0x6c`).
+   `diag_probe_touch()` read `EVIOCGABS` into a 5-int struct; the kernel writes
+   its full `struct input_absinfo` (6 ints, `value` first). The 4-byte overflow
+   clobbered a callee-saved register, and the crash surfaced several call levels
+   later at `atexit()` — so the reported line was nowhere near the bug. Fix: use
+   all six fields. **Any ioctl into a local struct needs the struct's real size.**
+2. **Host pause function registered on the device.** `kfbConsole.pauseForMilliseconds`
+   pointed at the `nanosleep` stub in `kfb-platform.c` even for the ARM build, so
+   `kfb_device_pauseForMilliseconds` was never called on the glass. Now `#ifdef
+   EK_HOST` picks the stub and the device picks the real one.
+3. **Animations drew nothing.** Brogue's menu flame loops `pauseBrogue(50)` and
+   redraws, and the frame push lives in `nextKeyOrMouseEvent` — which that loop
+   never reaches. The canvas stayed blank while the game animated into it. The
+   device pause now flushes at most every 250 ms (an e-ink update cannot keep up
+   with 50 ms) and polls touch during the delay, buffering one `rogueEvent` for
+   the next input call and returning 1 when `PauseBehavior.interuptForMouseMove`
+   asks to be interrupted. Without that, the flame loop could never be left.
+
+Verified: both binaries paint the menu (`dark px` 18k of 120k sampled, and two
+grabs 3 s apart differ by ~9.5k px, so it really animates).
+`make brogue-test` still green (13 frames).
+
+Runner caveat: `kindle-run.sh` refuses to start when the launcher `menu` session
+is up ("the launcher will not exit"). If `menu` is alive, clear it first:
+`: > /mnt/us/.menu-stop; : > /mnt/us/.menu-handoff; /sbin/initctl stop menu`
+then `kill -9` any leftover `menu`.
 `make brogue-host` + `make brogue-test` green (13 preview frames, layout
 checks pass). `make brogue-kindle` produces a static ARM binary
 (`brogue-kindle-app`, 1.4 MB). Grey layer wired: the device front-end owns the
@@ -59,6 +93,8 @@ ink buffer, 1:1 with what the panel shows.
 make brogue-host         # PC build (host C compiler, -DEK_HOST)
 make brogue-test         # scripted run -> 13 frames in /tmp/kfb-frames + check
 make brogue-kindle       # static ARM via docker kfb-build -> ./brogue-kindle-app
+make brogue-debug        # same, with symbols -> ./brogue-kindle-app-debug
+./tools/brogue-diag.sh [--debug] [--grab|--status] [IP]   # push, run, read the log, grab the panel
 ./run-brogue-on-kindle.sh [IP]   # push + take screen + run + restore
 ```
 

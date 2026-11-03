@@ -30,10 +30,25 @@ make engine-test                  # PC check of the shared engine's full-refresh
 make wifi-test                    # wi-fi joining + the on-screen keyboard (PC only)
 ```
 
-**Play Brogue or run the calib tuner on the Kindle** (same push-and-run pattern):
+**Play Brogue, or diagnose why it will not draw:**
 
 ```bash
-./run-brogue-on-kindle.sh [IP]    # roguelike. Taps do nothing yet; see "When it goes wrong" to give the screen back
+./run-brogue-on-kindle.sh [IP]              # just play it
+./tools/brogue-diag.sh [IP]                 # same thing, but keep the log + a picture
+./tools/brogue-diag.sh --debug [IP]         # unstripped ARM build; a crash names its own source line
+./tools/brogue-diag.sh --grab [IP]          # photograph the panel right now -> diag/<stamp>/shot.png
+./tools/brogue-diag.sh --status [IP]        # what the log says so far
+```
+
+Every run writes `diag/<timestamp>/app.log` and `shot.png`, so there is no guessing
+about what the glass showed. If the launcher menu is holding the touch device, clear
+it first:
+
+```bash
+ssh root@<ip> ': > /mnt/us/.menu-stop; : > /mnt/us/.menu-handoff; /sbin/initctl stop menu; kill -9 $(pidof menu)'
+```
+
+```bash
 ./run-calib-on-kindle.sh [IP]     # perception tuner; tap QUIT to give the screen back
 ```
 
@@ -385,9 +400,32 @@ permanent 12-button control bar occupies the top 392 px (`kfb-bar.h`).
 Text-mode only, no tileset — the classic Brogue legend (`#` wall, `.` floor,
 `@` player, …). `make brogue-host` runs a scripted game and dumps 600x800 PGM
 frames into `/tmp/kfb-frames` for the layout checker; `make brogue-kindle`
-cross-compiles the static ARM binary `brogue-kindle-app`, and
-`./run-brogue-on-kindle.sh [IP]` pushes + runs it. Touch mapping (two-tap
-travel) and first on-device run are the next steps.
+cross-compiles the static ARM binary `brogue-kindle-app`, `make brogue-debug`
+does the same with symbols, and `./tools/brogue-diag.sh [IP]` pushes + runs it
+while keeping the log and a picture of the panel.
+
+Three faults kept it off the glass, all fixed on 2026-11-03:
+
+- **A segfault at startup, reported nowhere near its cause.** `EVIOCGABS` was
+  given a 5-int struct; the kernel writes 6, so the overflow corrupted a
+  register and the crash surfaced at `atexit()`. `make brogue-debug` plus a
+  fault handler in `kfb-device.c` gives the address, and `addr2line` names the
+  line — the device has no usable `dmesg` and no core files, so this is the
+  only way to name a crash on it.
+- **The PC's `nanosleep` stub was registered on the device**, so the real pause
+  function never ran there.
+- **Animations drew nothing.** Brogue's menu flame redraws and pauses in a loop
+  that never asks for input, and the frame push lived in the input call — so
+  the canvas stayed blank while the game animated into it. The pause now pushes
+  a frame at most every 250 ms (an e-ink update cannot keep up with the 50 ms
+  loop) and polls touch, so a tap ends the animation and is handed to the next
+  input call.
+
+Verified on .63: both binaries paint the menu, and two grabs 3 s apart differ by
+~9.5k px, so it really animates. `make brogue-test` still green.
+Whether a tap then *advances* the game is the open question — no tap-injection
+tool exists yet, so the interrupt path is written and logged but untapped.
+Touch mapping (two-tap travel) is still the next step.
 
 ---
 

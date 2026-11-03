@@ -406,6 +406,37 @@ brogue: brogue-kindle
 brogue-kindle-app: brogue-kindle
 	@test -f brogue-kindle-app && echo "brogue: device binary ready: brogue-kindle-app"
 
+# Same binary with its symbols kept, for when the game dies on the device and
+# the only evidence is "Segmentation fault". Pushed to /mnt/us/brogue-debug and
+# run through tools/brogue-diag.sh --debug, which reads the fault address out of
+# the log and hands it to addr2line here. Costs a few hundred KB on /mnt/us and
+# changes no behaviour, so it is a separate target rather than a flag on the
+# shipping build.
+brogue-kindle-debug:
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" \
+	  -v /home/brendan/jailbreak-kindle:/jb \
+	  -w /src kfb-build \
+	  sh -c 'set -e; mkdir -p build/brogue-kindle-debug; \
+	    cd brogue; \
+	    for f in src/brogue/*.c src/variants/GlobalsBrogue.c src/variants/GlobalsRapidBrogue.c src/variants/GlobalsBulletBrogue.c external/cJSON/cJSON.c; do \
+	      arm-linux-musleabi-gcc -std=c99 -Os -g -ffunction-sections -fdata-sections \
+	        -Wno-parentheses -Wno-unused-result -Wno-format -Wno-format-security -Wno-format-overflow \
+	        -Isrc/brogue -Isrc/platform -Isrc/variants -I/jb/kindle-tools/fbdaemon/engine \
+	        -DBROGUE_KFB -DBROGUE_EXTRA_VERSION=\"-kfb\" -DDATADIR=\"/mnt/us/brogue\" \
+	        -c $$f -o ../build/brogue-kindle-debug/$$(basename $$f .c).o; \
+	    done; \
+	    arm-linux-musleabi-gcc -std=c99 -Os -g -ffunction-sections -fdata-sections \
+	      -Wno-parentheses -Wno-unused-result -Wno-format -Wno-format-security -Wno-format-overflow \
+	      -Isrc/brogue -Isrc/platform -Isrc/variants -I/jb/kindle-tools/fbdaemon/engine \
+	      -DBROGUE_KFB -DBROGUE_EXTRA_VERSION=\"-kfb\" -DDATADIR=\"/mnt/us/brogue\" \
+	      -o ../brogue-kindle-app-debug ../build/brogue-kindle-debug/*.o src/platform/kfb-platform.c src/platform/kfb-device.c src/platform/null-platform.c src/platform/platformdependent.c src/platform/main.c \
+	      /jb/kindle-tools/fbdaemon/engine/eink.c \
+	      -static -no-pie -Wl,--gc-sections -lm'
+
+brogue-debug: brogue-kindle-debug
+	@test -f brogue-kindle-app-debug && echo "brogue: debug binary ready: brogue-kindle-app-debug"
+
 brogue-test: brogue-host
 	rm -rf /tmp/kfb-frames && mkdir -p /tmp/kfb-frames
 	-KFB_PREVIEW=/tmp/kfb-frames KFB_SCRIPT=' n h j l k k' timeout 20 ./brogue-host -s 7

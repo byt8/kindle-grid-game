@@ -1,0 +1,9 @@
+brogue[0.000] brogue starting (pid 24540): diagnostics quiet, SIGUSR1 = screen grab
+initctl: Unknown instance: 
+initctl: Unknown instance: 
+eink: UI taken over (cvm gone, pillowd gone)
+eink: fb0 mxc_epdc_fb 600x800 bpp=8 stride=608 rotate=1
+eink: touch /dev/input/event3 0..4095,0..4095 -> 600x800
+brogue[1.411] panel: bar 0..392, game window 392..799, cell 6x12
+brogue[1.412] touch ABS_X range 0..4095 (fuzz 0 flat 0 res 0)
+brogue[1.414] touch ABS_Y range 0..4095 (fuzz 0 flat 0 res 0)

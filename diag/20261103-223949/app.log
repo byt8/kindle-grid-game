@@ -1,0 +1,9 @@
+brogue[0.001] brogue starting (pid 5805): diagnostics quiet, SIGUSR1 = screen grab
+initctl: Unknown instance: 
+initctl: Unknown instance: 
+eink: UI taken over (cvm gone, pillowd gone)
+eink: fb0 mxc_epdc_fb 600x800 bpp=8 stride=608 rotate=1
+eink: touch /dev/input/event3 0..4095,0..4095 -> 600x800
+brogue[1.445] panel: bar 0..392, game window 392..799, cell 6x12
+brogue[1.447] WARNING: /dev/input/event3 reports no axis ranges -- the engine's 4095 scaling may not match this panel
+Segmentation fault
