@@ -66,5 +66,19 @@ if found is None:
     sys.exit("brogue: zoomed map band is blank")
 if found < 3:
     sys.exit("brogue: map letters are not 3x (shortest ink run %d px)" % found)
-print("brogue: host preview ok (%d frames, %d dark map px, %d keyboard px, map stroke %d px)"
-      % (len(pgms), game, kb, found))
+
+# The script walks a few steps from the middle of the page. A scroll would
+# shift almost every map pixel. A page flip leaves the page where it is, so
+# only the @ (and a tile or two) change.
+prev = load(pgms[-2])
+changed = 0
+total = 0
+for y in range(48, 480):
+    for x in range(160, 784):
+        total += 1
+        if logical(prev, x, y) != logical(last, x, y):
+            changed += 1
+if total == 0 or changed * 100 / total > 15:
+    sys.exit("brogue: map scrolled (%d of %d px changed)" % (changed, total))
+print("brogue: host preview ok (%d frames, %d dark map px, %d keyboard px, map stroke %d px, page moved %d px)"
+      % (len(pgms), game, kb, found, changed))

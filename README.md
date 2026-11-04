@@ -41,7 +41,8 @@ make wifi-test                    # wi-fi joining + the on-screen keyboard (PC o
 ```
 
 Turn the Kindle so the power button is on the right. The map letters are
-three times as big. The three lines at the top stay black. Colour effects
+three times as big. The map stays still while you walk, and jumps a whole
+page when you reach the edge. The three lines at the top stay black. Colour effects
 start off (the **Hide color effects** box starts ticked; you can still
 untick it). The buttons float along the bottom the whole time. Tap the
 words **New Game** to start.
@@ -396,7 +397,8 @@ Two rules baked into the file, both learned the hard way:
 A port of **BrogueCE** (`brogue/` — the Community Edition source tree) through
 its swappable console backend (`struct brogueConsole`). The picture is
 landscape, rotated onto the 600x800 panel (`kfb-bar.h`). On the map the
-letters are 3x (24x48) around the `@`; the three status lines and the left
+letters are 3x (24x48) on a page around the `@`. The page stays put
+until the `@` reaches the edge, then it jumps. The three status lines and the left
 stats stay at the full 8x16 so a whole message still fits. Menus zoom onto
 their words, so **New Game** is big. The three status lines are solid black.
 Colour effects start disabled. The 12 buttons float on the bottom the whole
