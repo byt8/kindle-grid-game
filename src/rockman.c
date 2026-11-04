@@ -61,8 +61,26 @@ static uint8_t rand_acc;
 static uint32_t rng, game_seed;
 static int room, entry_pos, ply_r, ply_c, diamonds, gauge_row;
 static int phase, dying, quit_armed, running, redraw_all, clean_next, buttons_dirty;
-static int wfm_clean, failures;
+static int wfm_clean, wfm_motion, failures;
+static int stats_on, probe, warned_slow;   /* the calibrated knobs, as tetris */
 static volatile sig_atomic_t stop_req;
+
+/* How long to leave the panel alone between repaints.
+ *
+ * This was a bare 150 in the loop. Measured on the device, one flush costs
+ * ~276-312 ms whatever it paints, so a 150 ms throttle asked for a repaint
+ * twice as often as the glass can deliver: the loop spent its life blocked in
+ * ioctl and the game's pace became the panel's, not the game's. 320 is the
+ * panel floor; --refresh can raise it but never lower it past that. */
+#define PANEL_FLOOR_MS 320
+static int refresh_ms = PANEL_FLOOR_MS;
+
+/* How long one player step takes, in ms. The original arithmetic gave a step
+ * every 14 passes x 16 ms = ~224 ms, which is faster than this panel paints,
+ * so presses were eaten faster than the screen could show them. 450 is a step
+ * the eye can follow: about one and a half frames per move. */
+#define RM_TICK_CONTROL 14          /* rm_tick_limits[0]: passes per step */
+static int move_ms = 450;
 
 /* Key buffer: one slot per press, drained one action per control tick. The
  * screen refresh outlives several taps, so a single pending slot would let a
@@ -744,9 +762,28 @@ static void present(void) {
         }
     }
     clean_next = 0;
-    ek_waveform(clean && wfm_clean ? wfm_clean : 0);
-    ek_flush();
+    ek_waveform(clean ? wfm_clean : wfm_motion);
+    ek_stats st = ek_flush();
     ek_waveform(0);
+
+    /* Same honest floor as tetris: if the panel's own refresh outlasts the
+     * gap we are leaving, the repaint throttle is a lie. Say so once.
+     *
+     * Two deliberate costs are exempt, or this cries wolf on frame two: a full
+     * repaint (~670 ms, on a room change and the title) and a clean frame
+     * (~700 ms, on the engine's own every-30-flush GC16). Both are one-off
+     * swallows, not the steady per-frame cost this warning is about. */
+    if (!st.full && !clean && !warned_slow && (int)st.us > refresh_ms + 20) {
+        warned_slow = 1;
+        fprintf(stderr,
+                "rockman: the panel needs %u ms per update but the refresh gap is "
+                "%d ms; the screen updates as fast as the panel can, not every %d ms. "
+                "Fastest honest gap is about %u ms.\n",
+                st.us, refresh_ms, refresh_ms, st.us + 10u);
+    }
+    if (stats_on || probe)
+        fprintf(stderr, "rockman: flush wfm=%d rects=%d tiles=%d px=%ld full=%d folded=%d us=%u\n",
+                st.wfm, st.rects, st.tiles, st.px, st.full, st.folded, st.us);
 }
 
 static int hit(int x, int y) {
@@ -1065,7 +1102,15 @@ static void usage(void) {
             "  --selftest   check the rules on this computer and exit\n"
             "  --auto N     play N steps toward the nearest diamond, then stop\n"
             "  --dump FILE  write the picture (PGM) and exit\n"
-            "  --seed N     same seed, same caves\n");
+            "  --seed N     same seed, same caves\n"
+            "  --stats      print what each screen update cost\n"
+            "  --refresh N  ms to leave the panel alone between updates\n"
+            "               (default and floor: %d, one flush costs ~276-312 ms)\n"
+            "  --wfm NAME   waveform for moving frames: DU / GL16F / GC16F / AUTO\n"
+            "  --move N     ms per player step (default 450; the original was ~224,\n"
+            "               which is faster than the panel can paint)\n"
+            "  --tuned      the calibrated set: refresh 320, move 450, WFM DU\n",
+            PANEL_FLOOR_MS);
 }
 
 int main(int argc, char **argv) {
@@ -1088,7 +1133,44 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "--dump") && i + 1 < argc) {
             dump_path = argv[++i];
             if (!dump_path[0]) { usage(); return 2; }
-        } else if (!strcmp(argv[i], "--selftest")) do_test = 1;
+        } else if (!strcmp(argv[i], "--move") && i + 1 < argc) {
+            char *end = NULL;
+            long v = strtol(argv[++i], &end, 10);
+            if (!end || *end || v < 50 || v > 5000) { usage(); return 2; }
+            move_ms = (int)v;
+        } else if (!strcmp(argv[i], "--stats")) stats_on = 1;
+        else if (!strcmp(argv[i], "--probe")) { probe = 1; stats_on = 1; }
+        else if (!strcmp(argv[i], "--refresh") && i + 1 < argc) {
+            char *end = NULL;
+            long v = strtol(argv[++i], &end, 10);
+            if (!end || *end || v < 50 || v > 5000) { usage(); return 2; }
+            /* Refuse rather than clamp: one flush costs ~276-312 ms, so a
+             * smaller gap cannot be honoured, and quietly becoming 320 would
+             * hide which number is really in force. */
+            if (v < PANEL_FLOOR_MS) {
+                fprintf(stderr,
+                        "rockman: --refresh %ld is under the panel floor of %d ms "
+                        "(one flush costs ~276-312 ms); pick %d or more\n",
+                        v, PANEL_FLOOR_MS, PANEL_FLOOR_MS);
+                return 2;
+            }
+            refresh_ms = (int)v;
+        } else if (!strcmp(argv[i], "--wfm") && i + 1 < argc) {
+            const char *nm = argv[++i];
+            if (!strcasecmp(nm, "AUTO")) wfm_motion = 0;
+            else {
+                wfm_motion = ek_waveform_by_name(nm);
+                if (!wfm_motion) {
+                    fprintf(stderr, "rockman: unknown waveform '%s'\n", nm);
+                    return 2;
+                }
+            }
+        } else if (!strcmp(argv[i], "--tuned")) {
+            refresh_ms = PANEL_FLOOR_MS;
+            move_ms = 450;
+            wfm_motion = -1;   /* DU, resolved by name below */
+        }
+        else if (!strcmp(argv[i], "--selftest")) do_test = 1;
         else if (!strcmp(argv[i], "--no-takeover")) flags &= ~EK_TAKEOVER;
         else if (!strcmp(argv[i], "--help")) { usage(); return 0; }
         else { usage(); return 2; }
@@ -1122,11 +1204,20 @@ int main(int argc, char **argv) {
         ek_close();
         return 1;
     }
+    if (wfm_motion == -1) {            /* --tuned asked for DU by name */
+        wfm_motion = ek_waveform_by_name("DU");
+        if (!wfm_motion) {
+            fprintf(stderr, "rockman: DU waveform is missing\n");
+            ek_close();
+            return 1;
+        }
+    }
     ek_mono(1);
 #ifdef EK_HOST
     ek_ghost(0, 0);
     ek_policy(180, 4, 30);
 #else
+    ek_waveform(wfm_motion);   /* 0 = AUTO, or the tuned waveform */
     ek_ghost(6, 30);
     ek_policy(60, 4, 30);
 #endif
@@ -1145,8 +1236,13 @@ int main(int argc, char **argv) {
         show_title();
     } else if (auto_n >= 0) {
         new_game();
-        for (int i = 0; i < auto_n && phase == PHASE_PLAY && !stop_req; i++)
+        /* Present as it plays, not once at the end: otherwise --stats reports
+         * the title screen's one full paint and nothing about the game, which
+         * is the number that decides the refresh gap. */
+        for (int i = 0; i < auto_n && phase == PHASE_PLAY && !stop_req; i++) {
             play_action(bot_action());
+            present();
+        }
     } else {
         show_title();
     }
@@ -1170,6 +1266,8 @@ int main(int argc, char **argv) {
 #else
     if (!do_test && auto_n < 0) {
         int held = -1;
+        unsigned spins = 0;
+        uint32_t loop_start = ek_ms();
         uint32_t next_pass = ek_ms();
         uint32_t next_flush = 0;
         int dirty = 1;
@@ -1206,17 +1304,36 @@ int main(int argc, char **argv) {
                 int act = keyq_peek();      /* the queue drives, never `held`:
                                                holding a button does not walk */
                 if (one_pass(act, act >= 0) && act >= 0) keyq_pop();
-                next_pass = now + (uint32_t)((256 - (int)speed) * 16 / 256);
+                /* One pass per this many ms. The original VIC-20 arithmetic
+                 * was (256-speed)*16/256, i.e. 16 ms at speed 0, and the
+                 * control tick fires every 14 passes: a player move every
+                 * ~224 ms. That is FASTER than this panel can paint (~320 ms
+                 * a frame), so nearly one and a half moves happen per visible
+                 * frame and presses get consumed with nothing on screen to
+                 * show for them. move_ms anchors the pace to the glass and
+                 * keeps the original 14:16:9 tick ratios. */
+                next_pass = now + (uint32_t)((int64_t)move_ms * (256 - (int)speed)
+                                             / (RM_TICK_CONTROL * 256));
                 if (next_pass == now) next_pass = now + 1;
                 dirty = 1;
             }
             if (dirty && (int32_t)(now - next_flush) >= 0) {
+                /* refresh_ms is the frame PERIOD, not a sleep added after the
+                 * paint: present() blocks for the panel's own ~300 ms, so
+                 * timing from after it would make "refresh 320" really mean
+                 * ~620 ms per frame. Anchor on the time the paint started. */
+                uint32_t t0 = ek_ms();
                 present();
-                next_flush = ek_ms() + 150;
+                next_flush = t0 + (uint32_t)refresh_ms;
                 dirty = 0;
             } else {
                 ek_sleep_ms(5);
             }
+            spins++;
+            if (probe && (spins % 500) == 0)
+                fprintf(stderr, "probe: %u loop iterations in %u ms = %.1f/s\n",
+                        spins, ek_ms() - loop_start,
+                        (double)spins * 1000.0 / (double)(ek_ms() - loop_start));
         }
     }
 #endif

@@ -42,5 +42,39 @@ updated: 2026-11-01
 ## Do not redo
 - At speed 0 the timer kills on pass 6730 (256 for the first step, then 6 per step, 9 marks of 120). The self-test asserts that number.
 
+## Pace and panel cost (measured 2026-11-04 @192.168.0.63)
+
+Ran `./run-rockman-on-kindle.sh 192.168.0.63 --tuned --stats --auto 30`.
+Numbers off `/mnt/us/rockman.log`:
+
+- **DU frame = 303–335 ms** (3–4 rects, 33–157 tiles, 2–10 KB). Same as tetris:
+  the panel's own cost, not the game's.
+- **Periodic GC16 clean = 687–701 ms** (engine fires it every 30 flushes).
+- **Full paint (title / room change) = 669–670 ms.**
+
+Two real bugs this exposed, both now fixed in `src/rockman.c`:
+
+1. **The throttle was a lie.** `next_flush = ek_ms() + 150` was measured from
+   *after* a blocking ~300 ms paint, so the true frame period was ~450 ms while
+   the code read 150. `refresh_ms` (default 320 = `PANEL_FLOOR_MS`) is now
+   anchored to `t0` = when the paint *started*, so it means the frame period it
+   claims. `--refresh N` refuses `N < 320` with a message; it does not clamp.
+2. **The game moved faster than the glass could show it.** The original step was
+   `(256-speed)*16/256` ms per pass x 14 passes = **~224 ms per player step**,
+   which is under one 300 ms frame: presses were consumed with nothing on screen
+   to show for them. `move_ms` (default **450**) replaces the hardcoded 16 and
+   keeps the 14:16:9 tick ratios:
+   `next_pass = now + move_ms*(256-speed)/(RM_TICK_CONTROL*256)`.
+   `--move 224` reproduces the original exactly (verified by arithmetic).
+
+The slow-panel warning is exempt on `st.full` and `clean` frames. Those cost
+670–700 ms by design and are one-off swallows, not the steady per-frame cost —
+without the exemption it cried wolf on frame two of every run.
+
+`--auto N` now calls `present()` per step (it used to paint once at the end), so
+`--stats` reports the *game's* cost rather than the title screen's single full
+paint. That change must not `return 0` early or `--dump` silently stops being
+written — the test passed on a stale PGM and hid it once.
+
 ## Open
 - Built as `./rockman` (kfb-build image works), but not pushed or played yet: `./run-rockman-on-kindle.sh 192.168.0.66` timed out on SSH, so the device was off-network.

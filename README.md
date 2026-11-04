@@ -241,6 +241,28 @@ Pass `--seed N` to the runner to play the same puzzle again.
 
 **LEFT / UP / RIGHT / DOWN** dig and walk. **PUSH** shoves a rock sideways. Get all 8 diamonds and the exits open. **QUIT** then **SURE** exits.
 
+**Rockman's pace is tunable** (same treatment as tetris):
+
+```bash
+make rockman-kindle && ./run-rockman-on-kindle.sh <ip> --tuned --stats
+```
+
+`--tuned` = `--refresh 320 --move 450 --wfm DU`. Measured on the device: a DU
+frame costs **~303–335 ms**, a periodic GC16 clean ~700 ms, the title's full
+paint ~670 ms.
+
+- **`--move N`** — ms per player step (default **450**). The original VIC-20
+  arithmetic gave ~224 ms, which is *faster than the panel paints*, so presses
+  were eaten faster than the screen could show them. 450 is about 1.5 frames
+  per move — followable. `--move 224` reproduces the original exactly.
+- **`--refresh N`** — the frame period in ms (default and floor **320**). It is
+  the period, not a sleep *after* the paint: `present()` blocks ~300 ms, so
+  timing after it would silently mean ~620 ms. Under 320 is refused:
+
+  ```
+  rockman: --refresh 100 is under the panel floor of 320 ms (one flush costs ~276-312 ms); pick 320 or more
+  ```
+
 **Play Plants vs Pixels on the Kindle:**
 
 ```bash
