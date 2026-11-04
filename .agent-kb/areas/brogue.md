@@ -1,6 +1,6 @@
 # brogue
 
-Status: **runs on the device and draws the main menu.** Start it with `./tools/brogue-diag.sh [--debug] <ip>`; the log is in `diag/<stamp>/app.log` and a picture in `diag/<stamp>/shot.png`. A tap on the words New Game must be `MOUSE_DOWN` then `MOUSE_UP` on that cell or the menu only flashes (`Buttons.c` `processButtonInput`). `kfb-device.c` queues both on finger-up. Do not SIGTERM `menu` to get the panel (see areas/menu.md). Host preview, the ARM binary and the symbol build all build.
+Status: **landscape on the device.** Turn it so the power button is on the right. Full 8x16 glyphs (the old 6-wide cell chopped the right of every letter). Top `MESSAGE_LINES` are ink 15 on paper. The 12 buttons float on the bottom the whole time (`kfb-bar.h`). A menu tap is still mouse-down then mouse-up. Start it with `./tools/brogue-diag.sh [--debug] <ip>`; the log is in `diag/<stamp>/app.log` and a picture in `diag/<stamp>/shot.png`. A tap on the words New Game must be `MOUSE_DOWN` then `MOUSE_UP` on that cell or the menu only flashes (`Buttons.c` `processButtonInput`). `kfb-device.c` queues both on finger-up. Do not SIGTERM `menu` to get the panel (see areas/menu.md). Host preview, the ARM binary and the symbol build all build.
 
 ## 2026-11-03 night — why "Brogue doesn't work": three real faults, all fixed
 
@@ -137,6 +137,8 @@ text mode, which is what we want); `/mnt/us/brogue` on the device.
 
 ## Facts
 - [verified 2026-11-04 brogue/src/brogue/Buttons.c processButtonInput] A menu button is chosen only when `buttonDepressed == buttonFocused` on `MOUSE_UP`. `buttonDepressed` is set only on `MOUSE_DOWN`. A lone `MOUSE_UP` focuses nothing and titleMenu then leaves `nextGame` at `NG_NOTHING`, so the glass flashes (the pause redraw) and stays on the menu.
+- [verified 2026-11-04 brogue/src/platform/kfb-bar.h] Logical 800x600 rotated 90 degrees clockwise into the 600x800 framebuffer: physical rect is `(599-(ly+lh-1), lx, lh, lw)`. Cells are the full 8x16 font. Keyboard is 2x6, logical y 488..599, always drawn on top of the grid. Rows `y < MESSAGE_LINES` are forced fg 15 bg 0.
+- [ran 2026-11-04 ssh root@192.168.0.63] Binary md5 `ce160fbb32771f05aefc3e6aca0a7cac`, pid 12508. Log says `landscape 800x600`. SIGUSR1 grab: top three lines are solid black (no grey), keyboard band is fully painted. Taps on the floating keys log `key '<'`.
 - [verified 2026-11-04 brogue/src/platform/kfb-device.c] A map finger-up queues `MOUSE_DOWN` then `MOUSE_UP` at the release cell. The pause slot delivers the down; `kfb_evq` holds the up until the next input call. Bar buttons stay a single `KEYSTROKE`.
 - [verified 2026-11-04 .gitignore] `brogue/` is its own git repo and is gitignored here. The port commit belongs in that repo, not this one.
 - [ran 2026-11-04 ssh root@192.168.0.63] Fixed binary pushed, md5 `7d4f5ff4a4f13babb0736ede6c4054d1`. Starting a second runner while the first was still waiting made the first restore the menu (rc 143). The next start stopped the menu and the Kindle then answered `No route to host`. The new process was not seen up.

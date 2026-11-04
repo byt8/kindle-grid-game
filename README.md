@@ -40,8 +40,9 @@ make wifi-test                    # wi-fi joining + the on-screen keyboard (PC o
 ./tools/brogue-diag.sh --status [IP]        # what the log says so far
 ```
 
-On the Kindle, tap the words **New Game** in the bottom picture. The buttons
-along the top are for inside a game (save, rest, stairs, quit).
+Turn the Kindle so the power button is on the right. The letters are full
+size. The three lines at the top are black. The buttons float along the
+bottom the whole time. Tap the words **New Game** to start.
 
 The runner stops the launcher for you, including the job that would start
 the menu again. One kill is not enough: that job brings the menu straight back.
@@ -391,10 +392,10 @@ Two rules baked into the file, both learned the hard way:
 ## Brogue: how it fits together
 
 A port of **BrogueCE** (`brogue/` — the Community Edition source tree) through
-its swappable console backend (`struct brogueConsole`). The game core plots a
-100x34 grid of 6x12 px glyph cells (600x408 px game window on the bottom), and
-`brogue/src/platform/kfb-platform.c` renders it into the e-ink buffer; the
-permanent 12-button control bar occupies the top 392 px (`kfb-bar.h`).
+its swappable console backend (`struct brogueConsole`). The picture is
+landscape: a 100x34 grid of the full 8x16 font, rotated onto the 600x800
+panel (`kfb-bar.h`). The three status lines are solid black. The 12 buttons
+float on the bottom of the picture the whole time.
 Text-mode only, no tileset — the classic Brogue legend (`#` wall, `.` floor,
 `@` player, …). `make brogue-host` runs a scripted game and dumps 600x800 PGM
 frames into `/tmp/kfb-frames` for the layout checker; `make brogue-kindle`
