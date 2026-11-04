@@ -218,14 +218,18 @@ if [ "$job_up" = 1 ] || [ -n "$menus$boots" ]; then
     menu_was=1
     : > /mnt/us/.menu-handoff
     # Supervisor loop in menu.conf relaunches menu-boot unless this stamp exists.
+    # The loop itself deletes the stamp at the top of every pass, and its shell
+    # is not named menu or menu-boot, so one kill is not enough: the supervisor
+    # starts a new menu during the wait and the old check reports "will not exit".
     : > /mnt/us/.menu-stop
-    kill -9 $boots $menus 2>/dev/null
-    /sbin/initctl stop menu >/dev/null 2>&1
     i=0
     while :; do
         menus=$(pids_cmdline '/mnt/us/menu ')
         boots=$(pids_cmdline 'menu-boot.sh')
-        [ -z "$menus$boots" ] && break
+        jobpid=$(/sbin/initctl status menu 2>/dev/null | sed -n 's/.*process //p')
+        [ -z "$menus$boots$jobpid" ] && break
+        kill -9 $boots $menus $jobpid 2>/dev/null
+        /sbin/initctl stop menu >/dev/null 2>&1
         i=$((i + 1))
         [ "$i" -ge 10 ] && break
         sleep 1

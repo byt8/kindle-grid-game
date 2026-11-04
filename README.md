@@ -43,13 +43,8 @@ make wifi-test                    # wi-fi joining + the on-screen keyboard (PC o
 On the Kindle, tap the words **New Game** in the bottom picture. The buttons
 along the top are for inside a game (save, rest, stairs, quit).
 
-Every run writes `diag/<timestamp>/app.log` and `shot.png`, so there is no guessing
-about what the glass showed. If the launcher menu is holding the touch device, clear
-it first:
-
-```bash
-ssh root@<ip> ': > /mnt/us/.menu-stop; : > /mnt/us/.menu-handoff; /sbin/initctl stop menu; kill -9 $(pidof menu)'
-```
+The runner stops the launcher for you, including the job that would start
+the menu again. One kill is not enough: that job brings the menu straight back.
 
 ```bash
 ./run-calib-on-kindle.sh [IP]     # perception tuner; tap QUIT to give the screen back

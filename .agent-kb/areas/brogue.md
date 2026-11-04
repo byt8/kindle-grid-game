@@ -140,6 +140,7 @@ text mode, which is what we want); `/mnt/us/brogue` on the device.
 - [verified 2026-11-04 brogue/src/platform/kfb-device.c] A map finger-up queues `MOUSE_DOWN` then `MOUSE_UP` at the release cell. The pause slot delivers the down; `kfb_evq` holds the up until the next input call. Bar buttons stay a single `KEYSTROKE`.
 - [verified 2026-11-04 .gitignore] `brogue/` is its own git repo and is gitignored here. The port commit belongs in that repo, not this one.
 - [ran 2026-11-04 ssh root@192.168.0.63] Fixed binary pushed, md5 `7d4f5ff4a4f13babb0736ede6c4054d1`. Starting a second runner while the first was still waiting made the first restore the menu (rc 143). The next start stopped the menu and the Kindle then answered `No route to host`. The new process was not seen up.
+- [ran 2026-11-04 ssh root@192.168.0.63] `tools/kindle-run.sh` killed the menu once and then waited. `menu.conf`'s supervisor is not named menu or menu-boot, deletes `.menu-stop` at the top of each pass, and started a new menu during the wait, so the runner said "will not exit" and put the launcher back. The wait now kill -9s the menu, menu-boot, and the job pid every pass. After that, brogue-kindle-app pid 9438 took the panel (grab OK, flame pauses in the log, SIGUSR1 grab has ink in the game window).
 
 ## Dead ends
 - Sending only `MOUSE_UP` for a tap. The menu flame pause is interrupted (that is the flash) and `processButtonInput` returns -1, so New Game never starts. Do not retry unless Brogue's button rule changes.
