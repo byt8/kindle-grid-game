@@ -1,6 +1,6 @@
 # brogue
 
-Status: **runs on the device, draws the main menu on the glass, and animates it.** Start it with `./tools/brogue-diag.sh [--debug] <ip>`; the log is in `diag/<stamp>/app.log` and a picture of the canvas in `diag/<stamp>/shot.png`. Whether a *tap* advances the game is still unproven (no tap-injection tool exists yet) — the pause-interrupt path is written and logs `pause interrupted`, but nobody has tapped it through. Do not SIGTERM `menu` to get the panel (see areas/menu.md). Host preview, the ARM binary and the symbol build all build.
+Status: **runs on the device and draws the main menu.** Start it with `./tools/brogue-diag.sh [--debug] <ip>`; the log is in `diag/<stamp>/app.log` and a picture in `diag/<stamp>/shot.png`. A tap on the words New Game must be `MOUSE_DOWN` then `MOUSE_UP` on that cell or the menu only flashes (`Buttons.c` `processButtonInput`). `kfb-device.c` queues both on finger-up. Do not SIGTERM `menu` to get the panel (see areas/menu.md). Host preview, the ARM binary and the symbol build all build.
 
 ## 2026-11-03 night — why "Brogue doesn't work": three real faults, all fixed
 
@@ -135,8 +135,16 @@ forever once `$KFB_SCRIPT` is spent, so the 20 s timeout is expected
 DROWS 29`. `DATADIR` = `brogue/compiled` on host (currently absent -> only
 text mode, which is what we want); `/mnt/us/brogue` on the device.
 
+## Facts
+- [verified 2026-11-04 brogue/src/brogue/Buttons.c processButtonInput] A menu button is chosen only when `buttonDepressed == buttonFocused` on `MOUSE_UP`. `buttonDepressed` is set only on `MOUSE_DOWN`. A lone `MOUSE_UP` focuses nothing and titleMenu then leaves `nextGame` at `NG_NOTHING`, so the glass flashes (the pause redraw) and stays on the menu.
+- [verified 2026-11-04 brogue/src/platform/kfb-device.c] A map finger-up queues `MOUSE_DOWN` then `MOUSE_UP` at the release cell. The pause slot delivers the down; `kfb_evq` holds the up until the next input call. Bar buttons stay a single `KEYSTROKE`.
+- [verified 2026-11-04 .gitignore] `brogue/` is its own git repo and is gitignored here. The port commit belongs in that repo, not this one.
+- [ran 2026-11-04 ssh root@192.168.0.63] Fixed binary pushed, md5 `7d4f5ff4a4f13babb0736ede6c4054d1`. Starting a second runner while the first was still waiting made the first restore the menu (rc 143). The next start stopped the menu and the Kindle then answered `No route to host`. The new process was not seen up.
+
+## Dead ends
+- Sending only `MOUSE_UP` for a tap. The menu flame pause is interrupted (that is the flash) and `processButtonInput` returns -1, so New Game never starts. Do not retry unless Brogue's button rule changes.
+
 ## Still to do
 
-- Touch mapping: two-tap travel (first tap places the cursor, second tap
-  travels), taps -> `rogueEvent` on real buttons.
-- On-device layout check (panel grey ramp vs the preview ramp). The binary has run on .63; taps are still unwired, so the glass cannot quit the game.
+- Two-tap travel inside a level is not proven on the glass. `executeEvent` ignores `MOUSE_DOWN`; `MOUSE_UP` is the click.
+- On-device layout check (panel grey ramp vs the preview ramp).

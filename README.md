@@ -40,6 +40,9 @@ make wifi-test                    # wi-fi joining + the on-screen keyboard (PC o
 ./tools/brogue-diag.sh --status [IP]        # what the log says so far
 ```
 
+On the Kindle, tap the words **New Game** in the bottom picture. The buttons
+along the top are for inside a game (save, rest, stairs, quit).
+
 Every run writes `diag/<timestamp>/app.log` and `shot.png`, so there is no guessing
 about what the glass showed. If the launcher menu is holding the touch device, clear
 it first:
@@ -421,11 +424,12 @@ Three faults kept it off the glass, all fixed on 2026-11-03:
   loop) and polls touch, so a tap ends the animation and is handed to the next
   input call.
 
-Verified on .63: both binaries paint the menu, and two grabs 3 s apart differ by
-~9.5k px, so it really animates. `make brogue-test` still green.
-Whether a tap then *advances* the game is the open question — no tap-injection
-tool exists yet, so the interrupt path is written and logged but untapped.
-Touch mapping (two-tap travel) is still the next step.
+Verified on .63: the menu paints and animates. A tap on **New Game** used to
+flash and stay on the menu: the glass only sent finger-up, and Brogue only
+starts a button if it also saw finger-down on that word (`Buttons.c`). A map
+tap now sends both, at the cell where the finger lifted. `make brogue-test`
+is still the layout check. Two-tap travel inside a level is not proven on
+the glass yet.
 
 ---
 
@@ -860,8 +864,7 @@ does not fix it (the mirror starts with the reader UI). `initctl stop kfbterm`.
 
 **Screen stuck on the boot bar, taps do nothing** — the game menu was told to
 stop and it turned the book reader back on while the game still held the
-glass. The two fought, and the reader lost. Brogue does not read taps yet, so
-QUIT on the glass does nothing. From this PC:
+glass. The two fought, and the reader lost. From this PC:
 
 ```
 ssh root@192.168.0.63 'kill -9 $(pidof brogue-kindle-app menu); /sbin/initctl stop menu; rm -f /mnt/us/DONT_START_FRAMEWORK; /sbin/initctl start framework'
