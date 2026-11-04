@@ -439,7 +439,9 @@ brogue-debug: brogue-kindle-debug
 
 brogue-test: brogue-host
 	rm -rf /tmp/kfb-frames && mkdir -p /tmp/kfb-frames
+	rm -f brogue_config.json brogue_config_backup.json
 	-KFB_PREVIEW=/tmp/kfb-frames KFB_SCRIPT=' n h j l k k' timeout 20 ./brogue-host -s 7
+	rm -f brogue_config.json brogue_config_backup.json
 	$(PY) tools/check_brogue_preview.py
 
 clean:
