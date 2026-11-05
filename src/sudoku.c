@@ -688,10 +688,9 @@ static int selftest(void) {
  * they are the thing you tap most, and a menu trip for each one is no good. */
 enum { SUDOKU_NEW = 1, SUDOKU_ERASE, SUDOKU_HINT, SUDOKU_LEVEL };
 
-#define LVL_X   24
-#define LVL_W   552
-#define LVL_H   72
-#define LVL_Y(i) (140 + (i) * 84)
+/* The three levels are the shared chooser (kshell_options), same control as
+ * tetris's speed list. LVL_Y0 is where its first row starts. */
+#define LVL_Y0  140
 
 static int act_hit(int x, int y) {
     return kshell_inside(x, y, KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H);
@@ -773,20 +772,17 @@ static int tap_hint(const kshell_rect *r, int x, int y) {
 static void draw_level(const kshell_rect *r) {
     ek_text_scale(r->x, r->y, "LEVEL", EK_INK, 2);
     ek_text(r->x, r->y + 44, "a tap starts a fresh puzzle at that level", EK_INK);
-    for (int i = 0; i < 3; i++)
-        kshell_button(LVL_X, LVL_Y(i), LVL_W, LVL_H, DIFF_NAME[i], difficulty == i);
+    kshell_options(LVL_Y0, DIFF_NAME, 3, difficulty);
 }
 
 static int tap_level(const kshell_rect *r, int x, int y) {
     (void)r;
-    for (int i = 0; i < 3; i++)
-        if (kshell_inside(x, y, LVL_X, LVL_Y(i), LVL_W, LVL_H)) {
-            difficulty = i;
-            new_puzzle();
-            kframe_close();
-            return 1;
-        }
-    return 0;
+    int i = kshell_option_at(LVL_Y0, 3, x, y);
+    if (i < 0) return 0;
+    difficulty = i;
+    new_puzzle();
+    kframe_close();
+    return 1;
 }
 
 static const kframe_item SUDOKU_ITEMS[] = {

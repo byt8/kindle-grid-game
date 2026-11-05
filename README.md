@@ -72,10 +72,19 @@ cell you picked before opening the menu.
 ![chess menu](docs/kframe/menu.png)
 ![tetris apps](docs/kframe/tetris-apps.png)
 
+![tetris pause](docs/kframe/tetris-pause.png)
+![tetris speed](docs/kframe/tetris-speed.png)
+![tetris paused board](docs/kframe/tetris-paused.png)
+
 More in `docs/kframe/`: `tetris-board.png`, `tetris-menu.png`, `apps.png`,
-`volume.png`, `quit.png`, `wifi-pass.png`. These are host renders. The volume
-page shows this PC's real missing `amixer`, not a bug. This boot behaviour
-has not been pushed to a Kindle.
+`volume.png`, `quit.png`, `wifi-pass.png`. `device-tetris-square-button.png`
+is a real framebuffer dump off a Kindle Touch, made with
+`tools/fb_raw_to_png.py <raw> <out.png> 608 600 800`.
+`docs/sudoku-menu/level.png` shows Sudoku's LEVEL, which is the same shared
+chooser as tetris's SPEED. The rest are host renders. The volume
+page shows this PC's real missing `amixer`, not a bug. `device-tetris-square-button.png`
+is the exception: it came off the glass, so the square button is confirmed on a
+real Kindle rather than only in a host render.
 
 **Play Brogue, or diagnose why it will not draw:**
 
@@ -156,7 +165,7 @@ On the glass the three bottom buttons are gone. The small button at the
 APPS opens another game and saves it, so the next boot opens that game.
 QUIT needs a second tap and gives the reader back until that boot. The
 keyboard covers the bottom only while a text field is focused. Tetris uses
-this same shell.
+this same shell (NEW, PAUSE, SPEED). So does Sudoku (NEW, LEVEL).
 
 **CLOCK** sets how long each side gets (tap CHANGE: off → 1 → 3 → 5 → 10 →
 15 → 30 min, the same choices chess.com offers). The choice is written back into
@@ -182,9 +191,11 @@ panel ioctls, so the on-glass result still needs one look on a device.
 ./run-tetris-on-kindle.sh 192.168.0.66   # pass the IP
 ```
 
-Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down. The **top-right**
-button opens the menu: **NEW** starts again, **APPS** switches game, **QUIT**
-twice gives the screen back.
+Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down. The **top-right
+square button** opens the menu. Tetris's tabs are **NEW** (start again),
+**PAUSE** (hold the piece; RESUME or a tap on the board lets go) and **SPEED**
+(pick 320 / 450 / 600 ms or the level table, without losing the game).
+**APPS** switches game, **QUIT** twice gives the screen back.
 Pieces fall on a fixed beat. The panel still has to repaint each step. A grey repaint blinks. A black-and-white repaint jumps. Calib shows both.
 
 **Play it with the calibrated values** (speed 600, clean 30, WFM DU):

@@ -283,6 +283,20 @@ int kshell_inside(int x, int y, int bx, int by, int bw, int bh) {
     return x >= bx && y >= by && x < bx + bw && y < by + bh;
 }
 
+void kshell_options(int y0, const char *const *labels, int n, int chosen) {
+    for (int i = 0; i < n; i++)
+        kshell_button(KSHELL_OPT_X, y0 + i * KSHELL_OPT_STEP,
+                      KSHELL_OPT_W, KSHELL_OPT_H, labels[i], i == chosen);
+}
+
+int kshell_option_at(int y0, int n, int x, int y) {
+    for (int i = 0; i < n; i++)
+        if (kshell_inside(x, y, KSHELL_OPT_X, y0 + i * KSHELL_OPT_STEP,
+                          KSHELL_OPT_W, KSHELL_OPT_H))
+            return i;
+    return -1;
+}
+
 static void paint_key(int x, int y, int w, int h, const char *label, int on) {
     kshell_button(x, y, w, h, label, on);
 }

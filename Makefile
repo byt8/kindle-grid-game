@@ -202,10 +202,21 @@ tetris-test: tetris-host
 	./tetris-host --auto 24 --no-takeover --seed 1 --dump /tmp/tetris-play.pgm
 	$(PY) tools/check_pgm.py /tmp/tetris-open.pgm /tmp/tetris-drop.pgm /tmp/tetris-play.pgm
 	$(PY) tools/check_tetris.py /tmp/tetris-open.pgm /tmp/tetris-play.pgm
-	# Hamburger (572, 26) opens the shell. NEW is the only left tab.
+	# Hamburger (572, 26) opens the shell. Left tabs are NEW, PAUSE, SPEED
+	# (60 px each from x=6: centres 36, 100, 164). See kshell.h.
 	printf 'tap 572 26\n' | ./tetris-host --no-takeover --seed 1 --dump /tmp/tetris-menu.pgm \
 	    >/tmp/tetris-menu.out 2>/tmp/tetris-menu.err
 	grep -q 'kframe: menu open' /tmp/tetris-menu.err
+	# PAUSE tab, then the action button (KFRAME_ACT_*) holds the board.
+	printf 'tap 572 26\ntap 100 24\ntap 300 236\n' | ./tetris-host --no-takeover --seed 1 \
+	    --dump /tmp/tetris-paused.pgm >/tmp/tetris-paused.out 2>/tmp/tetris-paused.err
+	grep -q 'kframe: app item 2' /tmp/tetris-paused.err
+	# SPEED tab, then the first row (PANEL 320ms) is applied.
+	printf 'tap 572 26\ntap 164 24\ntap 300 176\n' | ./tetris-host --no-takeover --seed 1 \
+	    --dump /tmp/tetris-speed.pgm >/tmp/tetris-speed.out 2>/tmp/tetris-speed.err
+	grep -q 'kframe: app item 3' /tmp/tetris-speed.err
+	# The three tabs must look different from each other and from the board.
+	$(PY) tools/check_pgm.py /tmp/tetris-open.pgm /tmp/tetris-paused.pgm /tmp/tetris-speed.pgm
 	# APPS is the right-hand group. Centre (500, 24). From tetris, chess is
 	# the second row (xcom is first). Centre (300, 212). See kframe.h.
 	printf 'tap 572 26\ntap 500 24\n' | ./tetris-host --no-takeover --seed 1 --dump /tmp/tetris-apps.pgm \

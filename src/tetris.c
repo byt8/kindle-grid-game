@@ -148,6 +148,7 @@ static int next_pt;
 
 static int score, lines, level;
 static int over;      /* game-over card is up */
+static int paused;    /* held from the menu; the drop clock does not advance */
 static int running;   /* 0 = leave and give the screen back */
 static int redraw_all; /* next present() repaints the whole panel */
 
@@ -378,7 +379,6 @@ static void draw_over_card(void) {
     ek_text_scale(x + (w - 11 * 16) / 2, y + 168, "TAP TO PLAY", EK_INK, 2);
 }
 
-/* The parts that never move: title, labels, NEXT box, buttons, well frame. */
 static void draw_chrome(void) {
     ek_text_scale(14, 8, "TETRIS", EK_INK, 2);
 
@@ -396,6 +396,22 @@ static void draw_chrome(void) {
     for (int i = 0; i < N_ACT; i++) draw_button(i, 0);
 }
 
+static void draw_pause_card(void) {
+    const int w = 292, h = 180;
+    const int x = WELL_X + (WELL_W - w) / 2;
+    const int y = WELL_Y + (WELL_H - h) / 2;
+    const char *title = "PAUSED";
+    const char *line1 = "the menu has RESUME";
+    const char *line2 = "or tap the board";
+
+    ek_fill_rect(x, y, w, h, EK_PAPER);
+    ek_rect(x, y, w, h, EK_INK);
+    ek_rect(x + 1, y + 1, w - 2, h - 2, EK_INK);
+    ek_text_scale(x + (w - (int)strlen(title) * 16) / 2, y + 30, title, EK_INK, 2);
+    ek_text(x + (w - (int)strlen(line1) * 8) / 2, y + 84, line1, EK_INK);
+    ek_text(x + (w - (int)strlen(line2) * 8) / 2, y + 112, line2, EK_INK);
+}
+
 static void draw_all(void) {
     ek_clear(EK_PAPER);
     draw_chrome();
@@ -403,6 +419,7 @@ static void draw_all(void) {
     flush_well();
     flush_hud();
     if (over) draw_over_card();
+    else if (paused) draw_pause_card();
 }
 
 static void draw_button(int i, int pressed) {
@@ -678,6 +695,13 @@ static void tap_down(int x, int y) {
         reset_game((uint32_t)time(NULL) ^ (uint32_t)ek_ms());
         return;
     }
+    /* A paused board is un-paused by a tap on it, so the RESUME tab is not the
+     * only way back to the piece. */
+    if (paused) {
+        paused = 0;
+        redraw_all = 1;
+        return;
+    }
     int i = hit(x, y);
     if (i < 0) return;
     act(i);
@@ -795,25 +819,92 @@ static int selftest(void) {
 
 /* ---- the shared menu ---------------------------------------------------- */
 
-enum { TETRIS_NEW = 1 };
+enum { TETRIS_NEW = 1, TETRIS_PAUSE, TETRIS_SPEED };
+
+/* The speed list, fastest first. 0 means "use the level table". These are the
+ * same beats --speed takes, so the menu and the command line cannot drift. */
+static const struct { const char *label; int ms; } SPEEDS[] = {
+    { "PANEL  320 ms", 320 },
+    { "FAST   450 ms", 450 },
+    { "TUNED  600 ms", LEVEL_1_TUNED },
+    { "LEVEL TABLE",     0 },
+};
+#define N_SPEEDS ((int)(sizeof SPEEDS / sizeof SPEEDS[0]))
+
+#define SPEED_Y0 140
+
+static int speed_choice(void) {
+    for (int i = 0; i < N_SPEEDS; i++)
+        if (SPEEDS[i].ms == speed_override) return i;
+    return 0;
+}
 
 static void draw_new(const kshell_rect *r) {
+    char line[64];
+    snprintf(line, sizeof line, "score %d, lines %d, level %d", score, lines, level);
     ek_text_scale(r->x, r->y, "NEW GAME", EK_INK, 2);
     ek_text(r->x, r->y + 44, "throws this game away and starts again", EK_INK);
+    ek_text(r->x, r->y + 66, line, EK_INK);
     kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, "START", 0);
 }
 
+static int tap_new(const kshell_rect *r, int x, int y) {
+    (void)r;
+    if (!kshell_inside(x, y, KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H))
+        return 0;
+    reset_game((uint32_t)time(NULL) ^ (uint32_t)ek_ms());
+    kframe_close();
+    return 1;
+}
+
+static void draw_pause(const kshell_rect *r) {
+    ek_text_scale(r->x, r->y, paused ? "PAUSED" : "PLAYING", EK_INK, 2);
+    ek_text(r->x, r->y + 44,
+            paused ? "the piece is held until you go back"
+                   : "a tap here holds the piece in place", EK_INK);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H,
+                  paused ? "RESUME" : "PAUSE", 0);
+}
+
+static int tap_pause(const kshell_rect *r, int x, int y) {
+    (void)r;
+    if (!kshell_inside(x, y, KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H))
+        return 0;
+    paused = !paused;
+    redraw_all = 1;
+    kframe_close();
+    return 1;
+}
+
+static void draw_speed(const kshell_rect *r) {
+    static const char *labels[N_SPEEDS];
+    for (int i = 0; i < N_SPEEDS; i++) labels[i] = SPEEDS[i].label;
+    ek_text_scale(r->x, r->y, "SPEED", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "keeps your game; the next drop uses it", EK_INK);
+    kshell_options(SPEED_Y0, labels, N_SPEEDS, speed_choice());
+}
+
+static int tap_speed(const kshell_rect *r, int x, int y) {
+    (void)r;
+    int i = kshell_option_at(SPEED_Y0, N_SPEEDS, x, y);
+    if (i < 0) return 0;
+    speed_override = SPEEDS[i].ms;
+    redraw_all = 1;
+    kframe_close();
+    return 1;
+}
+
 static int on_tetris_item(int id) {
-    if (id == TETRIS_NEW) {
-        reset_game((uint32_t)time(NULL) ^ (uint32_t)ek_ms());
-        return 1;
-    }
-    fprintf(stderr, "tetris: menu item %d is not one of ours\n", id);
+    /* Every tab that acts has its own tap_*; this is the fallback for a tab
+     * that somehow arrives here, so it is loud in the log rather than silent. */
+    fprintf(stderr, "tetris: menu item %d has no action of its own\n", id);
     return 1;
 }
 
 static const kframe_item TETRIS_ITEMS[] = {
-    { "NEW", TETRIS_NEW, draw_new, NULL },
+    { "NEW",   TETRIS_NEW,   draw_new,   tap_new },
+    { "PAUSE", TETRIS_PAUSE, draw_pause, tap_pause },
+    { "SPEED", TETRIS_SPEED, draw_speed, tap_speed },
 };
 
 static void kf_status(const char *msg) { fprintf(stderr, "tetris: %s\n", msg); }
@@ -1052,9 +1143,9 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        if (kframe_covering()) {
-            /* The menu is up. Push the next drop out so closing the menu
-             * does not dump every drop the clock missed. */
+        if (kframe_covering() || paused) {
+            /* The menu is up, or the game is held. Push the next drop out so
+             * coming back does not dump every drop the clock missed. */
             drop_at = ek_ms() + (uint32_t)drop_ms();
         } else if (!over) {
             uint32_t now = ek_ms();

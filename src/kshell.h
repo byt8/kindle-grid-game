@@ -66,4 +66,17 @@ void kshell_button(int x, int y, int w, int h, const char *label, int on);
 void kshell_field(int x, int y, int w, int h, const char *value, int focused);
 int  kshell_inside(int x, int y, int bx, int by, int bw, int bh);
 
+/* A stack of one-per-row choices -- sudoku's LEVEL and tetris's SPEED are the
+ * same control, so it lives here once. Geometry is derived from the count, so
+ * a tap test can predict every rect without repeating the numbers:
+ *   row i occupies (KSHELL_OPT_X, y0 + i*KSHELL_OPT_STEP) sized KSHELL_OPT_W
+ *   x KSHELL_OPT_H. The chosen row is drawn inverted. */
+#define KSHELL_OPT_X    24
+#define KSHELL_OPT_W    552
+#define KSHELL_OPT_H    72
+#define KSHELL_OPT_STEP 84
+
+void kshell_options(int y0, const char *const *labels, int n, int chosen);
+int  kshell_option_at(int y0, int n, int x, int y);   /* index, or -1 */
+
 #endif
