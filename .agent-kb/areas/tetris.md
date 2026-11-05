@@ -4,6 +4,13 @@ Status: **working on the device** — builds, self-test clean, three screen dump
 verified by the picture checker, and it holds the screen on a real Kindle
 (192.168.0.66, pushed via `run-tetris-on-kindle.sh`).
 
+The shared shell is on it now (host-tested 2026-11-05, not yet pushed).
+Top-right button. Left tab is NEW. Right tabs are VOLUME, WIFI, APPS, QUIT.
+The on-screen QUIT button is gone; LEFT/TURN/RIGHT/DOWN/DROP stayed put.
+Drops pause while the menu is open and the next one waits a full beat, so
+closing the menu does not dump a catch-up burst. `make tetris-test` taps
+the menu, the APPS list, and a switch to chess (`/tmp/switch-app`).
+
 ## What it is
 
 `src/tetris.c` — one file, a 10x20 block-stacking game on the 600x800 e-ink

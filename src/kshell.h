@@ -20,7 +20,9 @@
 #define KSHELL_TAB_Y     4
 #define KSHELL_TAB_H     40
 #define KSHELL_TAB_GAP   4
-#define KSHELL_TAB_MIN_W 72
+/* 60, not 72: chess has four left tabs and the right side is
+ * VOLUME WIFI APPS QUIT. At 72 those eight tabs overlap. */
+#define KSHELL_TAB_MIN_W 60
 
 #define KSHELL_KB_TOP    468
 #define KSHELL_KB_X      12

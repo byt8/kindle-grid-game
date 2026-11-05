@@ -3,9 +3,12 @@
 /* Shared Kindle shell for one app at a time.
  *
  * The hamburger (top right) opens one full-screen shell. The app's own
- * tabs sit on the left. VOLUME, WIFI and QUIT sit on the right. A screen
- * fills the space under the tabs. The keyboard covers the bottom only
- * while a text field is focused.
+ * tabs sit on the left. VOLUME, WIFI, APPS and QUIT sit on the right.
+ * APPS lists the other games. Tapping one writes switch-app and leaves;
+ * tools/menu-boot.sh opens that game and remembers it for the next boot.
+ * QUIT (second tap) writes .menu-stop and leaves to the reader until then.
+ * A screen fills the space under the tabs. The keyboard covers the bottom
+ * only while a text field is focused.
  *
  * on_item is used when an app tab has no tap of its own. It must not
  * return 0. Return 1 when the tap is finished, or any other non-zero
@@ -18,13 +21,14 @@
 
 typedef struct {
     const char *label;
-    int id;                                          /* non-zero, not -1/-2/-3 */
+    int id;                                          /* non-zero, not -1/-2/-3/-4 */
     void (*draw)(const kshell_rect *r);              /* NULL: name + one button */
     int (*tap)(const kshell_rect *r, int x, int y);  /* NULL: the button calls on_item */
 } kframe_item;
 
 typedef struct {
     const char *title;
+    const char *app_id;           /* "chess" or "tetris": this process's name */
     const kframe_item *items;
     int nitems;
     int (*on_item)(int id);
@@ -77,6 +81,18 @@ int  kframe_pwr_log_grew(const char *prev, const char *cur, int len);
 #define KFRAME_WIFI_ROW_H 46
 #define KFRAME_WIFI_ROW_P 52
 #define KFRAME_WIFI_BTN_Y 660
+
+/* APPS rows. The running app is left off the list.
+ * Row i is centred at
+ * (KFRAME_APP_ROW_X + KFRAME_APP_ROW_W/2,
+ *  KFRAME_APP_ROW_Y + i*KFRAME_APP_ROW_P + KFRAME_APP_ROW_H/2).
+ * xcom is first in the catalog, so from chess or tetris the other one
+ * is row 1. Centre (300, 212). */
+#define KFRAME_APP_ROW_X 16
+#define KFRAME_APP_ROW_W 568
+#define KFRAME_APP_ROW_Y 140
+#define KFRAME_APP_ROW_H 44
+#define KFRAME_APP_ROW_P 50
 
 /* JOIN / NEXT, under the text field. Centre (438, 228). */
 #define KFRAME_WIFI_GO_X 300

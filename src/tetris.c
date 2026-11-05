@@ -23,6 +23,7 @@
  * --stats prints what every flush really cost, in rects / tiles / pixels.
  */
 #include "eink.h"
+#include "kframe.h"
 
 #include <signal.h>
 #include <stdint.h>
@@ -148,7 +149,6 @@ static int next_pt;
 static int score, lines, level;
 static int over;      /* game-over card is up */
 static int running;   /* 0 = leave and give the screen back */
-static int quit_armed;
 static int redraw_all; /* next present() repaints the whole panel */
 
 static int last_score = -1, last_lines = -1, last_level = -1, last_next = -1;
@@ -167,7 +167,7 @@ static int wfm_motion;       /* forced waveform on motion frames, 0 = AUTO   */
 static int clean_every;      /* GC16 clean every N drops, 0 = engine's own   */
 static int drop_n;           /* drops since the game started (clean cadence) */
 static int warned_slow;      /* the panel's real cost was reported once      */
-static volatile sig_atomic_t stop_req;
+static volatile int stop_req;
 #ifndef EK_HOST
 static uint32_t drop_at; /* next auto-drop deadline, anchored on a fixed beat */
 #endif
@@ -332,7 +332,7 @@ static void draw_next(void) {
 
 /* ---- buttons ------------------------------------------------------------ */
 
-enum { A_LEFT, A_ROT, A_RIGHT, A_DOWN, A_DROP, A_QUIT, N_ACT };
+enum { A_LEFT, A_ROT, A_RIGHT, A_DOWN, A_DROP, N_ACT };
 
 static const struct { int x, y, w, h; } BTN[N_ACT] = {
     {10, BTN_Y1, BTN_W, BTN_H},
@@ -340,10 +340,9 @@ static const struct { int x, y, w, h; } BTN[N_ACT] = {
     {402, BTN_Y1, BTN_W, BTN_H},
     {10, BTN_Y2, BTN_W, BTN_H},
     {206, BTN_Y2, BTN_W, BTN_H},
-    {402, BTN_Y2, BTN_W, BTN_H},
 };
 
-static const char *const BTN_LABEL[N_ACT] = {"LEFT", "TURN", "RIGHT", "DOWN", "DROP", "QUIT"};
+static const char *const BTN_LABEL[N_ACT] = {"LEFT", "TURN", "RIGHT", "DOWN", "DROP"};
 
 /* When each button stops being shown pressed. A tap is a press and a lift,
  * often landing inside a single poll, so the flash is timed rather than tied
@@ -408,7 +407,7 @@ static void draw_all(void) {
 
 static void draw_button(int i, int pressed) {
     const int x = BTN[i].x, y = BTN[i].y, w = BTN[i].w, h = BTN[i].h;
-    const char *s = (i == A_QUIT && quit_armed) ? "SURE" : BTN_LABEL[i];
+    const char *s = BTN_LABEL[i];
     const int tw = (int)strlen(s) * 16;
 
     ek_fill_rect(x, y, w, h, EK_PAPER);
@@ -513,7 +512,6 @@ static void reset_game(uint32_t seed) {
     score = lines = 0;
     level = 1;
     over = 0;
-    quit_armed = 0;
     running = 1;
     drop_n = 0;
     rng_state = seed ? seed : 1;
@@ -609,6 +607,11 @@ static void expire_buttons(void) {
 }
 
 static void present(void) {
+    if (kframe_covering()) {
+        kframe_paint();
+        ek_flush();
+        return;
+    }
     int clean = force_clean || clean_next || redraw_all;
     /* A clean fires on the calib cadence too: every N drops, like the tuner's
      * CLEAN knob. count is advanced by the callers that actually drop a piece. */
@@ -627,6 +630,7 @@ static void present(void) {
     clean_next = 0;
 
     ek_waveform(clean ? wfm_clean : wfm_motion);
+    kframe_paint();
     ek_stats st = ek_flush();
     ek_waveform(0);
 
@@ -664,28 +668,18 @@ static void act(int a) {
         break;
     case A_DOWN: step_down(); break;
     case A_DROP: hard_drop(); break;
-    case A_QUIT:
-        /* Two taps, because there is no way back from this one. */
-        if (quit_armed) running = 0;
-        else quit_armed = 1;
-        break;
     }
 }
 
 static void tap_down(int x, int y) {
+    if (kframe_tap(x, y)) return;
     /* The game-over card is dismissed by any tap at all. */
     if (over) {
         reset_game((uint32_t)time(NULL) ^ (uint32_t)ek_ms());
         return;
     }
     int i = hit(x, y);
-    if (i < 0) {
-        if (quit_armed) { /* a tap away from QUIT calls it off */
-            quit_armed = 0;
-            draw_button(A_QUIT, 0);
-        }
-        return;
-    }
+    if (i < 0) return;
     act(i);
     btn_flash[i] = ek_ms() + 140;
     draw_button(i, 1);
@@ -799,18 +793,67 @@ static int selftest(void) {
     return failures;
 }
 
+/* ---- the shared menu ---------------------------------------------------- */
+
+enum { TETRIS_NEW = 1 };
+
+static void draw_new(const kshell_rect *r) {
+    ek_text_scale(r->x, r->y, "NEW GAME", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "throws this game away and starts again", EK_INK);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, "START", 0);
+}
+
+static int on_tetris_item(int id) {
+    if (id == TETRIS_NEW) {
+        reset_game((uint32_t)time(NULL) ^ (uint32_t)ek_ms());
+        return 1;
+    }
+    fprintf(stderr, "tetris: menu item %d is not one of ours\n", id);
+    return 1;
+}
+
+static const kframe_item TETRIS_ITEMS[] = {
+    { "NEW", TETRIS_NEW, draw_new, NULL },
+};
+
+static void kf_status(const char *msg) { fprintf(stderr, "tetris: %s\n", msg); }
+static void kf_quit(void) { running = 0; stop_req = 1; }
+
+static int open_frame(void) {
+    kframe_cfg kf;
+    memset(&kf, 0, sizeof kf);
+    kf.title = "TETRIS";
+    kf.app_id = "tetris";
+    kf.items = TETRIS_ITEMS;
+    kf.nitems = (int)(sizeof TETRIS_ITEMS / sizeof TETRIS_ITEMS[0]);
+    kf.on_item = on_tetris_item;
+    kf.on_quit = kf_quit;
+    kf.repaint = present;
+    kf.status = kf_status;
+    kf.stop = &stop_req;
+    if (kframe_init(&kf) != 0) {
+        fprintf(stderr, "tetris: the shared menu would not start\n");
+        return -1;
+    }
+    return 0;
+}
+
 /* ---- main --------------------------------------------------------------- */
 
 static void usage(void) {
     fprintf(stderr,
             "usage: tetris [options]\n"
             "\n"
-            "  On the Kindle the panel is the game's until you tap QUIT, then SURE.\n"
+            "  The top-right button opens the menu. NEW starts again.\n"
+            "  VOLUME, WIFI, APPS and QUIT are on the right. APPS opens\n"
+            "  another game, and that game comes back after a restart.\n"
+            "  QUIT needs a second tap and gives the screen back until then.\n"
             "  Tap LEFT / TURN / RIGHT to move and turn, DOWN to nudge it down,\n"
-            "  DROP to slam it, QUIT to give the screen back.\n"
+            "  DROP to slam it.\n"
             "  --selftest   check the rules on this computer and exit\n"
             "  --auto N     play N pieces by itself, then stop\n"
             "  --dump FILE  write the picture (PGM) and exit\n"
+            "  --menu-shot F  write the menu (PGM) and exit\n"
             "  --seed N     same seed, same bag\n"
             "  --stats      print what each screen update cost\n"
             "  --clean      refresh the whole picture on every update (slow)\n"
@@ -832,6 +875,7 @@ int main(int argc, char **argv) {
     int do_test = 0;
     int auto_pieces = -1;
     const char *dump_path = NULL;
+    const char *menu_shot = NULL;
     uint32_t seed = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -848,6 +892,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "--dump") && i + 1 < argc) {
             dump_path = argv[++i];
             if (!dump_path[0]) { usage(); return 2; }
+        } else if (!strcmp(argv[i], "--menu-shot") && i + 1 < argc) {
+            menu_shot = argv[++i];
+            if (!menu_shot[0]) { usage(); return 2; }
         } else if (!strcmp(argv[i], "--selftest")) do_test = 1;
         else if (!strcmp(argv[i], "--stats")) stats_on = 1;
         else if (!strcmp(argv[i], "--clean")) force_clean = 1;
@@ -911,6 +958,7 @@ int main(int argc, char **argv) {
     sigaction(SIGHUP, &sa, NULL);
 
     build_shapes();
+    if (open_frame() != 0) return 1;
 
     if (ek_open(flags) != 0) {
         fprintf(stderr, "tetris: the screen would not open\n");
@@ -957,11 +1005,24 @@ int main(int argc, char **argv) {
         present();
     }
 
+    if (menu_shot) {
+        kframe_show_menu();
+        kframe_paint();
+        ek_flush();
+        if (ek_dump_pgm(menu_shot, 1) != 0) {
+            fprintf(stderr, "tetris: could not write %s\n", menu_shot);
+            ek_close();
+            return 1;
+        }
+        ek_close();
+        return 0;
+    }
+
 #ifdef EK_HOST
     /* A pipe of "tap X Y" lines plays the game, then --dump saves the picture. */
     if (!do_test && auto_pieces < 0 && !isatty(0)) {
         char buf[64];
-        while (!stop_req && fgets(buf, sizeof buf, stdin)) {
+        while (running && !stop_req && fgets(buf, sizeof buf, stdin)) {
             int x, y;
             if (buf[0] == 'q') break;
             if (sscanf(buf, "tap %d %d", &x, &y) != 2) {
@@ -991,7 +1052,11 @@ int main(int argc, char **argv) {
                 }
             }
         }
-        if (!over) {
+        if (kframe_covering()) {
+            /* The menu is up. Push the next drop out so closing the menu
+             * does not dump every drop the clock missed. */
+            drop_at = ek_ms() + (uint32_t)drop_ms();
+        } else if (!over) {
             uint32_t now = ek_ms();
             if ((int32_t)(now - drop_at) >= 0) {
                 if (probe) fprintf(stderr, "probe: drop at %u (due %u, ms %d) dir=%d\n",

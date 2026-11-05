@@ -49,8 +49,8 @@ rockman-test: rockman-host
 
 # ---- tetris: 10x20 well, on-screen buttons, no keyboard ------------------
 
-tetris-host: src/tetris.c $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
-	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/tetris.c $(ENGINE)/eink.c -lm
+tetris-host: src/tetris.c src/kframe.c src/kframe.h src/kshell.c src/kshell.h $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/tetris.c src/kframe.c src/kshell.c $(ENGINE)/eink.c -lm
 
 tetris: tetris-kindle
 
@@ -125,7 +125,7 @@ chess-host: src/chess.c src/kframe.c src/kframe.h src/kshell.c src/kshell.h $(EN
 
 # The device build: static musl, no libcurl, the game runs the device's own
 # curl for the API call.
-tetris-kindle: src/tetris.c $(ENGINE)/eink.c $(ENGINE)/eink.h
+tetris-kindle: src/tetris.c src/kframe.c src/kframe.h src/kshell.c src/kshell.h $(ENGINE)/eink.c $(ENGINE)/eink.h
 	docker run --rm -u "$$(id -u):$$(id -g)" \
 	  -v "$$(pwd):/src" \
 	  -v /home/brendan/jailbreak-kindle:/jb \
@@ -133,7 +133,7 @@ tetris-kindle: src/tetris.c $(ENGINE)/eink.c $(ENGINE)/eink.h
 	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
 	    -ffunction-sections -fdata-sections \
 	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
-	    -o tetris src/tetris.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -o tetris src/tetris.c src/kframe.c src/kshell.c /jb/kindle-tools/fbdaemon/engine/eink.c \
 	    -static -no-pie -Wl,--gc-sections -lm \
 	    && arm-linux-musleabi-strip tetris'
 
@@ -167,6 +167,21 @@ tetris-test: tetris-host
 	./tetris-host --auto 24 --no-takeover --seed 1 --dump /tmp/tetris-play.pgm
 	$(PY) tools/check_pgm.py /tmp/tetris-open.pgm /tmp/tetris-drop.pgm /tmp/tetris-play.pgm
 	$(PY) tools/check_tetris.py /tmp/tetris-open.pgm /tmp/tetris-play.pgm
+	# Hamburger (560, 10) opens the shell. NEW is the only left tab.
+	printf 'tap 560 10\n' | ./tetris-host --no-takeover --seed 1 --dump /tmp/tetris-menu.pgm \
+	    >/tmp/tetris-menu.out 2>/tmp/tetris-menu.err
+	grep -q 'kframe: menu open' /tmp/tetris-menu.err
+	# APPS is the right-hand group. Centre (500, 24). From tetris, chess is
+	# the second row (xcom is first). Centre (300, 212). See kframe.h.
+	printf 'tap 560 10\ntap 500 24\n' | ./tetris-host --no-takeover --seed 1 --dump /tmp/tetris-apps.pgm \
+	    >/tmp/tetris-apps.out 2>/tmp/tetris-apps.err
+	grep -q 'kframe: apps open' /tmp/tetris-apps.err
+	rm -f /tmp/switch-app
+	printf 'tap 560 10\ntap 500 24\ntap 300 212\n' | ./tetris-host --no-takeover --seed 1 \
+	    >/tmp/tetris-switch.out 2>/tmp/tetris-switch.err
+	grep -q 'kframe: switch chess' /tmp/tetris-switch.err
+	grep -qx 'chess' /tmp/switch-app
+	$(PY) tools/check_pgm.py /tmp/tetris-open.pgm /tmp/tetris-menu.pgm /tmp/tetris-apps.pgm
 
 chess-kindle: src/chess.c src/kframe.c src/kframe.h src/kshell.c src/kshell.h $(ENGINE)/eink.c $(ENGINE)/eink.h
 	docker run --rm -u "$$(id -u):$$(id -g)" \
@@ -192,23 +207,32 @@ chess-test: chess-host engine-test
 	./chess-host --fake-ai --auto 8 --no-takeover --no-wifi --dump /tmp/chess-mid.pgm
 	printf 'tap 62 96\ntap 62 232\n' | ./chess-host --no-takeover --no-wifi --dump /tmp/chess-sel.pgm
 	./chess-host --no-takeover --no-wifi --menu-shot /tmp/chess-menu.pgm
-	# VOLUME tab centre is (406, 24): right-hand group, 72px tabs. See kshell.h.
-	printf 'tap 560 10\ntap 406 24\n' | ./chess-host --no-takeover --no-wifi --dump /tmp/chess-vol.pgm \
+	# VOLUME centre is (368, 24). Tabs are 60px minimum so APPS fits. See kshell.h.
+	printf 'tap 560 10\ntap 368 24\n' | ./chess-host --no-takeover --no-wifi --dump /tmp/chess-vol.pgm \
 	    >/tmp/chess-vol.out 2>/tmp/chess-vol.err
 	grep -q 'kframe: menu open' /tmp/chess-vol.err
 	grep -q 'kframe: volume:' /tmp/chess-vol.err
-	# QUIT is the far-right tab. Centre (558, 24). The second tap confirms.
-	printf 'tap 560 10\ntap 558 24\ntap 558 24\n' | ./chess-host --no-takeover --no-wifi \
+	# QUIT is the far-right tab. Centre (564, 24). The second tap confirms.
+	printf 'tap 560 10\ntap 564 24\ntap 564 24\n' | ./chess-host --no-takeover --no-wifi \
 	    >/tmp/chess-quit.out 2>/tmp/chess-quit.err
 	grep -q 'kframe: quit armed' /tmp/chess-quit.err
 	grep -q 'kframe: quit confirmed' /tmp/chess-quit.err
-	$(PY) tools/check_pgm.py /tmp/chess-mid.pgm /tmp/chess-sel.pgm /tmp/chess-menu.pgm /tmp/chess-vol.pgm
-	# CLOCK is the third app tab, centre (194, 24). CHANGE is (300, 236).
-	printf 'tap 560 10\ntap 194 24\ntap 300 236\n' | ./chess-host --no-takeover --no-wifi --conf /tmp/chess-clock-test.conf \
+	# APPS centre (500, 24). From chess, tetris is row 1. Centre (300, 212).
+	printf 'tap 560 10\ntap 500 24\n' | ./chess-host --no-takeover --no-wifi --dump /tmp/chess-apps.pgm \
+	    >/tmp/chess-apps.out 2>/tmp/chess-apps.err
+	grep -q 'kframe: apps open' /tmp/chess-apps.err
+	rm -f /tmp/switch-app
+	printf 'tap 560 10\ntap 500 24\ntap 300 212\n' | ./chess-host --no-takeover --no-wifi \
+	    >/tmp/chess-switch.out 2>/tmp/chess-switch.err
+	grep -q 'kframe: switch tetris' /tmp/chess-switch.err
+	grep -qx 'tetris' /tmp/switch-app
+	$(PY) tools/check_pgm.py /tmp/chess-mid.pgm /tmp/chess-sel.pgm /tmp/chess-menu.pgm /tmp/chess-vol.pgm /tmp/chess-apps.pgm
+	# CLOCK is the third app tab, centre (164, 24). CHANGE is (300, 236).
+	printf 'tap 560 10\ntap 164 24\ntap 300 236\n' | ./chess-host --no-takeover --no-wifi --conf /tmp/chess-clock-test.conf \
 	    >/tmp/chess-timer.out 2>/tmp/chess-timer.err
 	grep -q 'kframe: app item 3' /tmp/chess-timer.err
 	printf 'clock = 60\n' > /tmp/chess-clock-test.conf
-	printf 'tap 560 10\ntap 194 24\n' | ./chess-host --no-takeover --no-wifi --conf /tmp/chess-clock-test.conf --dump /tmp/chess-menu-timer.pgm
+	printf 'tap 560 10\ntap 164 24\n' | ./chess-host --no-takeover --no-wifi --conf /tmp/chess-clock-test.conf --dump /tmp/chess-menu-timer.pgm
 	$(PY) tools/check_pgm.py /tmp/chess-menu.pgm /tmp/chess-menu-timer.pgm
 	# After a move, BOTH squares are cleaned, each as its own box that bleeds
 	# into the grid line: one box spanning them left a line down the middle of

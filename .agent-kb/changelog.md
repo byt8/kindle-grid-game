@@ -1,3 +1,4 @@
+- 2026-11-05 — kframe — Tetris shell, APPS tab, boot restores the last game.
 - 2026-11-05 — kframe — Tabbed shell and a keyboard that appears when typing.
 - 2026-11-04 — brogue — **The map page-flips instead of scrolling.** The 26x9 page stays put until the @ reaches the edge, then jumps. Host check: 666 map pixels changed across a few steps.
 - 2026-11-04 — brogue — **Map letters 3x, colour effects off by default.** On the glass at .63 (pid 17674, md5 44630d3d). Hide color effects starts ticked. The map is 24x48 around the @; messages and the sidebar stay 8x16. The menu shows New Game big.

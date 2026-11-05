@@ -1,18 +1,17 @@
 #!/bin/sh
-# menu-boot.sh -- the always-on launcher session, run on the Kindle.
+# menu-boot.sh -- the always-on session, run on the Kindle.
 #
 # Started by the menu upstart job (tools/menu-boot.conf installed as
-# /etc/upstart/menu.conf). This one script owns the whole session:
+# /etc/upstart/menu.conf). There is no launcher screen. Boot opens the game
+# named in /mnt/us/last-app (chess, the first time that file is missing).
+# The game's APPS tab writes /mnt/us/switch-app and exits; this loop opens
+# that game and saves it as last-app, so a restart comes back to it.
+# QUIT writes /mnt/us/.menu-stop: the reader stays up until the next boot,
+# and that boot opens last-app again.
 #
-#   boot -> stop the screen mirror -> menu -> game -> menu -> game -> ...
-#                                        \_-> KINDLE button -> restore the
-#                                            reader UI and stop
-#
-# The menu process gives up the panel + touch grab when it exits with a game's
-# code, so handing from menu to game is just process death: the game's own
-# ek_open(TAKEOVER) re-grabs. When the game quits, its runner restores the
-# Kindle UI (that is what tools/kindle-run.sh does on exit) and this loop
-# re-takes it with the menu -- so the Amazon UI stays invisible all boot.
+# A game with no APPS tab (everything except chess and tetris) is a visit.
+# Leaving it returns to /mnt/us/return-app, which is the game that opened it.
+# The ids below must match the catalog in src/kframe.c.
 #
 # Everything is logged to /mnt/us/menu-boot.log; at boot there is no shell to
 # watch anything.
@@ -140,6 +139,105 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# One token, lowercase letters only. Empty or unreadable is a failure.
+read_token() {
+    [ -f "$1" ] || return 1
+    IFS= read -r line < "$1" || return 1
+    printf '%s' "$line" | tr 'A-Z' 'a-z' | tr -cd 'a-z'
+}
+
+# Same ids as src/kframe.c. home apps have the in-game menu.
+known_app() {
+    case $1 in
+        xcom|chess|tetris|sudoku|rockman|pvz|brogue|calib|koreader) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+home_app() {
+    case $1 in
+        chess|tetris) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+runner_for() {
+    case $1 in
+        xcom) echo /mnt/us/xcom-run.sh ;;
+        chess) echo /mnt/us/chess-run.sh ;;
+        tetris) echo /mnt/us/tetris-run.sh ;;
+        sudoku) echo /mnt/us/sudoku-run.sh ;;
+        rockman) echo /mnt/us/rockman-run.sh ;;
+        pvz) echo /mnt/us/pvz-run.sh ;;
+        brogue) echo /mnt/us/brogue-run.sh ;;
+        calib) echo /mnt/us/calib-run.sh ;;
+        koreader) echo /mnt/us/koreader/koreader.sh ;;
+        *) return 1 ;;
+    esac
+}
+bin_for() {
+    case $1 in
+        xcom) echo /mnt/us/xcom ;;
+        chess) echo /mnt/us/chess ;;
+        tetris) echo /mnt/us/tetris ;;
+        sudoku) echo /mnt/us/sudoku ;;
+        rockman) echo /mnt/us/rockman ;;
+        pvz) echo /mnt/us/pvz ;;
+        brogue) echo /mnt/us/brogue-kindle-app ;;
+        calib) echo /mnt/us/calib ;;
+        koreader) echo /mnt/us/koreader/koreader.sh ;;
+        *) return 1 ;;
+    esac
+}
+# 0 when this Kindle can actually start the app. A missing file is a no,
+# said out loud by the caller. It is not a reason to open a different app.
+launchable() {
+    r=$(runner_for "$1") || return 1
+    b=$(bin_for "$1") || return 1
+    [ -f "$r" ] && [ -x "$b" ]
+}
+
+leave_to_reader() {
+    say "$*"
+    : > /mnt/us/.menu-stop
+    /sbin/initctl start powerd >> "$LOG" 2>&1 || say "could not restart powerd for the reader"
+    if [ -x /mnt/us/fbdaemon/restore-kindle.sh ]; then
+        sh /mnt/us/fbdaemon/restore-kindle.sh >> "$LOG" 2>&1
+    else
+        say "no restore-kindle.sh; starting the framework"
+        /sbin/initctl start framework >> "$LOG" 2>&1 || say "could not start framework"
+    fi
+    exit 0
+}
+
+save_last() {
+    printf '%s\n' "$1" > /mnt/us/last-app
+}
+
+launch_app() {
+    say "launching $1"
+    case $1 in
+        xcom) GAME=xcom sh /mnt/us/xcom-run.sh ;;
+        chess) GAME=chess sh /mnt/us/chess-run.sh --conf /mnt/us/chess.conf ;;
+        tetris) GAME=tetris sh /mnt/us/tetris-run.sh ;;
+        sudoku) GAME=sudoku sh /mnt/us/sudoku-run.sh ;;
+        rockman) GAME=rockman sh /mnt/us/rockman-run.sh ;;
+        pvz) GAME=pvz sh /mnt/us/pvz-run.sh ;;
+        brogue) GAME=brogue-kindle-app sh /mnt/us/brogue-run.sh ;;
+        calib) GAME=calib sh /mnt/us/calib-run.sh ;;
+        koreader)
+            echo "[[koreader.sh started at $(date)]]" >> /mnt/us/koreader-launch.log
+            sh /mnt/us/koreader/koreader.sh >> /mnt/us/koreader-launch.log 2>&1
+            rc=$?
+            say "KOREADER exited rc=$rc at $(date)"
+            echo "[[koreader.sh exited rc=$rc at $(date)]]" >> /mnt/us/koreader-launch.log
+            return $rc
+            ;;
+        *)
+            say "no launch line for $1"
+            return 2
+            ;;
+    esac
+}
+
 while :; do
     if ! stop_mirror; then
         say "cannot free the touch device; leaving the Kindle UI up"
@@ -166,52 +264,76 @@ while :; do
         sh /mnt/us/clear-boot-splash.sh >> "$LOG" 2>&1 || \
             say "clear-boot-splash.sh rc=$? (splash module may already be gone)"
     fi
-    /mnt/us/menu >> "$LOG" 2>&1
+    if [ -f /mnt/us/.menu-handoff ]; then
+        say "runner took the panel; not starting an app over it"
+        : > /mnt/us/.menu-stop
+        exit 143
+    fi
+
+    if [ -f /mnt/us/switch-app ]; then
+        next=$(read_token /mnt/us/switch-app) || next=
+        rm -f /mnt/us/switch-app
+        if ! known_app "$next"; then
+            say "switch-app \"$next\" is not an app; keeping the saved one"
+        elif ! launchable "$next"; then
+            say "$next is not installed on this Kindle; keeping the saved one"
+        else
+            save_last "$next" || {
+                say "could not save last-app"
+                leave_to_reader "could not save the chosen app"
+            }
+            say "saved last-app $next"
+        fi
+    fi
+
+    if [ ! -s /mnt/us/last-app ]; then
+        say "no last-app; starting chess"
+        save_last chess || {
+            say "could not write last-app"
+            leave_to_reader "could not write last-app"
+        }
+    fi
+    app=$(read_token /mnt/us/last-app) || {
+        say "could not read last-app"
+        leave_to_reader "could not read last-app"
+    }
+    if ! known_app "$app"; then
+        say "last-app \"$app\" is not an app"
+        leave_to_reader "bad last-app; reader stays up"
+    fi
+    if ! launchable "$app"; then
+        say "$app is not installed on this Kindle"
+        leave_to_reader "$app is not on this Kindle; reader stays up"
+    fi
+
+    launch_app "$app" >> "$LOG" 2>&1
     rc=$?
-    /sbin/initctl start powerd >> "$LOG" 2>&1 || say "could not restart powerd after the menu"
-    case $rc in
-        137|143)
-            # 143: the menu saw .menu-handoff and refused to start the reader.
-            # 137: the runner SIGKILLed the menu (an old menu binary cannot be
-            # trusted with SIGTERM). Either way, do not restore and do not
-            # draw the menu again on top of the game.
-            if [ -f /mnt/us/.menu-handoff ]; then
-                say "runner took the panel (menu rc=$rc); not restoring the reader"
-                : > /mnt/us/.menu-stop
-                exit "$rc"
-            fi
-            say "menu exited rc=$rc; showing it again" ;;
-        0)  say "KINDLE chosen; restoring the reader UI"
-            : > /mnt/us/.menu-stop
-            /sbin/initctl start powerd >> "$LOG" 2>&1 || \
-                say "could not restart powerd for the reader UI"
-            sh /mnt/us/fbdaemon/restore-kindle.sh >> "$LOG" 2>&1
-            exit 0 ;;
-        1)  say "launching XCOM"
-            GAME=xcom sh /mnt/us/xcom-run.sh >> "$LOG" 2>&1 ;;
-        2)  say "launching CHESS"
-            GAME=chess sh /mnt/us/chess-run.sh --conf /mnt/us/chess.conf >> "$LOG" 2>&1 ;;
-        3)  say "launching TETRIS"
-            GAME=tetris sh /mnt/us/tetris-run.sh >> "$LOG" 2>&1 ;;
-        4)  say "launching SUDOKU"
-            GAME=sudoku sh /mnt/us/sudoku-run.sh >> "$LOG" 2>&1 ;;
-        5)  say "launching ROCKMAN"
-            GAME=rockman sh /mnt/us/rockman-run.sh >> "$LOG" 2>&1 ;;
-        6)  say "launching KOREADER at $(date)"
-            # Framework is already stopped and the panel is ours; koreader.sh
-            # runs without --framework_stop and leaves the UI dead on exit,
-            # which is fine -- the launcher re-takes the panel next loop. Log
-            # tail is our only record on the device. Markers go into the
-            # append-only launch log too: a hard reboot wipes menu-boot.log
-            # (now rotated to menu-boot.log.prev), but this file survives.
-            echo "[[koreader.sh started at $(date)]]" >> /mnt/us/koreader-launch.log
-            sh /mnt/us/koreader/koreader.sh >> /mnt/us/koreader-launch.log 2>&1
-            rc=$?
-            say "KOREADER exited rc=$rc at $(date)"
-            echo "[[koreader.sh exited rc=$rc at $(date)]]" >> /mnt/us/koreader-launch.log ;;
-        7)  say "WIFI setup"
-            /mnt/us/chess --wifi-only --conf /mnt/us/chess.conf >> "$LOG" 2>&1 ;;
-        *)  say "menu exited rc=$rc; showing it again" ;;
-    esac
-    say "back to the menu $(date)"
+    say "$app exited rc=$rc"
+
+    if [ -f /mnt/us/switch-app ]; then
+        say "switch requested"
+        continue
+    fi
+    if [ -e /mnt/us/.menu-stop ]; then
+        leave_to_reader "quit; reader until the next boot. $app comes back then"
+    fi
+    if ! home_app "$app" && [ "$rc" -eq 0 ]; then
+        back=$(read_token /mnt/us/return-app) || back=
+        rm -f /mnt/us/return-app
+        if ! known_app "$back" || ! home_app "$back"; then
+            say "$app ended and return-app \"$back\" is not a home app"
+            leave_to_reader "nowhere to return; reader stays up"
+        fi
+        save_last "$back" || {
+            say "could not save return to $back"
+            leave_to_reader "could not save the return app"
+        }
+        say "$app ended; back to $back"
+        continue
+    fi
+    if ! launchable "$app"; then
+        say "$app is gone after exit rc=$rc"
+        leave_to_reader "$app is not on this Kindle any more"
+    fi
+    say "$app exited rc=$rc; starting it again"
 done

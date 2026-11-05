@@ -62,23 +62,19 @@ restore() {
     fi
     rm -f /mnt/us/DONT_START_FRAMEWORK
     # Drop the "a runner owns the panel" stamp before anything starts the
-    # menu again. Left in place, the next menu death looks like a handoff
+    # session again. Left in place, the next death looks like a handoff
     # and the session exits instead of coming back.
     rm -f /mnt/us/.menu-handoff
 
-    if [ -x /mnt/us/menu ] && [ -f /mnt/us/menu-boot.sh ]; then
-        # Hand the panel back to the launcher session, not the stock reader.
-        # This is not conditional on having found a menu running on arrival:
-        # a game started from the PC never touched the menu, and a .menu-stop
-        # left behind by an earlier session keeps the job down -- both used to
-        # send this exit down the reader path, and Amazon's reader opens on its
-        # own store. The menu is where a game gets chosen, so it is the screen
-        # the panel comes back to. The reader restore below still exists, but
-        # only for a device that cannot run the launcher at all: the menu job
-        # pulls the panel out from under the reader (it stops the mirror and
-        # keeps the Amazon UI hidden), so starting both would leave them
-        # fighting over the glass.
-        rm -f /mnt/us/.menu-stop
+    # QUIT wrote this. Do not delete it and do not start the session: that
+    # would open the same app again, and quit would do nothing. The reader
+    # path below is the one that runs. Next boot clears the stamp and opens
+    # last-app.
+    if [ -e /mnt/us/.menu-stop ]; then
+        say "quit: leaving the reader up until the next boot"
+    elif [ -x /mnt/us/menu ] && [ -f /mnt/us/menu-boot.sh ]; then
+        # Hand the panel back to the session, which opens last-app (or
+        # switch-app, if the game just asked for a different one).
         if ! /sbin/initctl status menu 2>/dev/null | grep -q 'start/running'; then
             say "giving the panel back to the launcher session (menu)"
             /sbin/initctl start menu >/dev/null 2>&1

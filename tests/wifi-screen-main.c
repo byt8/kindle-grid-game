@@ -19,6 +19,7 @@ int main(int argc, char **argv) {
     }
     kframe_cfg cfg = {
         .title = "wifi screen test",
+        .app_id = "chess",
         .items = NULL,
         .nitems = 0,
         .on_item = on_item,

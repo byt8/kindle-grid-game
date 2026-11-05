@@ -1777,6 +1777,7 @@ static int open_frame(void) {
     kframe_cfg kf;
     memset(&kf, 0, sizeof kf);
     kf.title = "CHESS";
+    kf.app_id = "chess";
     kf.items = CHESS_ITEMS;
     kf.nitems = (int)(sizeof CHESS_ITEMS / sizeof CHESS_ITEMS[0]);
     kf.on_item = on_chess_item;
@@ -1822,8 +1823,10 @@ static void usage(void) {
             "  --menu-shot F write the shared menu (PGM) and exit\n"
             "\n"
             "The top-right button opens the shared shell. This game's tabs\n"
-            "(NEW, RETRY, CLOCK, TAKEN) are on the left. VOLUME, WIFI and\n"
-            "QUIT are on the right. QUIT needs a second tap. The keyboard\n"
+            "(NEW, RETRY, CLOCK, TAKEN) are on the left. VOLUME, WIFI, APPS\n"
+            "and QUIT are on the right. APPS opens another game and that\n"
+            "game is the one the Kindle boots into next time. QUIT needs a\n"
+            "second tap and gives the screen back until that boot. The keyboard\n"
             "comes up only while you are typing. The power button\n"
             "puts the Kindle to sleep and wakes it again; the position is kept.\n"
             "A press during the model's turn cancels that question and asks it\n"

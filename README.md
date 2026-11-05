@@ -17,6 +17,31 @@ Plants vs Pixels: five-lane plant defence — grow sunflowers, shoot peas, hold 
 **What you need:** a jailbroken Kindle Touch with SSH on your network, this PC,
 Docker image `kfb-build` (ARM cross-compiler), and `python3`.
 
+**On the Kindle.** There is no launcher screen. Power on and the last game
+comes back. The first time, that game is chess. The **top-right** button opens
+the menu. **APPS** (on the right) lists the other games. Tap one. That game
+opens, and it is the one that comes back after a restart. **QUIT** twice gives
+the reader back until the next boot. Put this on the device with:
+
+```bash
+./install-menu-on-kindle.sh 192.168.0.63
+```
+
+Chess and Tetris have that menu. The other games do not. Leave one of those
+and you come back to the game that opened it. A game that is not installed
+is refused, and the saved game stays.
+
+**See it on this PC** (no Kindle):
+
+```bash
+make tetris-test          # rules, pictures, the menu, and a switch to chess
+make chess-test           # same shell, including a switch to tetris
+```
+
+Pictures from that run: `docs/kframe/tetris-board.png` (the game, button at
+the top right), `docs/kframe/tetris-apps.png` (the other games),
+`docs/kframe/menu.png` (chess's menu).
+
 ```bash
 make kindle                      # XCOM  -> ./xcom      (ARM binary)
 make chess-kindle                # Chess -> ./chess     (needs chess.conf first)
@@ -28,26 +53,21 @@ make brogue-kindle                # Brogue -> ./brogue-kindle-app
 make calib                        # Calib tuner -> ./calib
 make engine-test                  # PC check of the shared engine's full-refresh API
 make wifi-test                    # wi-fi joining + the on-screen keyboard (PC only)
-make chess-test                   # PC check of chess, including the tab shell
+make chess-test                   # PC check of chess, including APPS
+make tetris-test                  # PC check of tetris, including APPS
 ```
 
-**See the shared options screen on this PC** (no Kindle). `make chess-test` builds `./chess-host`. Then:
+The top-right button opens the shell. This game's tabs are on the left.
+Volume, wi-fi, apps and quit are on the right. The keyboard shows up only
+while a text box is in use.
 
-```bash
-./chess-host --no-takeover --no-wifi --menu-shot /tmp/menu.pgm
-./chess-host --no-takeover --no-wifi --wifi-shot /tmp/wifi-pass.pgm pass
-python3 tools/pgm2png.py /tmp/menu.pgm /tmp/menu.png
-```
+![chess menu](docs/kframe/menu.png)
+![tetris apps](docs/kframe/tetris-apps.png)
 
-The little top-right button opens it. Game tabs are on the left. Volume, wi-fi and quit are on the right. The keyboard shows up only while a text box is in use.
-
-![tab shell](docs/kframe/menu.png)
-![wi-fi password, keyboard up](docs/kframe/wifi-pass.png)
-
-More in `docs/kframe/`: `clock.png`, `taken.png`, `volume.png`, `quit.png`,
-`wifi-list.png`, `wifi-sym.png`. These are host renders — the volume and wi-fi
-list pictures show this PC's real missing `amixer` and missing
-`/mnt/us/chess-wifi.sh`, not a bug. Nothing here has been pushed to the Kindle.
+More in `docs/kframe/`: `tetris-board.png`, `tetris-menu.png`, `apps.png`,
+`volume.png`, `quit.png`, `wifi-pass.png`. These are host renders. The volume
+page shows this PC's real missing `amixer`, not a bug. This boot behaviour
+has not been pushed to a Kindle.
 
 **Play Brogue, or diagnose why it will not draw:**
 
@@ -124,9 +144,11 @@ ssh $K root@192.168.0.63 'kill -USR1 <pid>'   # grab -> /tmp/chess-shot.pgm (15 
 
 On the glass the three bottom buttons are gone. The small button at the
 **top right** opens the shared shell. This game's tabs sit on the **left**
-(NEW, RETRY, CLOCK, TAKEN). VOLUME, WIFI and QUIT sit on the **right**.
-QUIT needs a second tap. The keyboard covers the bottom only while a text
-field is focused. Only chess uses this shell so far.
+(NEW, RETRY, CLOCK, TAKEN). VOLUME, WIFI, APPS and QUIT sit on the **right**.
+APPS opens another game and saves it, so the next boot opens that game.
+QUIT needs a second tap and gives the reader back until that boot. The
+keyboard covers the bottom only while a text field is focused. Tetris uses
+this same shell.
 
 **CLOCK** sets how long each side gets (tap CHANGE: off → 1 → 3 → 5 → 10 →
 15 → 30 min, the same choices chess.com offers). The choice is written back into
@@ -152,7 +174,9 @@ panel ioctls, so the on-glass result still needs one look on a device.
 ./run-tetris-on-kindle.sh 192.168.0.66   # pass the IP
 ```
 
-Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down, **QUIT** then **SURE** to exit.
+Tap **LEFT / TURN / RIGHT** to steer, **DROP** to slam it down. The **top-right**
+button opens the menu: **NEW** starts again, **APPS** switches game, **QUIT**
+twice gives the screen back.
 Pieces fall on a fixed beat. The panel still has to repaint each step. A grey repaint blinks. A black-and-white repaint jumps. Calib shows both.
 
 **Play it with the calibrated values** (speed 600, clean 30, WFM DU):

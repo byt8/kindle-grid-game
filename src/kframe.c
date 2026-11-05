@@ -2,7 +2,7 @@
 /* kframe.c -- the Kindle bits every game should share.
  *
  * Hamburger, the tabbed shell (the app's screens on the left, volume /
- * wi-fi / quit on the right), and the power-key sleep. The on-screen
+ * wi-fi / apps / quit on the right), and the power-key sleep. The on-screen
  * keyboard lives in kshell.c and comes up only while a field is focused.
  *
  * The power key is not an input device on the Kindle Touch. It writes one
@@ -55,11 +55,107 @@ static int wifi_result;   /* 0 working, 1 joined, -1 user left */
 static int pwr_latch;
 
 #define KFRAME_MAX_APP 8
-enum { TAB_VOLUME = -1, TAB_WIFI = -2, TAB_QUIT = -3 };
+enum { TAB_VOLUME = -1, TAB_WIFI = -2, TAB_QUIT = -3, TAB_APPS = -4 };
 
-static kshell_tab shell_tabs[KFRAME_MAX_APP + 3];
+/* Host tests read and write these under /tmp. The Kindle copies live in
+ * the user store, which survives a reboot. tools/menu-boot.sh reads the
+ * same names. */
+#ifdef EK_HOST
+#define KFRAME_DIR "/tmp"
+#else
+#define KFRAME_DIR "/mnt/us"
+#endif
+
+enum { APP_HOME = 1, APP_VISIT = 2, APP_READER = 3 };
+
+/* Ids must match the case list in tools/menu-boot.sh.
+ * HOME: this shell. Quit writes .menu-stop (reader until next boot).
+ * VISIT: no shell. A clean exit returns to the app that opened it.
+ * READER: the Amazon screen. It is not saved as the boot app. */
+static const struct {
+    const char *id;
+    const char *label;
+    int kind;
+} APPS[] = {
+    { "xcom",     "XCOM",     APP_VISIT },
+    { "chess",    "CHESS",    APP_HOME },
+    { "tetris",   "TETRIS",   APP_HOME },
+    { "sudoku",   "SUDOKU",   APP_VISIT },
+    { "rockman",  "ROCKMAN",  APP_VISIT },
+    { "pvz",      "PVZ",      APP_VISIT },
+    { "brogue",   "BROGUE",   APP_VISIT },
+    { "calib",    "CALIB",    APP_VISIT },
+    { "koreader", "KOREADER", APP_VISIT },
+    { "kindle",   "KINDLE",   APP_READER },
+};
+
+static kshell_tab shell_tabs[KFRAME_MAX_APP + 4];
 static int shell_ntabs;
 static char quit_label[8] = "QUIT";
+
+static int app_slot(const char *id) {
+    if (!id || !id[0]) return -1;
+    for (int i = 0; i < (int)(sizeof APPS / sizeof APPS[0]); i++)
+        if (!strcmp(APPS[i].id, id)) return i;
+    return -1;
+}
+
+static int stamp_path(char *dst, size_t n, const char *name) {
+    int wr = snprintf(dst, n, "%s/%s", KFRAME_DIR, name);
+    if (wr < 0 || (size_t)wr >= n) {
+        fprintf(stderr, "kframe: path for %s does not fit\n", name);
+        return -1;
+    }
+    return 0;
+}
+
+static int write_stamp(const char *name, const char *body) {
+    char path[160];
+    if (stamp_path(path, sizeof path, name) != 0) return -1;
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        fprintf(stderr, "kframe: could not write %s: %s\n", path, strerror(errno));
+        return -1;
+    }
+    if (fprintf(f, "%s\n", body ? body : "") < 0) {
+        fprintf(stderr, "kframe: could not write %s: %s\n", path, strerror(errno));
+        fclose(f);
+        return -1;
+    }
+    if (fflush(f) != 0 || fsync(fileno(f)) != 0) {
+        fprintf(stderr, "kframe: could not save %s: %s\n", path, strerror(errno));
+        fclose(f);
+        return -1;
+    }
+    if (fclose(f) != 0) {
+        fprintf(stderr, "kframe: could not close %s: %s\n", path, strerror(errno));
+        return -1;
+    }
+    fprintf(stderr, "kframe: wrote %s (%s)\n", path, body ? body : "");
+    return 0;
+}
+
+/* Missing is fine. Any other error is reported and fails the caller. */
+static int clear_stamp(const char *name) {
+    char path[160];
+    if (stamp_path(path, sizeof path, name) != 0) return -1;
+    if (unlink(path) != 0 && errno != ENOENT) {
+        fprintf(stderr, "kframe: could not remove %s: %s\n", path, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+static int apps_fit(void) {
+    int n = (int)(sizeof APPS / sizeof APPS[0]) - 1; /* the running app is hidden */
+    int bottom = KFRAME_APP_ROW_Y + (n - 1) * KFRAME_APP_ROW_P + KFRAME_APP_ROW_H;
+    if (bottom > KFRAME_BACK_Y - 8) {
+        fprintf(stderr, "kframe: %d other apps do not fit (last row ends at %d, back is at %d)\n",
+                n, bottom, KFRAME_BACK_Y);
+        return -1;
+    }
+    return 0;
+}
 
 static int build_shell(void) {
     if (cfg.nitems > KFRAME_MAX_APP) {
@@ -74,7 +170,7 @@ static int build_shell(void) {
             return -1;
         }
         int id = cfg.items[i].id;
-        if (id == 0 || id == TAB_VOLUME || id == TAB_WIFI || id == TAB_QUIT) {
+        if (id == 0 || id == TAB_VOLUME || id == TAB_WIFI || id == TAB_QUIT || id == TAB_APPS) {
             fprintf(stderr, "kframe: app tab \"%s\" uses reserved id %d\n",
                     cfg.items[i].label, id);
             return -1;
@@ -90,6 +186,10 @@ static int build_shell(void) {
     n++;
     shell_tabs[n].label = "WIFI";
     shell_tabs[n].id = TAB_WIFI;
+    shell_tabs[n].side = KSHELL_GENERAL;
+    n++;
+    shell_tabs[n].label = "APPS";
+    shell_tabs[n].id = TAB_APPS;
     shell_tabs[n].side = KSHELL_GENERAL;
     n++;
     snprintf(quit_label, sizeof quit_label, "QUIT");
@@ -114,11 +214,26 @@ int kframe_init(const kframe_cfg *c) {
         cfg_ok = 0;
         return -1;
     }
+    int slot = app_slot(c->app_id);
+    if (slot < 0 || APPS[slot].kind == APP_READER) {
+        fprintf(stderr, "kframe: app_id \"%s\" is not a game this shell can be\n",
+                c->app_id ? c->app_id : "(none)");
+        cfg_ok = 0;
+        return -1;
+    }
     cfg = *c;
     cfg_ok = 1;
     page = 0;
     quit_armed = 0;
-    if (build_shell() != 0) {
+    if (build_shell() != 0 || apps_fit() != 0) {
+        cfg_ok = 0;
+        return -1;
+    }
+    /* A stamp left by an earlier quit or switch is stale once this app is
+     * actually up. Failing to clear one would make the next exit look like
+     * that old request. */
+    if (clear_stamp(".menu-stop") != 0 || clear_stamp("switch-app") != 0
+        || clear_stamp("return-app") != 0 || write_stamp("last-app", cfg.app_id) != 0) {
         cfg_ok = 0;
         return -1;
     }
@@ -450,6 +565,7 @@ static void select_tab(int id) {
     kshell_select(id);
     if (id == TAB_VOLUME && prev != TAB_VOLUME) vol_read();
     if (id == TAB_WIFI && wifi_mode == WIFI_OFF) wifi_enter();
+    if (id == TAB_APPS && prev != TAB_APPS) fprintf(stderr, "kframe: apps open\n");
 }
 
 static int quit_press(void) {
@@ -460,9 +576,80 @@ static int quit_press(void) {
         fprintf(stderr, "kframe: quit armed\n");
         return 1;
     }
+    if (write_stamp(".menu-stop", "quit") != 0) return 1;
     fprintf(stderr, "kframe: quit confirmed\n");
     kframe_close();
     cfg.on_quit();
+    return 1;
+}
+
+/* Row in the APPS list, skipping the app that is already running. */
+static int visible_app(int row) {
+    int seen = 0;
+    int n = (int)(sizeof APPS / sizeof APPS[0]);
+    for (int i = 0; i < n; i++) {
+        if (!strcmp(APPS[i].id, cfg.app_id)) continue;
+        if (seen == row) return i;
+        seen++;
+    }
+    return -1;
+}
+
+static int switch_to(int idx) {
+    const char *id = APPS[idx].id;
+    if (APPS[idx].kind == APP_READER) {
+        if (write_stamp(".menu-stop", "quit") != 0) return 1;
+        fprintf(stderr, "kframe: kindle\n");
+        kframe_close();
+        cfg.on_quit();
+        return 1;
+    }
+    if (!strcmp(id, cfg.app_id)) {
+        fprintf(stderr, "kframe: %s is already running\n", id);
+        return 1;
+    }
+    if (APPS[idx].kind == APP_VISIT) {
+        if (write_stamp("return-app", cfg.app_id) != 0) return 1;
+    } else if (clear_stamp("return-app") != 0) {
+        return 1;
+    }
+    if (write_stamp("switch-app", id) != 0) return 1;
+    fprintf(stderr, "kframe: switch %s\n", id);
+    kframe_close();
+    cfg.on_quit();
+    return 1;
+}
+
+static void draw_apps(const kshell_rect *r) {
+    ek_text_scale(r->x, r->y, "APPS", EK_INK, 2);
+    ek_text(r->x, r->y + 36, "tap one. that game comes back after a restart.", EK_INK);
+    ek_text(r->x, r->y + 54, "KINDLE hands the screen back until the next boot.", EK_INK);
+    int n = (int)(sizeof APPS / sizeof APPS[0]) - 1;
+    for (int row = 0; row < n; row++) {
+        int idx = visible_app(row);
+        if (idx < 0) {
+            fprintf(stderr, "kframe: apps row %d has no app\n", row);
+            return;
+        }
+        int y = KFRAME_APP_ROW_Y + row * KFRAME_APP_ROW_P;
+        kshell_button(KFRAME_APP_ROW_X, y, KFRAME_APP_ROW_W, KFRAME_APP_ROW_H,
+                      APPS[idx].label, 0);
+    }
+}
+
+static int tap_apps(int x, int y) {
+    int n = (int)(sizeof APPS / sizeof APPS[0]) - 1;
+    for (int row = 0; row < n; row++) {
+        int ry = KFRAME_APP_ROW_Y + row * KFRAME_APP_ROW_P;
+        if (!kshell_inside(x, y, KFRAME_APP_ROW_X, ry, KFRAME_APP_ROW_W, KFRAME_APP_ROW_H))
+            continue;
+        int idx = visible_app(row);
+        if (idx < 0) {
+            fprintf(stderr, "kframe: apps row %d has no app\n", row);
+            return 1;
+        }
+        return switch_to(idx);
+    }
     return 1;
 }
 
@@ -597,6 +784,7 @@ static void paint_shell_now(void) {
     int id = kshell_selected();
     if (id == TAB_VOLUME) draw_volume(&r);
     else if (id == TAB_WIFI) draw_wifi(&r);
+    else if (id == TAB_APPS) draw_apps(&r);
     else if (id == TAB_QUIT) draw_quit(&r);
     else draw_app(&r, id);
     if (!kshell_keyboard_on())
@@ -781,6 +969,7 @@ static int tap_shell(int x, int y) {
     id = kshell_selected();
     if (id == TAB_VOLUME) return tap_volume(x, y);
     if (id == TAB_WIFI) return tap_wifi(x, y);
+    if (id == TAB_APPS) return tap_apps(x, y);
     if (id == TAB_QUIT) {
         if (kshell_inside(x, y, KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H))
             return quit_press();

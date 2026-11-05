@@ -1,7 +1,17 @@
 # Area: menu launcher
 
-The Kindle boots into an eight-button launcher (`src/menu.c`) instead of the
-Amazon UI. Same e-ink engine as the games, same takeover rules.
+Boot does **not** draw the eight-button launcher. `tools/menu-boot.sh` opens
+the game named in `/mnt/us/last-app`. If that file is missing it writes
+`chess` and says so. The in-game APPS tab (`src/kframe.c`) writes
+`switch-app`; this script saves that name and opens it. QUIT writes
+`.menu-stop`: the reader stays up until the next boot, which opens the saved
+game again. A game with no shell (not chess or tetris) is a visit: a clean
+exit returns to `return-app`. A name that is not in the catalog, or a binary
+that is not installed, is logged and sent to the reader. It does not open a
+different game instead. `src/menu.c` is still the old screen and `make menu-test`
+still walks it. It is not what boot runs.
+
+The old launcher (`src/menu.c`) is the eight buttons below.
 
 ## How it works
 

@@ -1,18 +1,15 @@
 #!/bin/sh
-# install-menu-on-kindle.sh -- boot the Kindle straight into the launcher menu.
+# install-menu-on-kindle.sh -- boot the Kindle into the last game.
 #
 #   ./install-menu-on-kindle.sh [IP]
 #
-# Builds the menu and chess for the device, pushes the menu, the menu boot
-# driver, the upstart job, and the wifi helper, installs the job
-# (/etc/upstart/menu.conf, replacing the old direct-to-chess /etc/upstart/
-# chess.conf), then starts the menu session immediately so the device shows
-# the menu now rather than on the next boot.
+# Builds the games, pushes them, the boot script and the upstart job
+# (/etc/upstart/menu.conf), then starts the session. Boot opens
+# /mnt/us/last-app (chess the first time). The in-game APPS tab picks
+# another game. QUIT twice leaves the reader up until the next boot.
 #
-# The old chess job is removed without being started again, so a reboot lands
-# on the menu. To go back to stock Amazon UI at boot (e.g. after a factory
-# reset or to use the reader normally): reboot, or tap KINDLE in the menu and
-# remove /etc/upstart/menu.conf on the device.
+# To go back to the stock Amazon UI at boot: QUIT, then remove
+# /etc/upstart/menu.conf on the device.
 set -eu
 cd "$(dirname "$0")"
 
@@ -77,5 +74,6 @@ ssh_run '
     setsid sh /mnt/us/menu-boot.sh >>/mnt/us/menu-boot.log 2>&1 </dev/null &
 '
 
-echo "install-menu: done. The menu should be on the panel now."
-echo "     Next boot will land on the menu; tap KINDLE for the reader UI."
+echo "install-menu: done. The last game should be on the panel now."
+echo "     Next boot opens that same game. The top-right button, then APPS, picks another."
+echo "     QUIT twice gives the reader back until the next boot."
