@@ -39,3 +39,17 @@ Found and removed a leftover `ek_mono(1)` in src/chess.c main(): it forces
 EPDC_FLAG_FORCE_MONOCHROME on every update and the controller collapses the
 grey layer's 16 tones to 1 bit. Host simulator does not model it, so only the
 device showed the bug. Verified live: /tmp/chess-shot.pgm from `kill -USR1`
+
+## 2026-11-05 — pipes shipped; deploy now takes the panel
+`pipes` was built and `make pipes-test` green but absent from the device: not
+in `install-all-on-kindle.sh`'s build/push lists and not in `menu-boot.sh`'s
+`known_app`/`runner_for`, so APPS offered a game that could not start. Wired
+into all four places and proven on .63 (exit 0, md5 matches, pid stable).
+
+The deploy also learned to claim the panel. A live KOReader holds
+`/dev/input/event3` with its own X server, so `grabtest` failed all 10 attempts
+and `--no-koreader` deploys reported "pipes did not come up" with every binary
+correctly installed; `/mnt/us/.menu-stop` from a previous QUIT made the session
+exit 1 outright. Both are now cleared, the old `menu-boot.sh` is waited out
+before the new one starts (two at once fought over the panel), and the confirm
+loop no longer `break`s when `menu-boot` relaunches a game that exited rc=0.

@@ -68,3 +68,30 @@ pid twice, six seconds apart, so a game that takes the panel and quits is not
 counted as up. `menu-boot.log` also carries a full ALSA mixer dump, so the
 failure branch greps for `menu-boot:|app exited|kframe:|eink:` instead of
 tail-ing the file.
+
+## The deploy must take the panel (fixed 2026-11-05)
+A deploy is a request for a game on the glass, but three things left over from
+an earlier session kept the reader there. All three now run before the new
+session starts:
+
+1. **`/mnt/us/.menu-stop`** — QUIT writes it and `menu-boot.sh` exits on it.
+   Deploy now `rm -f`s it.
+2. **KOReader holds `/dev/input/event3`** via its own `Xorg -nolisten tcp +bs`
+   and `luajit ./reader.lua`. `grabtest` fails with EBUSY for all 10 attempts,
+   the session prints `touch device still grabbed after 20s; reader stays up`
+   and exits 1 — with **every binary correctly installed**. So `--no-koreader`
+   deploys reported `pipes did not come up` on 2026-11-05 while the push was
+   perfect. Deploy now `killall -q luajit koreader.sh`.
+3. **Two `menu-boot.sh` at once.** `killall` then `setsid` in the same command
+   raced: both sessions took the panel, the log showed `could not stop powerd
+   for the menu` and two `launching <game>` lines, and no app appeared. Deploy
+   now waits up to 20 s for the old `pidof menu-boot.sh` to be empty first.
+
+**Do not `break` out of the wait on the first app death.** `menu-boot.sh`
+relaunches a game that exits `rc=0`; the old loop `break`-ed out of the 120 s
+window and reported exit `2` while the game was up 4 s later. It now counts the
+6 s sample and keeps polling.
+
+**One more false alarm:** editing this script while `deploy.sh` was running gave
+`Syntax error: "(" unexpected (expecting "done")` from a half-written file even
+though `sh -n` passed before and after. `sh -n` on a copy, then run it.

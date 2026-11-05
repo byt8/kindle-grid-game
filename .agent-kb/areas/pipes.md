@@ -79,3 +79,21 @@ the first picture), `--dump FILE`, `--menu-shot FILE`, `--stats`, `--selftest`,
 `run-pipes-on-kindle.sh [ip]` pushes `./pipes`, `grabtest`, `tools/kindle-run.sh`
 as `/mnt/us/pipes-run.sh`, then `GAME=pipes sh /mnt/us/pipes-run.sh --detach`.
 Build the binary first: `make pipes-kindle` (docker `kfb-build`, ARM static).
+
+## Shipping it (done 2026-11-05)
+Pipes was built and host-tested but never reached the device: `install-all-
+on-kindle.sh` did not build or push it, and `tools/menu-boot.sh` did not list
+the id, so it was absent from `known_app()`/`runner_for()` and APPS could not
+open it. Now wired in four places, and these must stay in step:
+
+| What | Where |
+| --- | --- |
+| catalog `{ "pipes", "PIPES", APP_VISIT }` | `src/kframe.c` `APPS[]` |
+| `known_app()` + `runner_for()` -> `/mnt/us/pipes-run.sh` | `tools/menu-boot.sh` |
+| `make ... pipes ...` and both push loops | `install-all-on-kindle.sh` |
+| `run-pipes-on-kindle.sh` | already present |
+
+Proven on .63 2026-11-05: `./deploy.sh 192.168.0.63 --no-koreader` exit 0,
+`pipes is on the panel (pid 16882 16836)`, `md5sum /mnt/us/pipes` =
+`045b748b85af7b6348984c0fc5af44c4` = the host `pipes` build, 11 `*-run.sh`
+installed, and the pid unchanged across four 15 s samples.
