@@ -55,7 +55,7 @@ cat ./rockman            | ssh_run 'cat > /mnt/us/rockman.new && chmod +x /mnt/u
 cat ./grabtest           | ssh_run 'cat > /mnt/us/grabtest && chmod +x /mnt/us/grabtest'
 cat tools/kindle-run.sh  | ssh_run 'cat > /mnt/us/rockman-run.sh && chmod +x /mnt/us/rockman-run.sh'
 
-echo "run-rockman-on-kindle: taking the $ip screen. Tap QUIT, then SURE, to give it back."
+echo "run-rockman-on-kindle: taking the $ip screen. The top-right square is the menu. Tap QUIT, then SURE, to give it back."
 # --detach: from here the game belongs to the device. This script only follows
 # the game's log, and closing it changes nothing.
 ssh_run "GAME=rockman sh /mnt/us/rockman-run.sh --detach $*"

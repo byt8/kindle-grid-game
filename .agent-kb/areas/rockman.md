@@ -2,7 +2,7 @@
 area: rockman
 title: Rockman cave game
 aliases: [boulder-dash, vic20]
-updated: 2026-11-01
+updated: 2026-11-05
 ---
 
 # Rockman
@@ -25,6 +25,7 @@ updated: 2026-11-01
 
 ## Built
 - Playable port. Entry: `src/rockman.c`. Device runner: `./run-rockman-on-kindle.sh`.
+- Shared menu: `open_frame()`, tabs NEW and SPEED, `app_id` rockman. Still `APP_VISIT` in `src/kframe.c` (same as sudoku). Pictures: `docs/kframe/rockman-board.png`, `rockman-menu.png`, `rockman-speed.png`, `rockman-apps.png`.
 - Pictures from `make rockman-test`: `/tmp/rockman-title.pgm`, `/tmp/rockman-room.pgm`, `/tmp/rockman-play.pgm`.
 
 ## Decisions
@@ -37,44 +38,21 @@ updated: 2026-11-01
 
 ## Dead ends
 - Do not add `RotAt`, auto-firing traps, or the plan's extra score adders. They are not in `scratch/Rockman.asm`.
-- [verified 2026-11-01 src/rockman.c main] The two builds have separate input paths: `tap_at()` is called only from the `EK_HOST` stdin pipe (`tap X Y`), while the Kindle uses its own `ek_poll` press/release loop (held buttons repeat). `tap_at` is `#ifdef EK_HOST` for that reason — unwrapped it breaks `make rockman-kindle` under `-Werror=unused-function` while `make rockman-test` still passes, so the host test alone does not catch it.
+- [verified 2026-11-01 src/rockman.c main] The two builds have separate input paths: `tap_at()` is called only from the `EK_HOST` stdin pipe (`tap X Y`), while the Kindle uses its own `ek_poll` press/release loop (held buttons repeat). `tap_at` is `#ifdef EK_HOST` for that reason — unwrapped it breaks `make rockman-kindle` under `-Werror=unused-function` while `make rockman-test` still passes, so the host test alone does not catch it. Both paths call `kframe_tap` first.
+- Starting the runner while another rockman-run.sh was still launching left two `/mnt/us/rockman` processes; the second logged `EVIOCGRAB: Resource busy`. `killall rockman`, then one `GAME=rockman sh /mnt/us/rockman-run.sh --detach`, came up as a single pid with the grab (2026-11-05, .63, pid 2052, md5 `f584c8a6`). The `can't open /proc/.../cmdline` lines are the known harmless race.
 
 ## Do not redo
 - At speed 0 the timer kills on pass 6730 (256 for the first step, then 6 per step, 9 marks of 120). The self-test asserts that number.
 
-## Pace and panel cost (measured 2026-11-04 @192.168.0.63)
+## Pace
 
-Ran `./run-rockman-on-kindle.sh 192.168.0.63 --tuned --stats --auto 30`.
-Numbers off `/mnt/us/rockman.log`:
-
-- **DU frame = 303–335 ms** (3–4 rects, 33–157 tiles, 2–10 KB). Same as tetris:
-  the panel's own cost, not the game's.
-- **Periodic GC16 clean = 687–701 ms** (engine fires it every 30 flushes).
-- **Full paint (title / room change) = 669–670 ms.**
-
-Two real bugs this exposed, both now fixed in `src/rockman.c`:
-
-1. **The throttle was a lie.** `next_flush = ek_ms() + 150` was measured from
-   *after* a blocking ~300 ms paint, so the true frame period was ~450 ms while
-   the code read 150. `refresh_ms` (default 320 = `PANEL_FLOOR_MS`) is now
-   anchored to `t0` = when the paint *started*, so it means the frame period it
-   claims. `--refresh N` refuses `N < 320` with a message; it does not clamp.
-2. **The game moved faster than the glass could show it.** The original step was
-   `(256-speed)*16/256` ms per pass x 14 passes = **~224 ms per player step**,
-   which is under one 300 ms frame: presses were consumed with nothing on screen
-   to show for them. `move_ms` (default **450**) replaces the hardcoded 16 and
-   keeps the 14:16:9 tick ratios:
-   `next_pass = now + move_ms*(256-speed)/(RM_TICK_CONTROL*256)`.
-   `--move 224` reproduces the original exactly (verified by arithmetic).
-
-The slow-panel warning is exempt on `st.full` and `clean` frames. Those cost
-670–700 ms by design and are one-off swallows, not the steady per-frame cost —
-without the exemption it cried wolf on frame two of every run.
-
-`--auto N` now calls `present()` per step (it used to paint once at the end), so
-`--stats` reports the *game's* cost rather than the title screen's single full
-paint. That change must not `return 0` early or `--dump` silently stops being
-written — the test passed on a stale PGM and hid it once.
+- [verified 2026-11-05 src/rockman.c pump_passes] A step is 14 world passes. `present()` blocks ~300 ms. The old device loop did **one pass and then painted**, so a step took 14 frames (~4.5 s) no matter what `--move` said. `pump_passes()` runs the passes the paint blocked through, then the caller paints once.
+- [verified 2026-11-05 src/rockman.c] Default `move_ms` is `PANEL_FLOOR_MS` (320): one step per picture. 450 is the old default. 224 is the VIC-20 step and can put two taps in one picture; `note_pace()` says so. The menu SPEED tab sets the same numbers.
+- [ran 2026-11-05 make rockman-test] Self-test includes: one interval does not move the player, 320 ms does, a 60 s stall does not spend a life. Menu, SPEED, NEW and switch-to-chess greps passed.
+- A stall longer than two steps is dropped (`burst_max = limit * 2`). Do not "catch up" a hitch by running thousands of passes: that spends the death timer.
+- The menu holds the clock (`kframe_covering()` snaps `next_pass` to now).
+- [ran 2026-11-04] DU frame was 303–335 ms, full paint ~670 ms, GC16 clean ~700 ms. The slow-panel warning stays exempt on `st.full` and `clean` frames.
+- `--refresh N` still refuses `N < 320`. It does not clamp.
 
 ## Open
-- Built as `./rockman` (kfb-build image works), but not pushed or played yet: `./run-rockman-on-kindle.sh 192.168.0.66` timed out on SSH, so the device was off-network.
+- .66 did not answer SSH on 2026-11-05. .63 is the unit that is running this build.

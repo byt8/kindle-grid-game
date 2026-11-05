@@ -24,24 +24,53 @@ game opens, and it is the one that comes back after a restart. **QUIT** twice
 gives the reader back until the next boot. Put this on the device with:
 
 ```bash
-./install-menu-on-kindle.sh 192.168.0.63
+./deploy.sh
 ```
 
-Chess, Tetris and Sudoku have that menu. The other games do not. Leave one of
-those and you come back to the game that opened it. A game that is not
-installed is refused, and the saved game stays.
+That is the whole job: it asks for the Kindle's address, checks the Kindle
+answers, compiles every game, and pushes all of it. Give the address up front
+to skip the question:
+
+```bash
+./deploy.sh 192.168.0.63                 # compile + push everything
+./deploy.sh 192.168.0.63 --no-build      # push what is already compiled
+./deploy.sh 192.168.0.63 --no-koreader   # skip the KOReader step
+```
+
+It retries through the Kindle's wifi naps, so a dropped connection cannot
+leave half the games updated, and it exits `0` only once the panel is drawing.
+`./install-all-on-kindle.sh <ip>` is the same script underneath; `./deploy.sh
+--help` lists what goes over.
+
+Nothing else is needed on the device.
+
+Chess, Tetris, Sudoku, Minesweeper and Rockman have the APPS menu. Leave a game
+that does not, and you come back to the game that opened it. A game that is
+not installed is refused, and the saved game stays.
 
 **See it on this PC** (no Kindle):
 
 ```bash
+make rockman-test         # cave rules, the menu, speed, and a switch to chess
 make tetris-test          # rules, pictures, the menu, and a switch to chess
 make chess-test           # same shell, including a switch to tetris
 make sudoku-test          # same shell, including a switch to chess
 ```
 
-Pictures from that run: `docs/kframe/tetris-board.png` (the game, button at
-the top right), `docs/kframe/tetris-apps.png` (the other games),
-`docs/kframe/menu.png` (chess's menu).
+Rockman pictures: `docs/kframe/rockman-board.png` (the cave, button at the
+top right), `docs/kframe/rockman-menu.png`, `docs/kframe/rockman-speed.png`,
+`docs/kframe/rockman-apps.png`.
+
+**Play Rockman:**
+
+```bash
+make rockman-kindle
+./run-rockman-on-kindle.sh 192.168.0.63
+```
+
+One step takes one screen update (320 ms). The top-right square opens **NEW**
+and **SPEED**. SPEED can also pick 450 ms, or the old 224 ms step. LEFT UP
+RIGHT DOWN move. PUSH shoves a rock. QUIT then SURE stops.
 
 ```bash
 make kindle                      # XCOM  -> ./xcom      (ARM binary)
@@ -61,13 +90,17 @@ make sudoku-test                  # PC check of sudoku, including APPS
 make mines-test                   # PC check of minesweeper, including APPS
 ```
 
-The top-right button is a 48x48 square at (548, 2) — a big target. It opens
-the shell. This game's tabs are on the left. Volume, wi-fi, apps and quit are
-on the right. The keyboard shows up only while a text box is in use.
+The top-right button is a 48x48 square at (548, 2). It opens the shell.
+This game's tabs are on the left. Volume, wi-fi, apps and quit are on the
+right. The keyboard shows up only while a text box is in use.
 
-are **NEW**, **FLAG** and **LEVEL**. Digits 1..9
-stay on the board, since they are what you tap most. ERASE and HINT act on the
+Rockman tabs are **NEW** and **SPEED**. Minesweeper tabs are **NEW**, **FLAG**
+and **LEVEL**. Sudoku digits 1..9 stay on the board. ERASE and HINT act on the
 cell you picked before opening the menu.
+
+![rockman menu](docs/kframe/rockman-menu.png)
+![rockman speed](docs/kframe/rockman-speed.png)
+![rockman board](docs/kframe/rockman-board.png)
 
 ![sudoku level](docs/sudoku-menu/level.png)
 
@@ -167,8 +200,8 @@ On the glass the three bottom buttons are gone. The small button at the
 APPS opens another game and saves it, so the next boot opens that game.
 QUIT needs a second tap and gives the reader back until that boot. The
 keyboard covers the bottom only while a text field is focused. Tetris uses
-this same shell (NEW, PAUSE, SPEED). So does Sudoku (NEW, LEVEL), and so does
-Minesweeper (NEW, FLAG, LEVEL).
+this same shell (NEW, PAUSE, SPEED). So does Sudoku (NEW, ERASE, HINT, LEVEL),
+Minesweeper (NEW, FLAG, LEVEL), and Rockman (NEW, SPEED).
 
 **CLOCK** sets how long each side gets (tap CHANGE: off → 1 → 3 → 5 → 10 →
 15 → 30 min, the same choices chess.com offers). The choice is written back into

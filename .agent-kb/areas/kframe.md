@@ -2,7 +2,7 @@
 area: kframe
 title: Shared Kindle shell
 aliases: [hamburger, appmenu, volume, kshell, tabs]
-updated: 2026-11-06
+updated: 2026-11-05
 ---
 
 # Shared Kindle shell
@@ -28,7 +28,8 @@ updated: 2026-11-06
 - [verified 2026-11-06 src/tetris.c] `paused` stops the drop clock (`kframe_covering() || paused` pushes `drop_at` out) and draws a PAUSED card. A tap on the board also un-pauses. Without this, a pause would dump every held drop on resume.
 - [verified 2026-11-05 src/kframe.c] Wi-fi shells out to `/mnt/us/chess-wifi.sh`. Host override is `-DKFRAME_WIFI_SCRIPT`. The WIFI tab is stepped by `kframe_tap`. `kframe_wifi_setup()` is a separate blocking loop (boot, `--wifi`). Do not nest that loop inside the tab.
 - [verified 2026-11-05 src/kframe.h] JOIN / NEXT is `KFRAME_WIFI_GO_*`. Centre is (438, 228). It sits under the text field. The keyboard well starts at y=468.
-- [verified 2026-11-06 src/sudoku.c] Sudoku calls `kframe` too: `open_frame()`, items **NEW / ERASE / HINT / LEVEL** (each with its own `tap_*`), `app_id` sudoku, `--menu-shot`. Its own NEW / ERASE / HINT / QUIT row and the digit row stay on the board; digits are not a menu tab. Left tab centres: NEW (36,24), ERASE (100,24), HINT (164,24), LEVEL (228,24). XCOM, rockman, pvz, brogue, calib and KOReader still do not.
+- [verified 2026-11-06 src/sudoku.c] Sudoku calls `kframe` too: `open_frame()`, items **NEW / ERASE / HINT / LEVEL** (each with its own `tap_*`), `app_id` sudoku, `--menu-shot`. Its own NEW / ERASE / HINT / QUIT row and the digit row stay on the board; digits are not a menu tab. Left tab centres: NEW (36,24), ERASE (100,24), HINT (164,24), LEVEL (228,24).
+- [verified 2026-11-05 src/rockman.c] Rockman calls it too: NEW and SPEED, `app_id` rockman. SPEED centres (100, 24); VIC row centre (300, 344). It stays `APP_VISIT`. The hamburger covers the brick at the top-right of the cave; the lives digit (row 1, col 20) is just under it. XCOM, pvz, brogue, calib and KOReader still do not.
 - [verified 2026-11-05 tools/menu-boot.sh] Boot does not draw `src/menu.c`. It launches `last-app`. A missing file starts chess and says so. A name that is not in the catalog, or a binary that is not installed, goes to the reader and does not open a substitute game. A refused switch keeps the saved app.
 - [ran 2026-11-05 make tetris-test && make chess-test && make wifi-test] All passed. Switch chess→tetris writes `/tmp/switch-app`. Switch chess→xcom also writes `/tmp/return-app` (`chess`). KINDLE writes `/tmp/.menu-stop` and does not write switch-app.
 

@@ -22,10 +22,10 @@ rockman-data:
 
 # ---- rockman: the 1984 cave digger, same panel, tap buttons -------------
 
-rockman-host: src/rockman.c src/rockman_data.h $(ENGINE)/eink.c $(ENGINE)/eink.h
-	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/rockman.c $(ENGINE)/eink.c -lm
+rockman-host: src/rockman.c src/rockman_data.h src/kframe.c src/kframe.h src/kshell.c src/kshell.h $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/rockman.c src/kframe.c src/kshell.c $(ENGINE)/eink.c -lm
 
-rockman-kindle: src/rockman.c src/rockman_data.h $(ENGINE)/eink.c $(ENGINE)/eink.h
+rockman-kindle: src/rockman.c src/rockman_data.h src/kframe.c src/kframe.h src/kshell.c src/kshell.h $(ENGINE)/eink.c $(ENGINE)/eink.h
 	docker run --rm -u "$$(id -u):$$(id -g)" \
 	  -v "$$(pwd):/src" \
 	  -v /home/brendan/jailbreak-kindle:/jb \
@@ -33,7 +33,7 @@ rockman-kindle: src/rockman.c src/rockman_data.h $(ENGINE)/eink.c $(ENGINE)/eink
 	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
 	    -ffunction-sections -fdata-sections \
 	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
-	    -o rockman src/rockman.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -o rockman src/rockman.c src/kframe.c src/kshell.c /jb/kindle-tools/fbdaemon/engine/eink.c \
 	    -static -no-pie -Wl,--gc-sections -lm \
 	    && arm-linux-musleabi-strip rockman'
 
@@ -47,6 +47,30 @@ rockman-test: rockman-host
 	./rockman-host --auto 24 --no-takeover --seed 1 --dump /tmp/rockman-play.pgm
 	$(PY) tools/check_pgm.py /tmp/rockman-title.pgm /tmp/rockman-room.pgm /tmp/rockman-play.pgm
 	$(PY) tools/check_rockman.py /tmp/rockman-title.pgm /tmp/rockman-room.pgm /tmp/rockman-play.pgm
+	# The hamburger is a 48x48 square at (548,2). Centre (572, 26).
+	printf 'tap 572 26\n' | ./rockman-host --no-takeover --seed 1 --dump /tmp/rockman-menu.pgm \
+	    >/tmp/rockman-menu.out 2>/tmp/rockman-menu.err
+	grep -q 'kframe: menu open' /tmp/rockman-menu.err
+	# APPS is the right-hand group. Centre (500, 24). From rockman, chess is
+	# row 1 (xcom is row 0). Centre (300, 212). See kframe.h.
+	printf 'tap 572 26\ntap 500 24\n' | ./rockman-host --no-takeover --seed 1 --dump /tmp/rockman-apps.pgm \
+	    >/tmp/rockman-apps.out 2>/tmp/rockman-apps.err
+	grep -q 'kframe: apps open' /tmp/rockman-apps.err
+	$(PY) tools/check_pgm.py /tmp/rockman-menu.pgm /tmp/rockman-apps.pgm
+	# SPEED is the second left tab. Centre (100, 24). VIC is row 2, centre (300, 344).
+	printf 'tap 572 26\ntap 100 24\ntap 300 344\n' | ./rockman-host --no-takeover --seed 1 \
+	    --dump /tmp/rockman-speed.pgm >/tmp/rockman-speed.out 2>/tmp/rockman-speed.err
+	grep -q 'kframe: app item 2' /tmp/rockman-speed.err
+	grep -q 'rockman: step 224 ms' /tmp/rockman-speed.err
+	# NEW is the first left tab. Centre (36, 24). START is (300, 236).
+	printf 'tap 300 400\ntap 572 26\ntap 36 24\ntap 300 236\n' | ./rockman-host --no-takeover --seed 1 \
+	    --dump /tmp/rockman-new.pgm >/tmp/rockman-new.out 2>/tmp/rockman-new.err
+	grep -q 'rockman: new game' /tmp/rockman-new.err
+	rm -f /tmp/switch-app /tmp/return-app
+	printf 'tap 572 26\ntap 500 24\ntap 300 212\n' | ./rockman-host --no-takeover --seed 1 \
+	    >/tmp/rockman-switch.out 2>/tmp/rockman-switch.err
+	grep -q 'kframe: switch chess' /tmp/rockman-switch.err
+	grep -qx 'chess' /tmp/switch-app
 
 # ---- tetris: 10x20 well, on-screen buttons, no keyboard ------------------
 

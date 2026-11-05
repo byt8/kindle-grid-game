@@ -13,6 +13,7 @@
  *     not painted over and lost.
  */
 #include "eink.h"
+#include "kframe.h"
 #include "rockman_data.h"
 
 #include <signal.h>
@@ -75,12 +76,21 @@ static volatile sig_atomic_t stop_req;
 #define PANEL_FLOOR_MS 320
 static int refresh_ms = PANEL_FLOOR_MS;
 
-/* How long one player step takes, in ms. The original arithmetic gave a step
- * every 14 passes x 16 ms = ~224 ms, which is faster than this panel paints,
- * so presses were eaten faster than the screen could show them. 450 is a step
- * the eye can follow: about one and a half frames per move. */
+/* How long one player step takes, in ms. A step is 14 world passes. The
+ * panel paints in about 320 ms, so that is the fastest step that still gets
+ * its own picture. 224 is the VIC-20's own step: quicker than the glass, so
+ * two taps can share one picture. 450 was the old default (a step and a half). */
 #define RM_TICK_CONTROL 14          /* rm_tick_limits[0]: passes per step */
-static int move_ms = 450;
+static int move_ms = PANEL_FLOOR_MS;
+
+static void note_pace(void) {
+    fprintf(stderr, "rockman: step %d ms\n", move_ms);
+    if (move_ms < PANEL_FLOOR_MS)
+        fprintf(stderr,
+                "rockman: %d ms is faster than the panel (%d ms); "
+                "two taps can share one picture\n",
+                move_ms, PANEL_FLOOR_MS);
+}
 
 /* Key buffer: one slot per press, drained one action per control tick. The
  * screen refresh outlives several taps, so a single pending slot would let a
@@ -632,6 +642,51 @@ static void play_action(int action) {
     exit(1);
 }
 
+/* Milliseconds between world passes. One player step is RM_TICK_CONTROL
+ * passes, so at speed 0 this is move_ms / 14. */
+static uint32_t pass_interval_ms(void) {
+    int lim = (int)rm_tick_limits[0];
+    if (lim <= 0) {
+        fprintf(stderr, "rockman: control tick limit is %d\n", lim);
+        exit(1);
+    }
+    int sp = (int)speed;
+    if (sp < 0) sp = 0;
+    if (sp > 255) sp = 255;
+    uint32_t iv = (uint32_t)((int64_t)move_ms * (256 - sp) / (lim * 256));
+    if (iv == 0) iv = 1;
+    return iv;
+}
+
+/* Run every world pass the clock says is due. The caller paints once.
+ *
+ * present() blocks for the panel's own ~300 ms. The old loop did one pass
+ * and then painted, so the 14 passes of a step took 14 frames — about 4
+ * seconds a move, whatever --move said. Catching up here makes move_ms the
+ * real gap between steps. A stall longer than two steps is dropped: the
+ * death timer must not jump through a hitch. The menu holds the clock.
+ * Returns how many passes ran. */
+static int pump_passes(uint32_t now, uint32_t *next_pass) {
+    if (kframe_covering()) {
+        *next_pass = now;
+        return 0;
+    }
+    if (phase != PHASE_PLAY) return 0;
+    uint32_t iv = pass_interval_ms();
+    int lim = (int)rm_tick_limits[0];
+    int burst = 0;
+    int burst_max = lim * 2;
+    while ((int32_t)(now - *next_pass) >= 0 && burst < burst_max) {
+        int act = keyq_peek();
+        if (one_pass(act, act >= 0) && act >= 0) keyq_pop();
+        *next_pass += iv;
+        burst++;
+    }
+    if ((int32_t)(now - *next_pass) >= 0)
+        *next_pass = now + iv;
+    return burst;
+}
+
 static int dir_to_act(int d) {
     if (d == DIR_UP) return ACT_UP;
     if (d == DIR_DOWN) return ACT_DOWN;
@@ -737,6 +792,11 @@ static uint8_t want_cell(int r, int c) {
 }
 
 static void present(void) {
+    if (kframe_covering()) {
+        kframe_paint();
+        ek_flush();
+        return;
+    }
     int clean = clean_next || redraw_all;
     if (redraw_all) {
         ek_clear(EK_PAPER);
@@ -763,6 +823,7 @@ static void present(void) {
     }
     clean_next = 0;
     ek_waveform(clean ? wfm_clean : wfm_motion);
+    kframe_paint();
     ek_stats st = ek_flush();
     ek_waveform(0);
 
@@ -798,6 +859,13 @@ static int hit(int x, int y) {
 /* Pipe-driven taps ("tap X Y" on stdin) exist only in the host build; the
    Kindle build drives the same transitions from its press/release loop. */
 static void tap_at(int x, int y) {
+    /* The hamburger, and the shell it opens, come first. Closing the shell
+     * leaves its page on the glass, so the next present() repaints the cave. */
+    if (kframe_tap(x, y)) {
+        if (!kframe_covering()) redraw_all = 1;
+        return;
+    }
+    if (kframe_covering()) return;
     int b = hit(x, y);
     if (phase != PHASE_PLAY) {
         if (b == ACT_QUIT) {
@@ -1080,9 +1148,142 @@ static int selftest(void) {
     expect(phase == PHASE_TITLE, "no lives left returns to the title");
     expect(hi[5] == RM_TILE_0 + 4, "game over keeps the hi-score");
 
+    /* One pass is not a step. One panel frame is. A long stall must not
+     * spend a life: the cap drops the leftover time. */
+    phase = PHASE_PLAY;
+    room = 1;
+    dying = 0;
+    speed = 0;
+    lives = (uint8_t)(RM_TILE_0 + 5);
+    ticks[0] = ticks[1] = ticks[2] = 0;
+    timer_reset();
+    quit_armed = 0;
+    fill_brick();
+    ply_r = 7;
+    ply_c = 11;
+    scr[7][11] = RM_TILE_PLAYER_UD;
+    scr[7][10] = RM_TILE_EMPTY;
+    keyq_clear();
+    expect(keyq_push(ACT_LEFT), "the pace test can queue a step");
+    move_ms = PANEL_FLOOR_MS;
+    uint32_t np = 0;
+    int npass = pump_passes(pass_interval_ms(), &np);
+    expect(npass > 0 && npass < RM_TICK_CONTROL, "one tick interval is not a player step");
+    expect(ply_c == 11, "one tick interval does not move the player");
+
+    ticks[0] = ticks[1] = ticks[2] = 0;
+    keyq_clear();
+    expect(keyq_push(ACT_LEFT), "the frame test can queue a step");
+    np = 0;
+    npass = pump_passes(PANEL_FLOOR_MS, &np);
+    expect(npass >= RM_TICK_CONTROL, "one frame runs a full player step");
+    expect(ply_c == 10, "one frame of clock moves the player");
+
+    {
+        int lives_before = (int)lives;
+        ticks[0] = ticks[1] = ticks[2] = 0;
+        timer_reset();
+        keyq_clear();
+        np = 0;
+        pump_passes(60000, &np);
+        expect((int)lives == lives_before, "a stalled clock does not spend a life");
+        expect((int32_t)(np - 60000) > 0, "a stall past the cap drops the leftover time");
+    }
+
     if (failures == 0) fprintf(stderr, "rockman: selftest ok\n");
     else fprintf(stderr, "rockman: %d selftest failure%s\n", failures, failures == 1 ? "" : "s");
     return failures;
+}
+
+/* ---- the shared menu ---------------------------------------------------- */
+
+enum { ROCK_NEW = 1, ROCK_SPEED };
+
+/* Same beats --move takes. Fast is one picture per step. Old is the previous
+ * default. VIC is the 1984 step, which is quicker than this panel paints. */
+static const struct { const char *label; int ms; } PACES[] = {
+    { "FAST  320 ms", PANEL_FLOOR_MS },
+    { "OLD   450 ms", 450 },
+    { "VIC   224 ms", 224 },
+};
+#define N_PACES ((int)(sizeof PACES / sizeof PACES[0]))
+#define PACE_Y0 140
+
+static int pace_choice(void) {
+    for (int i = 0; i < N_PACES; i++)
+        if (PACES[i].ms == move_ms) return i;
+    return -1;
+}
+
+static void draw_new(const kshell_rect *r) {
+    char line[64];
+    int nlife = (int)lives - RM_TILE_0;
+    if (nlife < 0) nlife = 0;
+    snprintf(line, sizeof line, "room %d, lives %d", room, nlife);
+    ek_text_scale(r->x, r->y, "NEW GAME", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "throws this cave away and starts again", EK_INK);
+    ek_text(r->x, r->y + 66, line, EK_INK);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, "START", 0);
+}
+
+static int tap_new(const kshell_rect *r, int x, int y) {
+    (void)r;
+    if (!kshell_inside(x, y, KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H))
+        return 0;
+    new_game();
+    fprintf(stderr, "rockman: new game\n");
+    kframe_close();
+    return 1;
+}
+
+static void draw_speed(const kshell_rect *r) {
+    static const char *labels[N_PACES];
+    for (int i = 0; i < N_PACES; i++) labels[i] = PACES[i].label;
+    ek_text_scale(r->x, r->y, "SPEED", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "how long one step waits. the cave stays.", EK_INK);
+    kshell_options(PACE_Y0, labels, N_PACES, pace_choice());
+}
+
+static int tap_speed(const kshell_rect *r, int x, int y) {
+    (void)r;
+    int i = kshell_option_at(PACE_Y0, N_PACES, x, y);
+    if (i < 0) return 0;
+    move_ms = PACES[i].ms;
+    note_pace();
+    kframe_close();
+    return 1;
+}
+
+static int on_rock_item(int id) {
+    fprintf(stderr, "rockman: menu item %d has no action of its own\n", id);
+    return 1;
+}
+
+static const kframe_item ROCK_ITEMS[] = {
+    { "NEW",   ROCK_NEW,   draw_new,   tap_new },
+    { "SPEED", ROCK_SPEED, draw_speed, tap_speed },
+};
+
+static void kf_status(const char *msg) { fprintf(stderr, "rockman: %s\n", msg); }
+static void kf_quit(void) { running = 0; stop_req = 1; }
+
+static int open_frame(void) {
+    kframe_cfg kf;
+    memset(&kf, 0, sizeof kf);
+    kf.title = "ROCKMAN";
+    kf.app_id = "rockman";
+    kf.items = ROCK_ITEMS;
+    kf.nitems = (int)(sizeof ROCK_ITEMS / sizeof ROCK_ITEMS[0]);
+    kf.on_item = on_rock_item;
+    kf.on_quit = kf_quit;
+    kf.repaint = present;
+    kf.status = kf_status;
+    kf.stop = &stop_req;
+    if (kframe_init(&kf) != 0) {
+        fprintf(stderr, "rockman: the shared menu would not start\n");
+        return -1;
+    }
+    return 0;
 }
 
 /* ---- main --------------------------------------------------------------- */
@@ -1098,19 +1299,22 @@ static void usage(void) {
             "\n"
             "  Dig dirt, grab the diamonds, don't get crushed.\n"
             "  LEFT UP RIGHT DOWN move. PUSH shoves a rock. QUIT then SURE stops.\n"
+            "  The top-right square opens the menu: NEW and SPEED on the left,\n"
+            "  VOLUME, WIFI, APPS and QUIT on the right.\n"
             "  A tap anywhere on the title starts a game.\n"
             "  --selftest   check the rules on this computer and exit\n"
             "  --auto N     play N steps toward the nearest diamond, then stop\n"
             "  --dump FILE  write the picture (PGM) and exit\n"
+            "  --menu-shot F  write the menu (PGM) and exit\n"
             "  --seed N     same seed, same caves\n"
             "  --stats      print what each screen update cost\n"
             "  --refresh N  ms to leave the panel alone between updates\n"
             "               (default and floor: %d, one flush costs ~276-312 ms)\n"
             "  --wfm NAME   waveform for moving frames: DU / GL16F / GC16F / AUTO\n"
-            "  --move N     ms per player step (default 450; the original was ~224,\n"
-            "               which is faster than the panel can paint)\n"
-            "  --tuned      the calibrated set: refresh 320, move 450, WFM DU\n",
-            PANEL_FLOOR_MS);
+            "  --move N     ms per player step (default %d, one picture per step;\n"
+            "               224 is the VIC-20 step and can share a picture)\n"
+            "  --tuned      the calibrated set: refresh %d, move %d, WFM DU\n",
+            PANEL_FLOOR_MS, PANEL_FLOOR_MS, PANEL_FLOOR_MS, PANEL_FLOOR_MS);
 }
 
 int main(int argc, char **argv) {
@@ -1118,6 +1322,7 @@ int main(int argc, char **argv) {
     int do_test = 0;
     int auto_n = -1;
     const char *dump_path = NULL;
+    const char *menu_shot = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--seed") && i + 1 < argc) {
@@ -1138,6 +1343,10 @@ int main(int argc, char **argv) {
             long v = strtol(argv[++i], &end, 10);
             if (!end || *end || v < 50 || v > 5000) { usage(); return 2; }
             move_ms = (int)v;
+            note_pace();
+        } else if (!strcmp(argv[i], "--menu-shot") && i + 1 < argc) {
+            menu_shot = argv[++i];
+            if (!menu_shot[0]) { usage(); return 2; }
         } else if (!strcmp(argv[i], "--stats")) stats_on = 1;
         else if (!strcmp(argv[i], "--probe")) { probe = 1; stats_on = 1; }
         else if (!strcmp(argv[i], "--refresh") && i + 1 < argc) {
@@ -1167,7 +1376,7 @@ int main(int argc, char **argv) {
             }
         } else if (!strcmp(argv[i], "--tuned")) {
             refresh_ms = PANEL_FLOOR_MS;
-            move_ms = 450;
+            move_ms = PANEL_FLOOR_MS;
             wfm_motion = -1;   /* DU, resolved by name below */
         }
         else if (!strcmp(argv[i], "--selftest")) do_test = 1;
@@ -1192,6 +1401,8 @@ int main(int argc, char **argv) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGHUP, &sa, NULL);
+
+    if (open_frame() != 0) return 1;
 
     if (ek_open(flags) != 0) {
         fprintf(stderr, "rockman: the screen would not open\n");
@@ -1248,6 +1459,19 @@ int main(int argc, char **argv) {
     }
     present();
 
+    if (menu_shot) {
+        kframe_show_menu();
+        kframe_paint();
+        ek_flush();
+        if (ek_dump_pgm(menu_shot, 1) != 0) {
+            fprintf(stderr, "rockman: could not write %s\n", menu_shot);
+            ek_close();
+            return 1;
+        }
+        ek_close();
+        return rc;
+    }
+
 #ifdef EK_HOST
     if (!do_test && auto_n < 0 && !isatty(0)) {
         char buf[64];
@@ -1275,6 +1499,13 @@ int main(int argc, char **argv) {
             ek_event ev;
             while (ek_poll(&ev)) {
                 if (ev.type == EK_DOWN) {
+                    if (kframe_tap(ev.x, ev.y)) {
+                        if (!kframe_covering()) redraw_all = 1;
+                        held = -1;
+                        dirty = 1;
+                        continue;
+                    }
+                    if (kframe_covering()) continue;
                     int b = hit(ev.x, ev.y);
                     if (phase != PHASE_PLAY) {
                         keyq_clear();
@@ -1300,23 +1531,10 @@ int main(int argc, char **argv) {
                 }
             }
             uint32_t now = ek_ms();
-            if (phase == PHASE_PLAY && (int32_t)(now - next_pass) >= 0) {
-                int act = keyq_peek();      /* the queue drives, never `held`:
-                                               holding a button does not walk */
-                if (one_pass(act, act >= 0) && act >= 0) keyq_pop();
-                /* One pass per this many ms. The original VIC-20 arithmetic
-                 * was (256-speed)*16/256, i.e. 16 ms at speed 0, and the
-                 * control tick fires every 14 passes: a player move every
-                 * ~224 ms. That is FASTER than this panel can paint (~320 ms
-                 * a frame), so nearly one and a half moves happen per visible
-                 * frame and presses get consumed with nothing on screen to
-                 * show for them. move_ms anchors the pace to the glass and
-                 * keeps the original 14:16:9 tick ratios. */
-                next_pass = now + (uint32_t)((int64_t)move_ms * (256 - (int)speed)
-                                             / (RM_TICK_CONTROL * 256));
-                if (next_pass == now) next_pass = now + 1;
-                dirty = 1;
-            }
+            /* Catch up every pass the paint blocked through, then draw once.
+             * One pass per loop made a step take 14 frames. The queue still
+             * drives: holding a button does not walk. */
+            if (pump_passes(now, &next_pass)) dirty = 1;
             if (dirty && (int32_t)(now - next_flush) >= 0) {
                 /* refresh_ms is the frame PERIOD, not a sleep added after the
                  * paint: present() blocks for the panel's own ~300 ms, so
