@@ -41,6 +41,14 @@ python3 tools/pgm2png.py /tmp/menu.pgm /tmp/menu.png
 
 The little top-right button opens it. Game tabs are on the left. Volume, wi-fi and quit are on the right. The keyboard shows up only while a text box is in use.
 
+![tab shell](docs/kframe/menu.png)
+![wi-fi password, keyboard up](docs/kframe/wifi-pass.png)
+
+More in `docs/kframe/`: `clock.png`, `taken.png`, `volume.png`, `quit.png`,
+`wifi-list.png`, `wifi-sym.png`. These are host renders — the volume and wi-fi
+list pictures show this PC's real missing `amixer` and missing
+`/mnt/us/chess-wifi.sh`, not a bug. Nothing here has been pushed to the Kindle.
+
 **Play Brogue, or diagnose why it will not draw:**
 
 ```bash

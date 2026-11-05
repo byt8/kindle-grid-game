@@ -25,7 +25,7 @@ updated: 2026-11-05
 
 ## Built
 - Top-right hamburger opens the tab shell. Game tabs on the left, VOLUME / WIFI / QUIT on the right. QUIT needs a second tap (`SURE?`). Keyboard (`kshell`) only while a text field is focused. Entry: `kframe_init` from chess `open_frame`.
-- Pictures without a device: `./chess-host --no-takeover --no-wifi --menu-shot FILE.pgm` and `--wifi-shot FILE list|name|pass|sym|fail`, then `python3 tools/pgm2png.py`. PNGs for this session are in the chess workspace `preview/`.
+- Pictures without a device: `./chess-host --no-takeover --no-wifi --menu-shot FILE.pgm` and `--wifi-shot FILE list|name|pass|sym|fail`, then `python3 tools/pgm2png.py`. Session PNGs are committed in `docs/kframe/` (moved here from the `chess` workspace on 2026-11-05).
 
 ## Decisions
 - Chess first. Rejected: wiring tetris, sudoku, xcom, rockman, pvz, calib, brogue in the same change.
