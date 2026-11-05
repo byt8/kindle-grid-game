@@ -264,10 +264,20 @@ while :; do
         sh /mnt/us/clear-boot-splash.sh >> "$LOG" 2>&1 || \
             say "clear-boot-splash.sh rc=$? (splash module may already be gone)"
     fi
+    # A runner that is handing the panel back wrote this and is, by
+    # definition, still alive. If one is, leave it be. If none is, the stamp
+    # is a leftover -- from a forced reboot, or from a runner killed before
+    # its EXIT trap could delete it -- and honouring it would write
+    # .menu-stop and leave the reader up on every boot, so the saved game
+    # would never come back. Clear it and carry on in that case only.
     if [ -f /mnt/us/.menu-handoff ]; then
-        say "runner took the panel; not starting an app over it"
-        : > /mnt/us/.menu-stop
-        exit 143
+        if [ -n "$(pidof chess tetris xcom rockman sudoku pvz calib brogue-kindle-app 2>/dev/null || true)" ]; then
+            say "runner took the panel; not starting an app over it"
+            : > /mnt/us/.menu-stop
+            exit 143
+        fi
+        say "clearing a stale .menu-handoff (no runner alive to hand the panel back)"
+        rm -f /mnt/us/.menu-handoff
     fi
 
     if [ -f /mnt/us/switch-app ]; then

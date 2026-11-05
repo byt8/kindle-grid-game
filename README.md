@@ -63,6 +63,12 @@ The top-right button is a 48x48 square at (548, 2) — a big target. It opens
 the shell. This game's tabs are on the left. Volume, wi-fi, apps and quit are
 on the right. The keyboard shows up only while a text box is in use.
 
+Sudoku's own tabs are **NEW**, **ERASE**, **HINT** and **LEVEL**. Digits 1..9
+stay on the board, since they are what you tap most. ERASE and HINT act on the
+cell you picked before opening the menu.
+
+![sudoku level](docs/sudoku-menu/level.png)
+
 ![chess menu](docs/kframe/menu.png)
 ![tetris apps](docs/kframe/tetris-apps.png)
 

@@ -6,6 +6,9 @@
  *   NEW / ERASE / HINT / QUIT in the middle row
  *   1..9 digits along the bottom
  *
+ * The hamburger (top right) opens the shared shell, where the same controls
+ * live as tabs: NEW, ERASE, HINT and LEVEL. Digits stay on the board.
+ *
  * Flow: tap a cell to select it (thick ink ring), tap a digit to write it.
  * ERASE empties the selected cell (givens are locked). HINT writes the
  * answer into the selected cell (or the first empty one). A digit that
@@ -680,25 +683,117 @@ static int selftest(void) {
 
 /* ---- the shared menu ---------------------------------------------------- */
 
-enum { SUDOKU_NEW = 1 };
+/* The controls that are not a digit live here too: NEW, ERASE, HINT and the
+ * level. The shell's own QUIT tab ends the game. Digits stay on the board --
+ * they are the thing you tap most, and a menu trip for each one is no good. */
+enum { SUDOKU_NEW = 1, SUDOKU_ERASE, SUDOKU_HINT, SUDOKU_LEVEL };
 
-static void draw_new(const kshell_rect *r) {
-    ek_text_scale(r->x, r->y, "NEW PUZZLE", EK_INK, 2);
-    ek_text(r->x, r->y + 44, "throws this puzzle away and deals a fresh one", EK_INK);
-    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, "START", 0);
+#define LVL_X   24
+#define LVL_W   552
+#define LVL_H   72
+#define LVL_Y(i) (140 + (i) * 84)
+
+static int act_hit(int x, int y) {
+    return kshell_inside(x, y, KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H);
+}
+
+/* One line about the board, so a menu screen says what the action will hit. */
+static void progress_line(char *dst, size_t n) {
+    snprintf(dst, n, "filled %d/81, level %s", n_filled, DIFF_NAME[difficulty]);
+}
+
+static void cell_line(char *dst, size_t n) {
+    if (sel_r < 0) snprintf(dst, n, "no cell picked -- tap the grid, then come back");
+    else snprintf(dst, n, "the cell picked is row %d, column %d", sel_r + 1, sel_c + 1);
 }
 
 static int on_sudoku_item(int id) {
-    if (id == SUDOKU_NEW) {
-        new_puzzle();
-        return 1;
+    switch (id) {
+    case SUDOKU_NEW:   new_puzzle(); return 1;
+    case SUDOKU_ERASE: erase_cell(); return 1;
+    case SUDOKU_HINT:  hint();       return 1;
+    case SUDOKU_LEVEL:
+        return 1;        /* LEVEL acts on its own three buttons, not on a big one */
     }
     fprintf(stderr, "sudoku: menu item %d is not one of ours\n", id);
     return 1;
 }
 
+static void draw_new(const kshell_rect *r) {
+    char line[64];
+    progress_line(line, sizeof line);
+    ek_text_scale(r->x, r->y, "NEW PUZZLE", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "throws this puzzle away and deals a fresh one", EK_INK);
+    ek_text(r->x, r->y + 66, line, EK_INK);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, "START", 0);
+}
+
+static int tap_new(const kshell_rect *r, int x, int y) {
+    (void)r;
+    if (!act_hit(x, y)) return 0;
+    on_sudoku_item(SUDOKU_NEW);
+    kframe_close();
+    return 1;
+}
+
+static void draw_erase(const kshell_rect *r) {
+    char line[64];
+    cell_line(line, sizeof line);
+    ek_text_scale(r->x, r->y, "ERASE", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "empties the picked cell. clues are locked.", EK_INK);
+    ek_text(r->x, r->y + 66, line, EK_INK);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, "ERASE CELL", 0);
+}
+
+static int tap_erase(const kshell_rect *r, int x, int y) {
+    (void)r;
+    if (!act_hit(x, y)) return 0;
+    on_sudoku_item(SUDOKU_ERASE);
+    kframe_close();
+    return 1;
+}
+
+static void draw_hint(const kshell_rect *r) {
+    char line[64];
+    cell_line(line, sizeof line);
+    ek_text_scale(r->x, r->y, "HINT", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "writes the answer into the empty cell", EK_INK);
+    ek_text(r->x, r->y + 66, line, EK_INK);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, "HINT ME", 0);
+}
+
+static int tap_hint(const kshell_rect *r, int x, int y) {
+    (void)r;
+    if (!act_hit(x, y)) return 0;
+    on_sudoku_item(SUDOKU_HINT);
+    kframe_close();
+    return 1;
+}
+
+static void draw_level(const kshell_rect *r) {
+    ek_text_scale(r->x, r->y, "LEVEL", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "a tap starts a fresh puzzle at that level", EK_INK);
+    for (int i = 0; i < 3; i++)
+        kshell_button(LVL_X, LVL_Y(i), LVL_W, LVL_H, DIFF_NAME[i], difficulty == i);
+}
+
+static int tap_level(const kshell_rect *r, int x, int y) {
+    (void)r;
+    for (int i = 0; i < 3; i++)
+        if (kshell_inside(x, y, LVL_X, LVL_Y(i), LVL_W, LVL_H)) {
+            difficulty = i;
+            new_puzzle();
+            kframe_close();
+            return 1;
+        }
+    return 0;
+}
+
 static const kframe_item SUDOKU_ITEMS[] = {
-    { "NEW", SUDOKU_NEW, draw_new, NULL },
+    { "NEW",   SUDOKU_NEW,   draw_new,   tap_new },
+    { "ERASE", SUDOKU_ERASE, draw_erase, tap_erase },
+    { "HINT",  SUDOKU_HINT,  draw_hint,  tap_hint },
+    { "LEVEL", SUDOKU_LEVEL, draw_level, tap_level },
 };
 
 static void kf_status(const char *msg) { fprintf(stderr, "sudoku: %s\n", msg); }
@@ -732,6 +827,7 @@ static void usage(void) {
             "  On the Kindle the panel is the game's until you tap QUIT, then SURE.\n"
             "  Tap a cell, then a digit 1-9. ERASE clears it, HINT writes the answer,\n"
             "  EASY / MED / HARD start a fresh puzzle at that difficulty, NEW restarts.\n"
+            "  The hamburger at (572,26) has NEW / ERASE / HINT / LEVEL as tabs.\n"
             "  --selftest   check the generator and rules on this computer and exit\n"
             "  --auto N     fill N cells by itself, then stop\n"
             "  --dump FILE  write the picture (PGM) and exit\n"

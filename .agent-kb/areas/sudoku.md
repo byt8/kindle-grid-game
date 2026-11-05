@@ -26,6 +26,14 @@ conventions as tetris/chess (host build reads `tap X Y` from stdin and
   are set with no conflicts: "PUZZLE DONE" card.
 - Difficulty change or NEW re-runs the generator from the same seed state
   (NEW keeps the same puzzle; changing difficulty makes a new one).
+- Shared menu (2026-11-06): `open_frame()` registers `app_id` "sudoku" with
+  items **NEW / ERASE / HINT / LEVEL** — one per control that is not a digit.
+  Each screen has its own `tap_*` (kframe's `kframe_item.tap`), so the tap
+  acts and then `kframe_close()` returns to the board. LEVEL is three stacked
+  buttons, `LVL_Y(i) = 140 + i*84`, so HARD is centred at (300, 344). ERASE
+  and HINT use the cell picked before the menu opened, and each screen prints
+  which cell that is. Digits 1..9 deliberately stay on the board only (the
+  user asked for it): a menu trip per digit was the wrong trade.
 - CLI: `--selftest` (rule/board/verify checks, ~30 asserts), `--auto N`
   (plays N moves), `--dump FILE`, `--seed N`, `--stats`, `--clean`/`--no-wait`.
 

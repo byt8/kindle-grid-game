@@ -91,12 +91,32 @@ sudoku-test: sudoku-host
 	printf 'tap 572 26\ntap 500 24\n' | ./sudoku-host --no-takeover --seed 7 --dump /tmp/sudoku-apps.pgm \
 	    >/tmp/sudoku-apps.out 2>/tmp/sudoku-apps.err
 	grep -q 'kframe: apps open' /tmp/sudoku-apps.err
+	$(PY) tools/check_pgm.py /tmp/sudoku-open.pgm /tmp/sudoku-menu.pgm /tmp/sudoku-apps.pgm
+	# The menu carries the controls that are not a digit: ERASE, HINT, LEVEL.
+	# Left tabs are all 60 wide at KSHELL_TAB_MIN_W. Centres (36,24) NEW,
+	# (100,24) ERASE, (164,24) HINT, (228,24) LEVEL. See kshell.h.
+	# LEVEL row 2 (HARD) is centred at (300, 344).
+	printf 'tap 572 26\ntap 228 24\ntap 300 344\n' | ./sudoku-host --no-takeover --seed 7 \
+	    --dump /tmp/sudoku-level.pgm >/tmp/sudoku-level.out 2>/tmp/sudoku-level.err
+	grep -q 'kframe: app item 4' /tmp/sudoku-level.err
+	# ERASE and HINT act on the picked cell. Pick (60,440), type 5 from the
+	# board row, then use the menu: the cell must come back empty / filled.
+	printf 'tap 60 440\ntap 300 750\n' | ./sudoku-host --no-takeover --seed 7 \
+	    --dump /tmp/sudoku-typed.pgm
+	printf 'tap 60 440\ntap 300 750\ntap 572 26\ntap 100 24\ntap 300 236\n' \
+	    | ./sudoku-host --no-takeover --seed 7 --dump /tmp/sudoku-erased.pgm
+	printf 'tap 60 440\ntap 572 26\ntap 164 24\ntap 300 236\n' \
+	    | ./sudoku-host --no-takeover --seed 7 --dump /tmp/sudoku-hinted.pgm
+	printf 'tap 60 440\n' | ./sudoku-host --no-takeover --seed 7 --dump /tmp/sudoku-pick.pgm
+	cmp -s /tmp/sudoku-pick.pgm /tmp/sudoku-erased.pgm
+	! cmp -s /tmp/sudoku-pick.pgm /tmp/sudoku-hinted.pgm
+	! cmp -s /tmp/sudoku-open.pgm /tmp/sudoku-typed.pgm
+	$(PY) tools/check_pgm.py /tmp/sudoku-open.pgm /tmp/sudoku-level.pgm
 	rm -f /tmp/switch-app
 	printf 'tap 572 26\ntap 500 24\ntap 300 212\n' | ./sudoku-host --no-takeover --seed 7 \
 	    >/tmp/sudoku-switch.out 2>/tmp/sudoku-switch.err
 	grep -q 'kframe: switch chess' /tmp/sudoku-switch.err
 	grep -qx 'chess' /tmp/switch-app
-	$(PY) tools/check_pgm.py /tmp/sudoku-open.pgm /tmp/sudoku-menu.pgm /tmp/sudoku-apps.pgm
 
 # ---- launcher menu: what the Kindle boots into ---------------------------------
 
