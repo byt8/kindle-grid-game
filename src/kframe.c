@@ -84,6 +84,7 @@ static const struct {
     { "mines",    "MINES",    APP_VISIT },
     { "rockman",  "ROCKMAN",  APP_VISIT },
     { "pvz",      "PVZ",      APP_VISIT },
+    { "pipes",    "PIPES",    APP_VISIT },
     { "brogue",   "BROGUE",   APP_VISIT },
     { "calib",    "CALIB",    APP_VISIT },
     { "koreader", "KOREADER", APP_VISIT },

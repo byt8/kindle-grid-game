@@ -37,6 +37,12 @@ __pycache__/
 /pvz-host
 /pvz
 
+# Pipes: same as pvz -- the cross build and the PC test binary are products,
+# and the screenshots come back from `make pipes-test` any time.
+/pipes
+/pipes-host
+/pipes-*.png
+
 # Brogue: the vendored upstream source tree keeps its own git history, like
 # the jailbreak-kindle constituent, so it is not tracked here. Build outputs
 # and PC test binaries are ignored too; the port code itself (the kfb

@@ -164,7 +164,7 @@ if [ "$no_build" = 0 ]; then
     echo "install-all: building the device binaries"
     # Same group as install-menu-on-kindle.sh, plus the standalone games and
     # pvz/calib/brogue which install-menu does not build.
-    make menu chess tetris sudoku mines rockman pvz calib grabtest
+    make menu chess tetris sudoku mines rockman pvz pipes calib grabtest
     make kindle          # xcom: oldest and largest build
     make brogue-kindle
 fi
@@ -174,7 +174,7 @@ need() {
     [ -f "$1" ] || { echo "install-all: missing $1 -- build it first (make)" >&2; exit 1; }
 }
 need menu; need grabtest; need chess; need tetris; need sudoku; need mines; need rockman
-need xcom; need pvz; need calib; need brogue-kindle-app
+need xcom; need pvz; need pipes; need calib; need brogue-kindle-app
 need tools/kindle-run.sh; need tools/menu-boot.sh; need tools/menu-boot.conf
 need tools/chess-wifi.sh;  need tools/chess-boot.conf
 need "$KJ/fbdaemon/restore-kindle.sh"; need "$KJ/fbdaemon/kfb-watchdog.sh"
@@ -183,14 +183,14 @@ need "$KJ/fbdaemon/kfbterm.conf"
 
 echo "install-all: pushing games to $ip"
 # Write beside then rename: a copy over a running binary is "Text file busy".
-for g in menu chess tetris sudoku mines rockman xcom pvz calib brogue-kindle-app grabtest; do
+for g in menu chess tetris sudoku mines rockman xcom pvz pipes calib brogue-kindle-app grabtest; do
     push_file "$g" "/mnt/us/$g" 755
     echo "install-all:   $g"
 done
 # Grabtest was already pushed above in the loop; this is the binary itself.
 
 # The runners: one kindle-run.sh per game name.
-for g in chess xcom tetris sudoku mines rockman pvz calib brogue koreader; do
+for g in chess xcom tetris sudoku mines rockman pvz pipes calib brogue koreader; do
     push_file tools/kindle-run.sh "/mnt/us/$g-run.sh" 755
 done
 push_file tools/menu-boot.sh    /mnt/us/menu-boot.sh  755
@@ -291,6 +291,15 @@ echo "install-all: starting the boot session on $ip"
 ssh_run '
     /sbin/initctl list | grep -q "^menu start" && /sbin/initctl stop menu
     killall -q menu-boot.sh menu 2>/dev/null || true
+    # Wait for the old session to be gone before starting the new one. Two
+    # menu-boot.sh running at once both try to take the e-ink panel and both
+    # launch the game, which showed up as "could not stop powerd for the menu"
+    # followed by a second "launching rockman" and no app on the panel.
+    i=0
+    while [ -n "$(pidof menu-boot.sh 2>/dev/null)" ] && [ $i -lt 20 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
     setsid sh /mnt/us/menu-boot.sh >>/mnt/us/menu-boot.log 2>&1 </dev/null &
 '
 
@@ -317,7 +326,9 @@ i=0
 while [ $i -lt 120 ]; do
     if pid=$(ssh_once "pidof $bin 2>/dev/null" 2>/dev/null) && [ -n "$pid" ]; then
         # A pid that is there now can still be an app that took the panel and
-        # quit a second later, so ask again before calling it up.
+        # quit a second later -- menu-boot.sh then starts it again, so keep
+        # polling instead of giving up on the first short life (an early
+        # `break` here said exit 2 while the game was up 4 s later).
         sleep 6
         # "|| true": a wifi blip here is not a failed deploy, and the loop's
         # own ERROR branch prints the log. Under set -e an unguarded call
@@ -328,10 +339,11 @@ while [ $i -lt 120 ]; do
             echo "install-all: done. Next boot opens $app; APPS inside it switches game."
             exit 0
         fi
-        break
+        i=$((i + 6))
+    else
+        sleep 3
+        i=$((i + 3))
     fi
-    sleep 3
-    i=$((i + 3))
 done
 echo "install-all: ERROR: $app did not come up within 120s; see the log below." >&2
 echo "install-all: everything is installed -- the panel just did not start, so" >&2

@@ -5,6 +5,7 @@ Chess against DeepSeek, which talks trash after every move. Tetris: tap to stack
 Sudoku: a generated puzzle with exactly one solution, three difficulties, hints, tap-to-play.
 Rockman: dig dirt, grab diamonds, don't let the rocks fall on you.
 Plants vs Pixels: five-lane plant defence — grow sunflowers, shoot peas, hold the lawn.
+Pipemania: a whole pipeline from IN to OUT, most of it turned the wrong way. Tap a pipe to turn it a quarter turn, then RUN THE WATER.
 **Calib:** opens on two black squares that step together. The left one is the grey zap (it blinks). The right one is plain ink (it jumps). The time each zap took is printed underneath. That is the choice. NEXT opens the tuner. Screens run **RX → TUNER → GHOST → TAPLAG → CHESS**, NEXT on every one (the tuner's NEXT is a bar at the bottom left, above its two knob rows).
 **SimCity port (in progress):** OpenSimCity/Micropolis core on the 600x800 e-ink panel.
 **Brogue (in progress):** the classic roguelike from BrogueCE on the 600x800 e-ink panel — 100x34 text grid on the bottom 408 px, permanent 12-button bar on top, true 16-level grey (walls of darkness, lit glyphs) via the engine's grey layer.
@@ -57,6 +58,7 @@ make rockman-test         # cave rules, the menu, speed, and a switch to chess
 make tetris-test          # rules, pictures, the menu, and a switch to chess
 make chess-test           # same shell, including a switch to tetris
 make sudoku-test          # same shell, including a switch to chess
+make pipes-test           # 48 levels generated and solved, pictures, the menu
 ```
 
 Rockman pictures: `docs/kframe/rockman-board.png` (the cave, button at the
@@ -91,6 +93,7 @@ make sudoku-kindle               # Sudoku -> ./sudoku  (no key needed)
 make mines-kindle                # Minesweeper -> ./mines (no key needed)
 make rockman-kindle              # Rockman -> ./rockman (no key needed)
 make pvz-kindle                   # PvZ -> ./pvz      (no key needed)
+make pipes-kindle                 # Pipemania -> ./pipes (no key needed)
 make brogue-kindle                # Brogue -> ./brogue-kindle-app
 make calib                        # Calib tuner -> ./calib
 make engine-test                  # PC check of the shared engine's full-refresh API
@@ -391,6 +394,18 @@ If the launcher menu is showing, the runner stops it first — the menu holds th
 touch device — and hands the panel back to it when you quit, so this works from
 the PC whatever is on screen. A run that never starts prints the runner's own
 error (touch device refused, …) instead of claiming the game exited.
+
+**Play Pipemania on the Kindle:**
+
+```bash
+./run-pipes-on-kindle.sh 192.168.0.63   # pass the IP
+```
+
+A complete pipeline runs from IN to OUT, but most pipes are turned the wrong
+way. Tap a pipe to turn it a quarter turn (one small repaint). **RUN THE WATER**
+floods from the spout; the level clears only if the water reaches the drain and
+nothing spills. Turning a pipe after a run throws that run away. The top-right
+button has **NEW**, **LEVEL** and **HELP**. QUIT then SURE stops.
 
 **Quitting always returns to the launcher menu, never Amazon's UI.** The runner
 clears a stale `/mnt/us/.menu-stop` and starts the `menu` job on the way out, so

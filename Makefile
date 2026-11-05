@@ -12,6 +12,7 @@ HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
         mines mines-host mines-test mines-kindle \
         menu-host menu-kindle menu-test rockman-data rockman-host rockman-test rockman-kindle rockman \
         pvz-host pvz pvz-test calib calib-host calib-kindle calib-test \
+        pipes pipes-host pipes-test pipes-kindle \
         brogue-host brogue brogue-test brogue-kindle engine-test clean
 
 # ---- rockman data: regenerate from the commented VIC-20 disassembly --------
@@ -498,6 +499,44 @@ pvz-test: pvz-host
 	./pvz-host --auto 120 --no-takeover --seed 1 --dump /tmp/pvz-play.pgm
 	$(PY) tools/check_pgm.py /tmp/pvz-open.pgm /tmp/pvz-plant.pgm /tmp/pvz-play.pgm
 
+# ---- pipes: Pipemania. A complete board, turned wrong; tap to fix it. ----
+
+pipes-host: src/pipemania.c src/kframe.c src/kframe.h src/kshell.c src/kshell.h $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/pipemania.c src/kframe.c src/kshell.c $(ENGINE)/eink.c -lm
+
+pipes-kindle: src/pipemania.c src/kframe.c src/kframe.h src/kshell.c src/kshell.h $(ENGINE)/eink.c $(ENGINE)/eink.h
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" \
+	  -v /home/brendan/jailbreak-kindle:/jb \
+	  -w /src kfb-build \
+	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -ffunction-sections -fdata-sections \
+	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
+	    -o pipes src/pipemania.c src/kframe.c src/kshell.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -static -no-pie -Wl,--gc-sections -lm \
+	    && arm-linux-musleabi-strip pipes'
+
+pipes: pipes-kindle
+
+# --selftest proves a solution exists for 48 generated boards, and that one
+# turned pipe blocks it. Then three pictures: the scrambled board, the same
+# board after two turns, and the water running through the solved path.
+pipes-test: pipes-host
+	./pipes-host --selftest --no-takeover --seed 7
+	./pipes-host --no-takeover --seed 7 --dump /tmp/pipes-open.pgm < /dev/null
+	# (219,281) is row 3 col 3 and (219,389) is row 5 col 3: pipes on seed 7.
+	printf 'tap 219 281\ntap 219 389\n' | ./pipes-host --no-takeover --seed 7 --dump /tmp/pipes-turn.pgm \
+	    2>/tmp/pipes-turn.err
+	grep -q 'turns 2' /tmp/pipes-turn.err
+	./pipes-host --solve --go --no-takeover --seed 7 --dump /tmp/pipes-wet.pgm < /dev/null
+	$(PY) tools/check_pgm.py /tmp/pipes-open.pgm /tmp/pipes-turn.pgm /tmp/pipes-wet.pgm
+	$(PY) tools/check_pipes.py /tmp/pipes-open.pgm /tmp/pipes-wet.pgm
+	# The hamburger is a 48x48 square at (548,2). Centre (572, 26).
+	printf 'tap 572 26\n' | ./pipes-host --no-takeover --seed 7 --dump /tmp/pipes-menu.pgm \
+	    >/tmp/pipes-menu.out 2>/tmp/pipes-menu.err
+	grep -q 'kframe: menu open' /tmp/pipes-menu.err
+	$(PY) tools/check_pgm.py /tmp/pipes-open.pgm /tmp/pipes-menu.pgm
+
 calib-test: calib-host
 	./calib-host --selftest --no-takeover --dump /tmp/calib-clock.pgm
 	./calib-host --no-takeover --screen 2 --dump /tmp/calib-ghost.pgm < /dev/null
@@ -613,7 +652,8 @@ brogue-test: brogue-host
 
 clean:
 	rm -f xcom-host xcom grabtest chess-host chess tetris-host tetris sudoku-host sudoku \
-	      rockman-host rockman pvz-host pvz calib-host calib brogue-host brogue-kindle-app
+	      rockman-host rockman pvz-host pvz calib-host calib brogue-host brogue-kindle-app \
+	      pipes-host pipes
 
 # --- SimCity POC (600x800 screen mock) -------------------------------------
 poc: poc/screen_600x800_grey.png
