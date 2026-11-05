@@ -8,9 +8,10 @@ moves come back. `chess.conf` holds the real key and is gitignored.
 
 `src/chess.c` — you are White on a 600x800 touchscreen, DeepSeek is
 Black and writes one line of trash talk under the board. Tap-to-pick/tap-to-move.
-Quit, volume, wi-fi and the power-key sleep are the shared shell in
-`src/kframe.c` (see `areas/kframe.md`). The hamburger is the top-right corner.
-NEW, RETRY and TIMER are chess's own rows under the shared ones.
+The top-right hamburger opens the shared tab shell (`src/kframe.c`, `src/kshell.c`;
+see `areas/kframe.md`). Chess tabs on the left: NEW, RETRY, CLOCK, TAKEN.
+VOLUME, WIFI and QUIT sit on the right. The tab label is CLOCK; the words
+`TIMER: off` / `TIMER: N min` are drawn on that screen, not on the tab.
 
 ## Baked piece sprites
 

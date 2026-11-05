@@ -28,7 +28,18 @@ make brogue-kindle                # Brogue -> ./brogue-kindle-app
 make calib                        # Calib tuner -> ./calib
 make engine-test                  # PC check of the shared engine's full-refresh API
 make wifi-test                    # wi-fi joining + the on-screen keyboard (PC only)
+make chess-test                   # PC check of chess, including the tab shell
 ```
+
+**See the shared options screen on this PC** (no Kindle). `make chess-test` builds `./chess-host`. Then:
+
+```bash
+./chess-host --no-takeover --no-wifi --menu-shot /tmp/menu.pgm
+./chess-host --no-takeover --no-wifi --wifi-shot /tmp/wifi-pass.pgm pass
+python3 tools/pgm2png.py /tmp/menu.pgm /tmp/menu.png
+```
+
+The little top-right button opens it. Game tabs are on the left. Volume, wi-fi and quit are on the right. The keyboard shows up only while a text box is in use.
 
 **Play Brogue, or diagnose why it will not draw:**
 
@@ -103,13 +114,14 @@ ssh $K root@192.168.0.63 'md5sum /mnt/us/chess /mnt/us/chess-wifi.sh; pidof ches
 ssh $K root@192.168.0.63 'kill -USR1 <pid>'   # grab -> /tmp/chess-shot.pgm (15 grey levels = healthy)
 ```
 
-On the glass the three bottom buttons are gone. The new
-control is the small button at the **top right**: **QUIT** (tap twice),
-**VOLUME**, **WIFI**, then **NEW**, **RETRY** and **TIMER**. Only chess has this menu.
+On the glass the three bottom buttons are gone. The small button at the
+**top right** opens the shared shell. This game's tabs sit on the **left**
+(NEW, RETRY, CLOCK, TAKEN). VOLUME, WIFI and QUIT sit on the **right**.
+QUIT needs a second tap. The keyboard covers the bottom only while a text
+field is focused. Only chess uses this shell so far.
 
-The **TIMER** row in the menu sets a chess clock for the next game (tap to
-cycle: off → 1 → 3 → 5 → 10 → 15 → 30 min, the same choices chess.com
-offers). The choice is written back into
+**CLOCK** sets how long each side gets (tap CHANGE: off → 1 → 3 → 5 → 10 →
+15 → 30 min, the same choices chess.com offers). The choice is written back into
 `chess.conf`, so it survives a reboot. The remaining time for both sides is
 drawn at the top right of the board, the clock only runs while it is that
 side's turn, and running out of time loses the game. The LLM is told the clock
@@ -725,9 +737,10 @@ games). Progress is in `/mnt/us/menu-boot.log`.
 
 The game draws its own screen: scan, tap a network, type the password on a drawn
 keyboard, result saved to `/mnt/us/wifi.conf` so the next boot joins by itself.
-Two symbol pages (12 keys) sit between the letters and the buttons, because real
-passwords are full of `@ . - _ ! # $ %` and the letter rows cannot type them.
-SHIFT is one capital then back to small, and says ON while it is armed.
+The keyboard stays hidden until a text field is focused. **123** swaps the
+letters for punctuation (`@ . - _ ! # $ %` and the rest), because real
+passwords need those. SHIFT is one capital then back to small, and the key
+turns solid black while it is armed.
 
 ```
 sh /mnt/us/chess-wifi.sh status          # state / ssid / ip, exit 0 when online
@@ -741,8 +754,7 @@ on the glass looked like "connection failed" with the right password. If a join
 does fail, the screen says which stage failed (password refused, or no such
 network) instead of one general message.
 
-Pictures of the screens: `wifi-keyboard.png` (letters), `wifi-keyboard-sym.png`
-(symbol page, SHIFT on).
+Pictures on this PC: `--wifi-shot FILE list|name|pass|sym|fail`, then `python3 tools/pgm2png.py`.
 
 ### Boot and device pictures
 

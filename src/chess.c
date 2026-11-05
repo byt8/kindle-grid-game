@@ -17,8 +17,9 @@
  *
  * Screen is 600x800, one bit, touch: 8x8 board of 68 px squares, a status
  * bar on top, the model's remarks underneath. Quit, volume, wi-fi and the
- * power-key sleep live in the shared menu (src/kframe.c): the hamburger is
- * the top-right corner. NEW and RETRY are this game's own rows in that menu.
+ * power-key sleep live in the shared shell (src/kframe.c, src/kshell.c):
+ * the hamburger is the top-right corner. NEW, RETRY, CLOCK and TAKEN are
+ * this game's own tabs, on the left.
  */
 #include "eink.h"
 #include "kframe.h"
@@ -1267,7 +1268,7 @@ static void present(void) {
         if (remark[0]) wrap(remark, 12, COMMENT_Y, 72, 5);
         else ek_text(12, COMMENT_Y, "(the computer has not said anything yet)", EK_INK);
     }
-    ek_text(12, 740, "top right opens quit, volume, wi-fi", EK_INK);
+    ek_text(12, 740, "top right opens the menu", EK_INK);
     kframe_paint();
     /* A half-move leaves a faint ghost of the moved piece on its old square.
      * Every ordinary flush the engine sends is UPDATE_MODE_PARTIAL, and a
@@ -1602,10 +1603,9 @@ static int selftest(void) {
 
 /* ---- the shared menu -------------------------------------------------- */
 
-enum { CHESS_NEW = 1, CHESS_RETRY = 2, CHESS_TIMER = 3 };
+enum { CHESS_NEW = 1, CHESS_RETRY = 2, CHESS_TIMER = 3, CHESS_TAKEN = 4 };
 
 static char timer_label[32];
-static int clock_set;   /* which TIMER_CHOICES is active */
 
 static void timer_label_set(void) {
     int s = clock_set < 0 ? TIMER_CHOICES[0] : TIMER_CHOICES[clock_set];
@@ -1644,10 +1644,96 @@ static void persist_clock_choice(void) {
     rename(tmp, g_conf_path);
 }
 
+static int on_chess_item(int id);
+
+static int act_hit(int x, int y) {
+    return kshell_inside(x, y, KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H);
+}
+
+static void draw_new(const kshell_rect *r) {
+    ek_text_scale(r->x, r->y, "NEW GAME", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "throws this board away and starts again", EK_INK);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, "START", 0);
+}
+
+static int tap_new(const kshell_rect *r, int x, int y) {
+    (void)r;
+    if (!act_hit(x, y)) return 0;
+    on_chess_item(CHESS_NEW);
+    kframe_close();
+    return 1;
+}
+
+static void draw_retry(const kshell_rect *r) {
+    ek_text_scale(r->x, r->y, "ASK AGAIN", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "ask the computer for another move", EK_INK);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, "RETRY", 0);
+}
+
+static int tap_retry(const kshell_rect *r, int x, int y) {
+    (void)r;
+    if (!act_hit(x, y)) return 0;
+    int rc = on_chess_item(CHESS_RETRY);
+    kframe_close();
+    return rc == 0 ? 1 : rc;
+}
+
+static void draw_clock(const kshell_rect *r) {
+    ek_text_scale(r->x, r->y, "CLOCK", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "how long each side gets. it is saved.", EK_INK);
+    ek_text_scale(r->x, r->y + 78, timer_label, EK_INK, 2);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, "CHANGE", 0);
+}
+
+static int tap_clock(const kshell_rect *r, int x, int y) {
+    (void)r;
+    if (!act_hit(x, y)) return 0;
+    on_chess_item(CHESS_TIMER);
+    return 1;
+}
+
+static int missing_of(int type, int black) {
+    int want = (type == PAWN) ? 8 : (type == QUEEN || type == KING) ? 1 : 2;
+    int pc = black ? -type : type;
+    int have = 0;
+    for (int s = 0; s < 64; s++) if (P.sq[s] == pc) have++;
+    return have >= want ? 0 : want - have;
+}
+
+static void missing_line(char *dst, size_t n, int black) {
+    static const int types[] = { QUEEN, ROOK, BISHOP, KNIGHT, PAWN };
+    static const char *names[] = { "queen", "rook", "bishop", "knight", "pawn" };
+    size_t o = 0;
+    int any = 0;
+    for (int i = 0; i < 5; i++) {
+        int m = missing_of(types[i], black);
+        if (!m) continue;
+        int wr = snprintf(dst + o, n - o, "%s%d %s%s", any ? ", " : "", m, names[i], m == 1 ? "" : "s");
+        if (wr < 0 || (size_t)wr >= n - o) { dst[n - 1] = 0; return; }
+        o += (size_t)wr;
+        any = 1;
+    }
+    if (!any) snprintf(dst, n, "none");
+}
+
+static void draw_taken(const kshell_rect *r) {
+    char line[120];
+    ek_text_scale(r->x, r->y, "TAKEN", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "missing from the set the game started with", EK_INK);
+    ek_text(r->x, r->y + 68, "a pawn that became a queen shows up here", EK_INK);
+    missing_line(line, sizeof line, 0);
+    ek_text(r->x, r->y + 110, "white lost:", EK_INK);
+    ek_text(r->x, r->y + 132, line, EK_INK);
+    missing_line(line, sizeof line, 1);
+    ek_text(r->x, r->y + 164, "black lost:", EK_INK);
+    ek_text(r->x, r->y + 186, line, EK_INK);
+}
+
 static const kframe_item CHESS_ITEMS[] = {
-    { "NEW",   CHESS_NEW },
-    { "RETRY", CHESS_RETRY },
-    { timer_label, CHESS_TIMER },
+    { "NEW",    CHESS_NEW,   draw_new,   tap_new },
+    { "RETRY",  CHESS_RETRY, draw_retry, tap_retry },
+    { "CLOCK",  CHESS_TIMER, draw_clock, tap_clock },
+    { "TAKEN",  CHESS_TAKEN, draw_taken, NULL },
 };
 
 static void kf_status(const char *msg) { set_status("%s", msg); }
@@ -1732,11 +1818,13 @@ static void usage(void) {
             "  --wifi-only   open the wi-fi screen, then exit without a board\n"
             "  --no-wifi     do not check wi-fi on start\n"
             "  --wifi-shot F write a wi-fi screen (PGM) and exit: F then\n"
-            "                list|name|pass|fail, default list\n"
+            "                list|name|pass|sym|fail, default list\n"
             "  --menu-shot F write the shared menu (PGM) and exit\n"
             "\n"
-            "The top-right button opens the shared menu: QUIT (tap twice),\n"
-            "VOLUME, WIFI, then this game's NEW and RETRY. The power button\n"
+            "The top-right button opens the shared shell. This game's tabs\n"
+            "(NEW, RETRY, CLOCK, TAKEN) are on the left. VOLUME, WIFI and\n"
+            "QUIT are on the right. QUIT needs a second tap. The keyboard\n"
+            "comes up only while you are typing. The power button\n"
             "puts the Kindle to sleep and wakes it again; the position is kept.\n"
             "A press during the model's turn cancels that question and asks it\n"
             "again after the wake.\n",

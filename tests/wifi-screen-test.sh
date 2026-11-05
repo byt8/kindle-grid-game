@@ -21,17 +21,35 @@ fail=0
 ok()  { echo "  ok   $*"; }
 bad() { echo "  FAIL $*"; fail=$((fail + 1)); }
 
-# screen geometry, matching the #defines in src/kframe.c
-KB_X=22; KEY=56; KB_Y=150; BOT=454; BOT2=518; SYM_Y=390
-# a letter key: row (0..3), column
-key() { printf 'tap %d %d\n' $((KB_X + $2 * KEY + 10)) $((KB_Y + $1 * 60 + 10)); }
-# a symbol key on the current page, by column
-sym() { printf 'tap %d %d\n' $((KB_X + $1 * KEY + 10)) $((SYM_Y + 10)); }
-SHIFT="tap 35 $((BOT + 10))"
-SYMKEY="tap 510 $((BOT + 10))"
-JOIN="tap 445 $((BOT2 + 10))"
-NET0="tap 300 100"         # PRNet84, first row of the list
-NET1="tap 300 150"         # garden, second row (open)
+# Geometry is the #defines in src/kshell.h and src/kframe.h. Read them so a
+# layout change cannot leave this test tapping the old pixels.
+hdr() { awk -v k="$1" '$1=="#define" && $2==k { print $3; exit }' "$2"; }
+KB_X=$(hdr KSHELL_KB_X src/kshell.h)
+KB_Y0=$(hdr KSHELL_KB_Y0 src/kshell.h)
+KEY_W=$(hdr KSHELL_KEY_W src/kshell.h)
+KEY_GAP=$(hdr KSHELL_KEY_GAP src/kshell.h)
+KEY_H=$(hdr KSHELL_KEY_H src/kshell.h)
+ROW_H=$(hdr KSHELL_ROW_H src/kshell.h)
+ROW2_X=$(hdr KSHELL_ROW2_X src/kshell.h)
+PITCH=$((KEY_W + KEY_GAP))
+ROW_Y=$(hdr KFRAME_WIFI_ROW_Y src/kframe.h)
+ROW_HH=$(hdr KFRAME_WIFI_ROW_H src/kframe.h)
+ROW_P=$(hdr KFRAME_WIFI_ROW_P src/kframe.h)
+GO_X=$(hdr KFRAME_WIFI_GO_X src/kframe.h)
+GO_Y=$(hdr KFRAME_WIFI_GO_Y src/kframe.h)
+GO_W=$(hdr KFRAME_WIFI_GO_W src/kframe.h)
+GO_H=$(hdr KFRAME_WIFI_GO_H src/kframe.h)
+# rows 0 and 1 are ten keys. row 2 is nine, centered. row 3 letters start
+# two columns in, because SHIFT occupies the first two.
+k01() { printf 'tap %d %d\n' $((KB_X + $2 * PITCH + KEY_W / 2)) $((KB_Y0 + $1 * ROW_H + KEY_H / 2)); }
+k2()  { printf 'tap %d %d\n' $((ROW2_X + $1 * PITCH + KEY_W / 2)) $((KB_Y0 + 2 * ROW_H + KEY_H / 2)); }
+k3()  { printf 'tap %d %d\n' $((KB_X + ($1 + 2) * PITCH + KEY_W / 2)) $((KB_Y0 + 3 * ROW_H + KEY_H / 2)); }
+SW=$((2 * KEY_W + KEY_GAP))
+SHIFT="tap $((KB_X + SW / 2)) $((KB_Y0 + 3 * ROW_H + KEY_H / 2))"
+SYMKEY="tap $((KB_X + SW / 2)) $((KB_Y0 + 4 * ROW_H + KEY_H / 2))"
+JOIN="tap $((GO_X + GO_W / 2)) $((GO_Y + GO_H / 2))"
+NET0="tap 300 $((ROW_Y + ROW_HH / 2))"
+NET1="tap 300 $((ROW_Y + ROW_P + ROW_HH / 2))"
 
 common="gcc -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc \
   -Ijailbreak-kindle/kindle-tools/fbdaemon/engine \
@@ -52,17 +70,23 @@ esac
 exit 0
 EOF
 chmod +x /tmp/fake-wifi-check.sh
-$common -o /tmp/wifi-screens tests/wifi-screen-main.c src/kframe.c \
-  jailbreak-kindle/kindle-tools/fbdaemon/engine/eink.c -lm 2>&1 | head -20
+$common -o /tmp/wifi-screens tests/wifi-screen-main.c src/kframe.c src/kshell.c \
+  jailbreak-kindle/kindle-tools/fbdaemon/engine/eink.c -lm 2>&1 | head -40
 [ -x /tmp/wifi-screens ] && ok "built" || { bad "build failed"; exit 1; }
 
 echo "1. tap the network, type the password, join"
 {
     echo "$NET0"
     echo "$SHIFT"          # A
-    key 2 0                # a -> A
-    key 2 8; key 1 8; key 1 4; key 3 4; key 2 1; key 1 8; key 2 8   # lotbsol
-    key 0 0                # 1
+    k2 0                   # a -> A
+    k2 8                   # l
+    k01 1 8                # o
+    k01 1 4                # t
+    k3 4                   # b
+    k2 1                   # s
+    k01 1 8                # o
+    k2 8                   # l
+    k01 0 0                # 1
     echo "$JOIN"
 } > "$T/taps"
 rm -f /tmp/fake-wifi-check.log
@@ -75,7 +99,7 @@ esac
 
 echo "2. SHIFT is one capital, then back to small"
 rm -f /tmp/fake-wifi-check.log
-{ echo "$NET0"; echo "$SHIFT"; key 2 0; key 2 0; echo "$JOIN"; } > "$T/taps"
+{ echo "$NET0"; echo "$SHIFT"; k2 0; k2 0; echo "$JOIN"; } > "$T/taps"
 /tmp/wifi-screens --no-takeover < "$T/taps" > "$T/out" 2>&1
 got=$(grep '^join' /tmp/fake-wifi-check.log 2>/dev/null || echo '<none>')
 case $got in
@@ -85,9 +109,8 @@ esac
 
 echo "3. the symbol page types a symbol"
 rm -f /tmp/fake-wifi-check.log
-# the keyboard opens on the letter page, whose keys are letters; the symbols
-# are one press of MORE away. '@' is the first key of the first symbol page.
-{ echo "$NET0"; sym 0; echo "$JOIN"; } > "$T/taps"
+# 123 swaps the letter keys for punctuation. '@' is the first key on that page.
+{ echo "$NET0"; echo "$SYMKEY"; k01 0 0; echo "$JOIN"; } > "$T/taps"
 /tmp/wifi-screens --no-takeover < "$T/taps" > "$T/out" 2>&1
 got=$(grep '^join' /tmp/fake-wifi-check.log 2>/dev/null || echo '<none>')
 case $got in
@@ -96,7 +119,7 @@ case $got in
 esac
 
 echo "4. a refused password says so on the screen"
-{ echo "$NET0"; key 0 0; echo "$JOIN"; echo "tap 400 685"; } > "$T/taps"
+{ echo "$NET0"; k01 0 0; echo "$JOIN"; echo "tap 400 686"; } > "$T/taps"
 /tmp/wifi-screens --no-takeover < "$T/taps" > "$T/out" 2>&1
 if grep -q 'the password was refused by PRNet84' "$T/out"; then ok "the screen was told why"
 else bad "no reason reached the screen: $(cat "$T/out")"; fi

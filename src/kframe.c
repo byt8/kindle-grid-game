@@ -1,8 +1,9 @@
 #define _GNU_SOURCE
 /* kframe.c -- the Kindle bits every game should share.
  *
- * Hamburger, quit, volume, wi-fi, and the power-key sleep. The game draws
- * its own board and hands this file a list of extra menu rows.
+ * Hamburger, the tabbed shell (the app's screens on the left, volume /
+ * wi-fi / quit on the right), and the power-key sleep. The on-screen
+ * keyboard lives in kshell.c and comes up only while a field is focused.
  *
  * The power key is not an input device on the Kindle Touch. It writes one
  * `pmic: PWRON1 event` line into the kernel log. The PMIC_IRQ counter is the
@@ -41,12 +42,64 @@
 static kframe_cfg cfg;
 static int cfg_ok;
 
-static int page;          /* 0 board, 1 menu, 2 volume */
+static int page;          /* 0 board, 1 shell */
 static int quit_armed;
 static int vol_pct = -1; /* last level amixer actually reported; -1 = unknown */
 static char vol_err[240];
 
+static int wifi_mode;     /* 0 off, 1 list, 2 name, 3 password, 4 failed */
+static int ssid_focus, pass_focus;
+static int wifi_blocking; /* kframe_wifi_setup is in its tap loop */
+static int wifi_result;   /* 0 working, 1 joined, -1 user left */
+
 static int pwr_latch;
+
+#define KFRAME_MAX_APP 8
+enum { TAB_VOLUME = -1, TAB_WIFI = -2, TAB_QUIT = -3 };
+
+static kshell_tab shell_tabs[KFRAME_MAX_APP + 3];
+static int shell_ntabs;
+static char quit_label[8] = "QUIT";
+
+static int build_shell(void) {
+    if (cfg.nitems > KFRAME_MAX_APP) {
+        fprintf(stderr, "kframe: %d app tabs do not fit (max %d)\n",
+                cfg.nitems, KFRAME_MAX_APP);
+        return -1;
+    }
+    int n = 0;
+    for (int i = 0; i < cfg.nitems; i++) {
+        if (!cfg.items[i].label || !cfg.items[i].label[0]) {
+            fprintf(stderr, "kframe: app tab %d has no name\n", i);
+            return -1;
+        }
+        int id = cfg.items[i].id;
+        if (id == 0 || id == TAB_VOLUME || id == TAB_WIFI || id == TAB_QUIT) {
+            fprintf(stderr, "kframe: app tab \"%s\" uses reserved id %d\n",
+                    cfg.items[i].label, id);
+            return -1;
+        }
+        shell_tabs[n].label = cfg.items[i].label;
+        shell_tabs[n].id = id;
+        shell_tabs[n].side = KSHELL_APP;
+        n++;
+    }
+    shell_tabs[n].label = "VOLUME";
+    shell_tabs[n].id = TAB_VOLUME;
+    shell_tabs[n].side = KSHELL_GENERAL;
+    n++;
+    shell_tabs[n].label = "WIFI";
+    shell_tabs[n].id = TAB_WIFI;
+    shell_tabs[n].side = KSHELL_GENERAL;
+    n++;
+    snprintf(quit_label, sizeof quit_label, "QUIT");
+    shell_tabs[n].label = quit_label;
+    shell_tabs[n].id = TAB_QUIT;
+    shell_tabs[n].side = KSHELL_GENERAL;
+    n++;
+    shell_ntabs = n;
+    return kshell_init(shell_tabs, n);
+}
 
 static int need_cfg(const char *what) {
     if (cfg_ok) return 0;
@@ -65,25 +118,46 @@ int kframe_init(const kframe_cfg *c) {
     cfg_ok = 1;
     page = 0;
     quit_armed = 0;
+    if (build_shell() != 0) {
+        cfg_ok = 0;
+        return -1;
+    }
     return 0;
 }
 
 int kframe_covering(void) { return page != 0; }
 
+static void disarm_quit(void) {
+    quit_armed = 0;
+    snprintf(quit_label, sizeof quit_label, "QUIT");
+}
+
+void kframe_close(void) {
+    page = 0;
+    disarm_quit();
+    wifi_mode = 0;
+    ssid_focus = 0;
+    pass_focus = 0;
+    kshell_focus(NULL, 0);
+}
+
 void kframe_show_menu(void) {
     page = 1;
-    quit_armed = 0;
+    disarm_quit();
+    wifi_mode = 0;
+    ssid_focus = 0;
+    pass_focus = 0;
+    kshell_focus(NULL, 0);
+    for (int i = 0; i < shell_ntabs; i++) {
+        if (shell_tabs[i].side == KSHELL_APP) {
+            kshell_select(shell_tabs[i].id);
+            return;
+        }
+    }
+    kshell_select(TAB_VOLUME);
 }
 
 /* ---- small drawing ---------------------------------------------------- */
-
-static void box(int x, int y, int w, int h, const char *label) {
-    int tw = (int)strlen(label) * 8;
-    ek_fill_rect(x, y, w, h, EK_PAPER);
-    ek_rect(x, y, w, h, EK_INK);
-    ek_rect(x + 1, y + 1, w - 2, h - 2, EK_INK);
-    ek_text(x + (w - tw) / 2, y + (h - 16) / 2, label, EK_INK);
-}
 
 static void wrap(const char *s, int x, int y, int maxchars, int lines) {
     char buf[600];
@@ -107,19 +181,7 @@ static void wrap(const char *s, int x, int y, int maxchars, int lines) {
     }
 }
 
-static int row_y(int i) {
-    return KFRAME_ROW_Y0 + i * (KFRAME_ROW_H + KFRAME_ROW_GAP);
-}
-
-/* App rows sit under a "THIS GAME" label, one gap below WIFI. */
-static int app_y(int i) {
-    return row_y(3) + 20 + i * (KFRAME_ROW_H + KFRAME_ROW_GAP);
-}
-
-static int in_row(int x, int y, int ry) {
-    return x >= KFRAME_ROW_X && x < KFRAME_ROW_X + KFRAME_ROW_W
-        && y >= ry && y < ry + KFRAME_ROW_H;
-}
+static void paint_shell(void);
 
 static void paint_tab(void) {
     int x = KFRAME_TAB_X, y = KFRAME_TAB_Y, w = KFRAME_TAB_W, h = KFRAME_TAB_H;
@@ -131,56 +193,9 @@ static void paint_tab(void) {
     ek_fill_rect(bx, y + 19, bw, 3, EK_INK);
 }
 
-static void paint_menu(void) {
-    ek_clear(EK_PAPER);
-    ek_text_scale(24, 12, "MENU", EK_INK, 2);
-    ek_text(140, 20, cfg.title ? cfg.title : "", EK_INK);
-    ek_text(24, 58, "the same on every game", EK_INK);
-
-    box(KFRAME_ROW_X, row_y(0), KFRAME_ROW_W, KFRAME_ROW_H,
-        quit_armed ? "SURE?" : "QUIT");
-    box(KFRAME_ROW_X, row_y(1), KFRAME_ROW_W, KFRAME_ROW_H, "VOLUME");
-    box(KFRAME_ROW_X, row_y(2), KFRAME_ROW_W, KFRAME_ROW_H, "WIFI");
-
-    ek_text(24, row_y(3) + 2, "THIS GAME", EK_INK);
-    int n = cfg.nitems;
-    int hidden = 0;
-    for (int i = 0; i < n; i++) {
-        int y = app_y(i);
-        if (y + KFRAME_ROW_H > 700) { hidden++; continue; }
-        box(KFRAME_ROW_X, y, KFRAME_ROW_W, KFRAME_ROW_H,
-            cfg.items[i].label ? cfg.items[i].label : "?");
-    }
-    if (hidden) {
-        fprintf(stderr, "kframe: %d menu item%s did not fit on the page\n",
-                hidden, hidden == 1 ? "" : "s");
-        ek_text(24, 692, "some menu items did not fit", EK_INK);
-    }
-    box(24, 720, 200, 52, "BACK");
-}
-
-static void paint_volume(void) {
-    ek_clear(EK_PAPER);
-    ek_text_scale(24, 16, "VOLUME", EK_INK, 2);
-    if (vol_pct >= 0) {
-        char num[16];
-        snprintf(num, sizeof num, "%d%%", vol_pct);
-        int tw = (int)strlen(num) * 8 * 4;
-        ek_text_scale((EK_W - tw) / 2, 150, num, EK_INK, 4);
-        ek_text(24, 240, "speaker, from the Kindle mixer", EK_INK);
-    } else {
-        ek_text(24, 80, "the mixer did not give a level", EK_INK);
-        wrap(vol_err[0] ? vol_err : "no error text came back", 24, 110, 68, 6);
-    }
-    box(24, 300, 180, 70, "-");
-    box(396, 300, 180, 70, "+");
-    box(24, 720, 200, 52, "BACK");
-}
-
 void kframe_paint(void) {
     if (need_cfg("paint") != 0) return;
-    if (page == 1) paint_menu();
-    else if (page == 2) paint_volume();
+    if (page == 1) paint_shell();
     else paint_tab();
 }
 
@@ -277,12 +292,6 @@ static void vol_set(int pct) {
 /* ---- wi-fi screens (moved out of chess.c) ----------------------------- */
 
 #define W_MAX   12
-#define W_KB_X  22
-#define W_KEY   56
-#define W_KB_Y  150
-#define W_ROW_H 50
-#define W_BOT   (W_KB_Y + 4 * 60 + 64)
-#define W_BOT2  (W_KB_Y + 4 * 60 + 128)
 
 typedef struct { char ssid[64]; int sig; int secure; } wnet;
 static wnet g_nets[W_MAX];
@@ -409,322 +418,223 @@ static int wait_tap(int *x, int *y) {
     return 0;
 }
 
-static const char *KB[4] = { "1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm" };
+enum { WIFI_OFF = 0, WIFI_LIST = 1, WIFI_SSID = 2, WIFI_PASS = 3, WIFI_FAIL = 4 };
 
-/* Wi-fi passwords are full of the characters the letter rows cannot produce.
- * Without these rows the only reachable "password" was the letters and digits
- * the user could see -- which the access point then refused, looking exactly
- * like a broken join. Two pages, toggled by the &123 / abc key. */
-static const char *SYM[2] = { "@.-_!#$%&*", "+=/?;:,()" };
-#define W_SYM     2
-#define W_SYM_Y   (W_KB_Y + 4 * 60)
+static char typed_ssid[64];
+static char typed_pw[64];
+static int typed_secure = 1;
 
-static void w_entry(const char *value, int y) {
-    ek_rect(20, y, 560, 40, EK_INK);
-    ek_rect(21, y + 1, 558, 38, EK_INK);
-    ek_text(30, y + 12, value, EK_INK);
-    ek_text(30 + (int)strlen(value) * 8, y + 12, "_", EK_INK);
+static const kframe_item *find_item(int id) {
+    for (int i = 0; i < cfg.nitems; i++)
+        if (cfg.items[i].id == id) return &cfg.items[i];
+    return NULL;
 }
 
-static void w_keyboard(const char *bottom_right, int shift, int sym) {
-    for (int r = 0; r < 4; r++) {
-        int len = (int)strlen(KB[r]);
-        for (int i = 0; i < len; i++) {
-            int x = W_KB_X + i * W_KEY;
-            int y = W_KB_Y + r * 60;
-            char label[2] = { KB[r][i], 0 };
-            if (shift) label[0] = (char)toupper((unsigned char)label[0]);
-            ek_fill_rect(x, y, W_KEY - 4, 54, EK_PAPER);
-            ek_rect(x, y, W_KEY - 4, 54, EK_INK);
-            ek_text(x + (W_KEY - 4 - 8) / 2, y + 19, label, EK_INK);
-        }
-    }
-    /* the symbol row: same key size, so a tap lands the same way */
-    int slen = (int)strlen(SYM[sym]);
-    for (int i = 0; i < slen; i++) {
-        int x = W_KB_X + i * W_KEY;
-        char label[2] = { SYM[sym][i], 0 };
-        ek_fill_rect(x, W_SYM_Y, W_KEY - 4, 54, EK_PAPER);
-        ek_rect(x, W_SYM_Y, W_KEY - 4, 54, EK_INK);
-        ek_text(x + (W_KEY - 4 - 8) / 2, W_SYM_Y + 19, label, EK_INK);
-    }
-    /* SHIFT says whether it is on: a silent caps state mistypes the first
-     * character of every password, and nothing on the screen shows it. */
-    box(20,  W_BOT, 130, 54, shift ? "SHIFT ON" : "SHIFT");
-    box(160, W_BOT, 120, 54, "DEL");
-    box(290, W_BOT, 140, 54, "CLEAR");
-    /* both symbol pages are one row, so the button says which page is up
-     * rather than pretending to switch to symbols that are already there. */
-    box(440, W_BOT, 140, 54, sym ? "SYM 2/2" : "SYM 1/2");
-    box(20,  W_BOT2, 280, 54, "BACK");
-    box(310, W_BOT2, 270, 54, bottom_right);
-}
-
-static int w_key_at(int x, int y, int sym, char *out) {
-    for (int r = 0; r < 4; r++) {
-        int len = (int)strlen(KB[r]);
-        for (int i = 0; i < len; i++) {
-            int kx = W_KB_X + i * W_KEY, ky = W_KB_Y + r * 60;
-            if (x >= kx && x < kx + W_KEY - 4 && y >= ky && y < ky + 54) {
-                *out = KB[r][i];
-                return 1;
-            }
-        }
-    }
-    int slen = (int)strlen(SYM[sym]);
-    for (int i = 0; i < slen; i++) {
-        int kx = W_KB_X + i * W_KEY;
-        if (x >= kx && x < kx + W_KEY - 4 && y >= W_SYM_Y && y < W_SYM_Y + 54) {
-            *out = SYM[sym][i];
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static void w_draw_list(void) {
-    ek_clear(EK_PAPER);
-    ek_text_scale(12, 6, "WI-FI", EK_INK, 2);
-    if (g_wifi_ssid[0]) {
-        char line[128];
-        snprintf(line, sizeof line, "on %s   %s", g_wifi_ssid, g_wifi_ip);
-        ek_text(140, 16, line, EK_INK);
-    } else {
-        ek_text(140, 16, "not connected - tap a network", EK_INK);
-    }
-    if (g_wifi_err[0]) ek_text(12, 52, g_wifi_err, EK_INK);
-    else if (!g_nnets) ek_text(12, 52, "looking for networks...", EK_INK);
-
-    for (int i = 0; i < g_nnets; i++) {
-        int y = 84 + i * W_ROW_H;
-        if (y + W_ROW_H > 600) break;
-        ek_rect(20, y, 560, W_ROW_H - 6, EK_INK);
-        char name[40];
-        snprintf(name, sizeof name, "%.30s", g_nets[i].ssid);
-        ek_text(30, y + (W_ROW_H - 6 - 16) / 2, name, EK_INK);
-        ek_text(470, y + (W_ROW_H - 6 - 16) / 2, g_nets[i].secure ? "WPA2" : "open", EK_INK);
-    }
-    box(20,  660, 170, 50, "RESCAN");
-    box(210, 660, 190, 50, "TYPE NAME");
-    box(420, 660, 160, 50, "SKIP");
-    ek_flush();
-}
-
-static void w_draw_text(const char *title, const char *value, const char *bottom_right,
-                        int shift, int sym) {
-    ek_clear(EK_PAPER);
-    ek_text(12, 12, title, EK_INK);
-    ek_text(12, 34, "tap the letters, then the button at the bottom", EK_INK);
-    w_entry(value, 70);
-    w_keyboard(bottom_right, shift, sym);
-    ek_flush();
-}
-
-static void w_draw_fail(void) {
-    ek_clear(EK_PAPER);
-    ek_text(12, 12, "that did not work", EK_INK);
-    wrap(g_wifi_err, 12, 44, 72, 8);
-    box(20, 660, 250, 50, "TRY AGAIN");
-    box(300, 660, 280, 50, "OTHER NETWORKS");
-    ek_flush();
-}
-
-int kframe_wifi_setup(void) {
-    if (need_cfg("wifi") != 0) return -1;
-    enum { M_LIST, M_SSID, M_PASS, M_DONE };
-    int mode = M_LIST;
-    char ssid[64] = "", pw[64] = "";
-    int shift = 0;
-    int sym = 0;        /* which symbol page the keyboard is showing */
-    int secure = 1;
-
+static void wifi_enter(void) {
+    wifi_mode = WIFI_LIST;
+    ssid_focus = 0;
+    pass_focus = 0;
     g_wifi_err[0] = 0;
     wifi_scan();
-
-    for (;;) {
-        if (cfg.stop && *cfg.stop) return -1;
-
-        if (mode == M_LIST) {
-            w_draw_list();
-            int x, y;
-            if (!wait_tap(&x, &y)) return -1;
-            if (y >= 660 && y < 710) {
-                if (x >= 20 && x < 190) { g_wifi_err[0] = 0; wifi_scan(); continue; }
-                if (x >= 210 && x < 400) { mode = M_SSID; ssid[0] = 0; pw[0] = 0; secure = 1; continue; }
-                if (x >= 420 && x < 580) return -1;
-            }
-            for (int i = 0; i < g_nnets; i++) {
-                int ry = 84 + i * W_ROW_H;
-                if (y >= ry && y < ry + W_ROW_H - 6 && x >= 20 && x < 580) {
-                    snprintf(ssid, sizeof ssid, "%s", g_nets[i].ssid);
-                    secure = g_nets[i].secure;
-                    pw[0] = 0;
-                    if (secure) {
-                        mode = M_PASS;
-                    } else {
-                        ek_clear(EK_PAPER);
-                        ek_text(12, 12, "joining", EK_INK);
-                        ek_text(12, 40, ssid, EK_INK);
-                        ek_flush();
-                        if (wifi_join(ssid, "") == 0) return 0;
-                        mode = M_DONE;
-                    }
-                    break;
-                }
-            }
-            continue;
-        }
-
-        if (mode == M_SSID || mode == M_PASS) {
-            char *buf = (mode == M_SSID) ? ssid : pw;
-            size_t cap = (mode == M_SSID) ? sizeof ssid : sizeof pw;
-            char title[120];
-            if (mode == M_SSID) snprintf(title, sizeof title, "NETWORK NAME");
-            else                snprintf(title, sizeof title, "PASSWORD FOR %.50s", ssid);
-            w_draw_text(title, buf, mode == M_SSID ? "NEXT" : "JOIN", shift, sym);
-
-            int x, y;
-            if (!wait_tap(&x, &y)) return -1;
-            size_t len = strlen(buf);
-
-            if (x >= 20 && x < 150 && y >= W_BOT && y < W_BOT + 54) { shift = !shift; continue; }
-            if (x >= 160 && x < 280 && y >= W_BOT && y < W_BOT + 54) {
-                if (len) buf[len - 1] = 0;
-                continue;
-            }
-            if (x >= 290 && x < 430 && y >= W_BOT && y < W_BOT + 54) { buf[0] = 0; continue; }
-            if (x >= 440 && x < 580 && y >= W_BOT && y < W_BOT + 54) { sym = !sym; continue; }
-            if (y >= W_BOT2 && y < W_BOT2 + 54) {
-                if (x >= 20 && x < 300) { mode = M_LIST; continue; }
-                if (x >= 310 && x < 580) {
-                    if (mode == M_SSID) {
-                        if (!ssid[0]) {
-                            snprintf(g_wifi_err, sizeof g_wifi_err, "type the network name first");
-                            fprintf(stderr, "kframe: %s\n", g_wifi_err);
-                            continue;
-                        }
-                        pw[0] = 0;
-                        mode = M_PASS;
-                        continue;
-                    }
-                    ek_clear(EK_PAPER);
-                    ek_text(12, 12, "joining", EK_INK);
-                    ek_text(12, 40, ssid, EK_INK);
-                    ek_flush();
-                    if (wifi_join(ssid, pw) == 0) return 0;
-                    mode = M_DONE;
-                    continue;
-                }
-            }
-            char ch;
-            if (w_key_at(x, y, sym, &ch)) {
-                if (len + 1 < cap) {
-                    buf[len] = shift ? (char)toupper((unsigned char)ch) : ch;
-                    buf[len + 1] = 0;
-                    /* one capital, then back to small: typing "Alotbsol1"
-                     * should not need remembering to turn SHIFT off. */
-                    shift = 0;
-                }
-            }
-            continue;
-        }
-
-        if (mode == M_DONE) {
-            w_draw_fail();
-            int x, y;
-            if (!wait_tap(&x, &y)) return -1;
-            if (y >= 660 && y < 710) {
-                if (x >= 20 && x < 270) { mode = M_PASS; continue; }
-                if (x >= 300 && x < 580) { mode = M_LIST; g_wifi_err[0] = 0; wifi_scan(); continue; }
-            }
-            continue;
-        }
-    }
 }
 
-int kframe_wifi_shot(const char *what) {
-    if (!what) what = "list";
-    if (!strcmp(what, "list")) {
-        wifi_scan();
-        w_draw_list();
-    } else if (!strcmp(what, "name")) {
-        w_draw_text("NETWORK NAME", "garden", "NEXT", 0, 0);
-    } else if (!strcmp(what, "pass")) {
-        w_draw_text("PASSWORD FOR PRNet84", "Alotbsol1", "JOIN", 0, 0);
-    } else if (!strcmp(what, "sym")) {
-        /* the symbol page with SHIFT on, so both states get a picture */
-        w_draw_text("PASSWORD FOR PRNet84", "a@b.c", "JOIN", 1, 1);
-    } else if (!strcmp(what, "fail")) {
-        snprintf(g_wifi_err, sizeof g_wifi_err,
-                 "could not join PRNet84 (out of range, or the password was refused)");
-        w_draw_fail();
+static int leave_shell(void) {
+    if (wifi_blocking) wifi_result = -1;
+    else kframe_close();
+    return 1;
+}
+
+static void select_tab(int id) {
+    if (id != TAB_QUIT) disarm_quit();
+    int prev = kshell_selected();
+    kshell_select(id);
+    if (id == TAB_VOLUME && prev != TAB_VOLUME) vol_read();
+    if (id == TAB_WIFI && wifi_mode == WIFI_OFF) wifi_enter();
+}
+
+static int quit_press(void) {
+    if (!quit_armed) {
+        quit_armed = 1;
+        snprintf(quit_label, sizeof quit_label, "SURE?");
+        kshell_select(TAB_QUIT);
+        fprintf(stderr, "kframe: quit armed\n");
+        return 1;
+    }
+    fprintf(stderr, "kframe: quit confirmed\n");
+    kframe_close();
+    cfg.on_quit();
+    return 1;
+}
+
+static void shell_sync_focus(void) {
+    if (page != 1 || kshell_selected() != TAB_WIFI) {
+        kshell_focus(NULL, 0);
+        return;
+    }
+    if (wifi_mode == WIFI_PASS && pass_focus)
+        kshell_focus(typed_pw, sizeof typed_pw);
+    else if (wifi_mode == WIFI_SSID && ssid_focus)
+        kshell_focus(typed_ssid, sizeof typed_ssid);
+    else
+        kshell_focus(NULL, 0);
+}
+
+static void draw_volume(const kshell_rect *r) {
+    ek_text_scale(r->x, r->y, "VOLUME", EK_INK, 2);
+    if (vol_pct >= 0) {
+        char num[16];
+        snprintf(num, sizeof num, "%d%%", vol_pct);
+        int tw = (int)strlen(num) * 8 * 4;
+        ek_text_scale((EK_W - tw) / 2, r->y + 70, num, EK_INK, 4);
+        ek_text(r->x, r->y + 160, "speaker, from the Kindle mixer", EK_INK);
     } else {
-        fprintf(stderr, "kframe: wifi shot wants list, name, pass, sym or fail (got %s)\n", what);
-        return -1;
+        ek_text(r->x, r->y + 50, "the mixer did not give a level", EK_INK);
+        wrap(vol_err[0] ? vol_err : "no error text came back", r->x, r->y + 80, 68, 5);
     }
-    return 0;
+    kshell_button(24, 320, 200, 70, "-", 0);
+    kshell_button(376, 320, 200, 70, "+", 0);
 }
 
-/* ---- taps on the hamburger and the menu -------------------------------- */
+static void draw_quit(const kshell_rect *r) {
+    ek_text_scale(r->x, r->y, quit_armed ? "SURE?" : "QUIT", EK_INK, 2);
+    ek_text(r->x, r->y + 48, "tap QUIT again to leave the game", EK_INK);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H,
+                  quit_armed ? "SURE?" : "QUIT", quit_armed);
+}
 
-static int tap_menu(int x, int y) {
-    if (x >= 24 && x < 224 && y >= 720 && y < 772) {
-        page = 0;
-        quit_armed = 0;
-        return 1;
+static void draw_app(const kshell_rect *r, int id) {
+    const kframe_item *it = find_item(id);
+    if (!it) {
+        fprintf(stderr, "kframe: no screen for tab %d\n", id);
+        return;
     }
-    if (in_row(x, y, row_y(0))) {
-        if (!quit_armed) {
-            quit_armed = 1;
-            fprintf(stderr, "kframe: quit armed\n");
-            return 1;
+    if (it->draw) {
+        it->draw(r);
+        return;
+    }
+    ek_text_scale(r->x, r->y, it->label, EK_INK, 2);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, it->label, 0);
+}
+
+static void draw_wifi_list(void) {
+    ek_text_scale(16, 58, "WI-FI", EK_INK, 2);
+    if (g_wifi_err[0]) wrap(g_wifi_err, 16, 96, 70, 1);
+    else if (g_wifi_ssid[0]) {
+        char line[128];
+        snprintf(line, sizeof line, "on %.60s   %.30s", g_wifi_ssid, g_wifi_ip);
+        ek_text(16, 96, line, EK_INK);
+    } else if (!g_nnets) {
+        ek_text(16, 96, "no networks yet - tap RESCAN", EK_INK);
+    } else {
+        ek_text(16, 96, "tap a network", EK_INK);
+    }
+
+    int hidden = 0;
+    for (int i = 0; i < g_nnets; i++) {
+        int y = KFRAME_WIFI_ROW_Y + i * KFRAME_WIFI_ROW_P;
+        if (y + KFRAME_WIFI_ROW_H > KFRAME_WIFI_BTN_Y - 8) { hidden++; continue; }
+        ek_fill_rect(16, y, 568, KFRAME_WIFI_ROW_H, EK_PAPER);
+        ek_rect(16, y, 568, KFRAME_WIFI_ROW_H, EK_INK);
+        char name[40];
+        snprintf(name, sizeof name, "%.28s", g_nets[i].ssid);
+        ek_text(28, y + (KFRAME_WIFI_ROW_H - 16) / 2, name, EK_INK);
+        ek_text(480, y + (KFRAME_WIFI_ROW_H - 16) / 2,
+                g_nets[i].secure ? "WPA2" : "open", EK_INK);
+    }
+    if (hidden)
+        fprintf(stderr, "kframe: %d network%s did not fit on the wi-fi list\n",
+                hidden, hidden == 1 ? "" : "s");
+    kshell_button(16,  KFRAME_WIFI_BTN_Y, 180, 52, "RESCAN", 0);
+    kshell_button(206, KFRAME_WIFI_BTN_Y, 180, 52, "TYPE NAME", 0);
+    kshell_button(396, KFRAME_WIFI_BTN_Y, 188, 52, "SKIP", 0);
+}
+
+static void text_back_at(int *x, int *y) {
+    kshell_rect r;
+    kshell_content(&r);
+    *x = r.x + r.w - 120;
+    *y = r.y;
+}
+
+static void draw_wifi_text(void) {
+    char title[80];
+    if (wifi_mode == WIFI_SSID) snprintf(title, sizeof title, "NETWORK NAME");
+    else snprintf(title, sizeof title, "PASSWORD FOR %.40s", typed_ssid);
+    ek_text(16, 64, title, EK_INK);
+    int bx, by;
+    text_back_at(&bx, &by);
+    kshell_button(bx, by, 120, 40, "BACK", 0);
+    int focused = (wifi_mode == WIFI_PASS && pass_focus) ||
+                  (wifi_mode == WIFI_SSID && ssid_focus);
+    const char *value = (wifi_mode == WIFI_SSID) ? typed_ssid : typed_pw;
+    kshell_field(KFRAME_FIELD_X, KFRAME_FIELD_Y, KFRAME_FIELD_W, KFRAME_FIELD_H,
+                 value, focused);
+    if (g_wifi_err[0]) ek_text(16, 160, g_wifi_err, EK_INK);
+    kshell_button(KFRAME_WIFI_GO_X, KFRAME_WIFI_GO_Y, KFRAME_WIFI_GO_W, KFRAME_WIFI_GO_H,
+                  wifi_mode == WIFI_SSID ? "NEXT" : "JOIN", 0);
+}
+
+static void draw_wifi_fail(void) {
+    ek_text_scale(16, 58, "NO JOIN", EK_INK, 2);
+    wrap(g_wifi_err[0] ? g_wifi_err : "the join failed", 16, 110, 70, 6);
+    kshell_button(16,  KFRAME_WIFI_BTN_Y, 270, 52, "TRY AGAIN", 0);
+    kshell_button(300, KFRAME_WIFI_BTN_Y, 284, 52, "OTHER NETWORKS", 0);
+}
+
+static void draw_wifi(const kshell_rect *r) {
+    (void)r;
+    if (wifi_mode == WIFI_OFF) wifi_enter();
+    if (wifi_mode == WIFI_LIST) draw_wifi_list();
+    else if (wifi_mode == WIFI_FAIL) draw_wifi_fail();
+    else draw_wifi_text();
+}
+
+static void paint_shell_now(void) {
+    ek_clear(EK_PAPER);
+    kshell_paint_tabs();
+    kshell_rect r;
+    kshell_content(&r);
+    int id = kshell_selected();
+    if (id == TAB_VOLUME) draw_volume(&r);
+    else if (id == TAB_WIFI) draw_wifi(&r);
+    else if (id == TAB_QUIT) draw_quit(&r);
+    else draw_app(&r, id);
+    if (!kshell_keyboard_on())
+        kshell_button(KFRAME_BACK_X, KFRAME_BACK_Y, KFRAME_BACK_W, KFRAME_BACK_H, "BACK", 0);
+    kshell_paint_keyboard();
+}
+
+static void paint_shell(void) {
+    shell_sync_focus();
+    paint_shell_now();
+}
+
+static int do_join(const char *ssid, const char *pw) {
+    ek_clear(EK_PAPER);
+    ek_text(16, 60, "joining", EK_INK);
+    ek_text(16, 90, ssid, EK_INK);
+    ek_flush();
+    if (wifi_join(ssid, pw) == 0) {
+        if (wifi_blocking) wifi_result = 1;
+        else {
+            wifi_mode = WIFI_LIST;
+            pass_focus = 0;
+            ssid_focus = 0;
         }
-        page = 0;
-        quit_armed = 0;
-        fprintf(stderr, "kframe: quit confirmed\n");
-        cfg.on_quit();
         return 1;
     }
-    quit_armed = 0;
-    if (in_row(x, y, row_y(1))) {
-        vol_read();
-        page = 2;
-        return 1;
-    }
-    if (in_row(x, y, row_y(2))) {
-        page = 0;
-        fprintf(stderr, "kframe: wifi opened from the menu\n");
-        kframe_wifi_setup();
-        return 1;
-    }
-    for (int i = 0; i < cfg.nitems; i++) {
-        int y0 = app_y(i);
-        if (y0 + KFRAME_ROW_H > 700) break;
-        if (!in_row(x, y, y0)) continue;
-        page = 0;
-        int id = cfg.items[i].id;
-        fprintf(stderr, "kframe: app item %d\n", id);
-        int r = cfg.on_item(id);
-        if (r == 0) {
-            fprintf(stderr, "kframe: app item %d returned 0; the tap was still consumed\n", id);
-            return 1;
-        }
-        return r;
-    }
+    wifi_mode = WIFI_FAIL;
+    pass_focus = 0;
+    ssid_focus = 0;
     return 1;
 }
 
 static int tap_volume(int x, int y) {
-    if (x >= 24 && x < 224 && y >= 720 && y < 772) {
-        page = 1;
-        return 1;
-    }
     int hit = 0;
-    if (x >= 24 && x < 204 && y >= 300 && y < 370) hit = -1;
-    if (x >= 396 && x < 576 && y >= 300 && y < 370) hit = 1;
+    if (kshell_inside(x, y, 24, 320, 200, 70)) hit = -1;
+    if (kshell_inside(x, y, 376, 320, 200, 70)) hit = 1;
     if (!hit) return 1;
     if (vol_pct < 0) {
-        /* No made-up starting level. Ask the mixer again and show its answer. */
         fprintf(stderr, "kframe: volume step refused until the mixer answers\n");
         vol_read();
         return 1;
@@ -733,24 +643,229 @@ static int tap_volume(int x, int y) {
     return 1;
 }
 
+static int tap_wifi_list(int x, int y) {
+    if (kshell_inside(x, y, 16, KFRAME_WIFI_BTN_Y, 180, 52)) {
+        g_wifi_err[0] = 0;
+        wifi_scan();
+        return 1;
+    }
+    if (kshell_inside(x, y, 206, KFRAME_WIFI_BTN_Y, 180, 52)) {
+        typed_ssid[0] = 0;
+        typed_pw[0] = 0;
+        typed_secure = 1;
+        g_wifi_err[0] = 0;
+        wifi_mode = WIFI_SSID;
+        ssid_focus = 1;
+        pass_focus = 0;
+        return 1;
+    }
+    if (kshell_inside(x, y, 396, KFRAME_WIFI_BTN_Y, 188, 52)) return leave_shell();
+    for (int i = 0; i < g_nnets; i++) {
+        int ry = KFRAME_WIFI_ROW_Y + i * KFRAME_WIFI_ROW_P;
+        if (ry + KFRAME_WIFI_ROW_H > KFRAME_WIFI_BTN_Y - 8) break;
+        if (!kshell_inside(x, y, 16, ry, 568, KFRAME_WIFI_ROW_H)) continue;
+        snprintf(typed_ssid, sizeof typed_ssid, "%s", g_nets[i].ssid);
+        typed_secure = g_nets[i].secure;
+        typed_pw[0] = 0;
+        g_wifi_err[0] = 0;
+        if (typed_secure) {
+            wifi_mode = WIFI_PASS;
+            pass_focus = 1;
+            ssid_focus = 0;
+            return 1;
+        }
+        return do_join(typed_ssid, "");
+    }
+    return 1;
+}
+
+static int tap_wifi_text(int x, int y) {
+    int bx, by;
+    text_back_at(&bx, &by);
+    if (kshell_inside(x, y, bx, by, 120, 40)) {
+        wifi_mode = WIFI_LIST;
+        pass_focus = 0;
+        ssid_focus = 0;
+        g_wifi_err[0] = 0;
+        return 1;
+    }
+    if (kshell_inside(x, y, KFRAME_FIELD_X, KFRAME_FIELD_Y, KFRAME_FIELD_W, KFRAME_FIELD_H)) {
+        if (wifi_mode == WIFI_SSID) ssid_focus = 1;
+        else pass_focus = 1;
+        return 1;
+    }
+    if (!kshell_inside(x, y, KFRAME_WIFI_GO_X, KFRAME_WIFI_GO_Y,
+                       KFRAME_WIFI_GO_W, KFRAME_WIFI_GO_H))
+        return 1;
+    if (wifi_mode == WIFI_SSID) {
+        if (!typed_ssid[0]) {
+            snprintf(g_wifi_err, sizeof g_wifi_err, "type the network name first");
+            fprintf(stderr, "kframe: %s\n", g_wifi_err);
+            return 1;
+        }
+        typed_pw[0] = 0;
+        wifi_mode = WIFI_PASS;
+        pass_focus = 1;
+        ssid_focus = 0;
+        g_wifi_err[0] = 0;
+        return 1;
+    }
+    return do_join(typed_ssid, typed_pw);
+}
+
+static int tap_wifi_fail(int x, int y) {
+    if (kshell_inside(x, y, 16, KFRAME_WIFI_BTN_Y, 270, 52)) {
+        if (typed_ssid[0] && typed_secure) {
+            wifi_mode = WIFI_PASS;
+            pass_focus = 1;
+        } else {
+            wifi_mode = WIFI_LIST;
+        }
+        return 1;
+    }
+    if (kshell_inside(x, y, 300, KFRAME_WIFI_BTN_Y, 284, 52)) {
+        g_wifi_err[0] = 0;
+        wifi_mode = WIFI_LIST;
+        pass_focus = 0;
+        wifi_scan();
+        return 1;
+    }
+    return 1;
+}
+
+static int tap_wifi(int x, int y) {
+    if (wifi_mode == WIFI_OFF) wifi_enter();
+    if (wifi_mode == WIFI_LIST) return tap_wifi_list(x, y);
+    if (wifi_mode == WIFI_FAIL) return tap_wifi_fail(x, y);
+    return tap_wifi_text(x, y);
+}
+
+static int tap_app(const kshell_rect *r, int x, int y) {
+    const kframe_item *it = find_item(kshell_selected());
+    if (!it) {
+        fprintf(stderr, "kframe: tap on tab %d, which has no screen\n", kshell_selected());
+        return 1;
+    }
+    if (it->tap) {
+        int rc = it->tap(r, x, y);
+        if (rc == 0) return 1;
+        fprintf(stderr, "kframe: app item %d\n", it->id);
+        return rc;
+    }
+    if (!kshell_inside(x, y, KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H))
+        return 1;
+    fprintf(stderr, "kframe: app item %d\n", it->id);
+    int rc = cfg.on_item(it->id);
+    kframe_close();
+    if (rc == 0) {
+        fprintf(stderr, "kframe: app item %d returned 0; the tap was still consumed\n", it->id);
+        return 1;
+    }
+    return rc;
+}
+
+static int tap_shell(int x, int y) {
+    int id = kshell_tab_at(x, y);
+    if (id == TAB_QUIT) return quit_press();
+    if (id) { select_tab(id); return 1; }
+
+    int done = 0;
+    if (kshell_keyboard_tap(x, y, &done)) {
+        if (done) { pass_focus = 0; ssid_focus = 0; }
+        return 1;
+    }
+    if (!kshell_keyboard_on() &&
+        kshell_inside(x, y, KFRAME_BACK_X, KFRAME_BACK_Y, KFRAME_BACK_W, KFRAME_BACK_H))
+        return leave_shell();
+
+    id = kshell_selected();
+    if (id == TAB_VOLUME) return tap_volume(x, y);
+    if (id == TAB_WIFI) return tap_wifi(x, y);
+    if (id == TAB_QUIT) {
+        if (kshell_inside(x, y, KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H))
+            return quit_press();
+        return 1;
+    }
+    kshell_rect r;
+    kshell_content(&r);
+    return tap_app(&r, x, y);
+}
+
+int kframe_wifi_setup(void) {
+    if (need_cfg("wifi") != 0) return -1;
+    wifi_blocking = 1;
+    wifi_result = 0;
+    page = 1;
+    disarm_quit();
+    wifi_enter();
+    kshell_select(TAB_WIFI);
+    while (wifi_result == 0) {
+        if (cfg.stop && *cfg.stop) { wifi_result = -1; break; }
+        paint_shell();
+        ek_flush();
+        int x, y;
+        if (!wait_tap(&x, &y)) { wifi_result = -1; break; }
+        kframe_tap(x, y);
+        if (cfg.stop && *cfg.stop) { wifi_result = -1; break; }
+    }
+    int rc = wifi_result == 1 ? 0 : -1;
+    wifi_blocking = 0;
+    wifi_result = 0;
+    kframe_close();
+    return rc;
+}
+
+int kframe_wifi_shot(const char *what) {
+    if (need_cfg("wifi shot") != 0) return -1;
+    if (!what) what = "list";
+    page = 1;
+    kshell_select(TAB_WIFI);
+    pass_focus = 0;
+    ssid_focus = 0;
+    g_wifi_err[0] = 0;
+    if (!strcmp(what, "list")) {
+        wifi_enter();
+    } else if (!strcmp(what, "name")) {
+        wifi_mode = WIFI_SSID;
+        ssid_focus = 1;
+        snprintf(typed_ssid, sizeof typed_ssid, "garden");
+        typed_pw[0] = 0;
+    } else if (!strcmp(what, "pass")) {
+        wifi_mode = WIFI_PASS;
+        pass_focus = 1;
+        snprintf(typed_ssid, sizeof typed_ssid, "PRNet84");
+        snprintf(typed_pw, sizeof typed_pw, "Alotbsol1");
+    } else if (!strcmp(what, "sym")) {
+        wifi_mode = WIFI_PASS;
+        pass_focus = 1;
+        snprintf(typed_ssid, sizeof typed_ssid, "PRNet84");
+        snprintf(typed_pw, sizeof typed_pw, "a@b.c");
+    } else if (!strcmp(what, "fail")) {
+        wifi_mode = WIFI_FAIL;
+        snprintf(g_wifi_err, sizeof g_wifi_err,
+                 "could not join PRNet84 (out of range, or the password was refused)");
+    } else {
+        fprintf(stderr, "kframe: wifi shot wants list, name, pass, sym or fail (got %s)\n", what);
+        return -1;
+    }
+    shell_sync_focus();
+    if (!strcmp(what, "sym")) kshell_keyboard_config(1, 1);
+    paint_shell_now();
+    return 0;
+}
+
 int kframe_tap(int x, int y) {
     if (need_cfg("tap") != 0) return 0;
-    if (page == 1) return tap_menu(x, y);
-    if (page == 2) return tap_volume(x, y);
+    if (page == 1) return tap_shell(x, y);
     if (x >= KFRAME_TAB_X && x < KFRAME_TAB_X + KFRAME_TAB_W
         && y >= KFRAME_TAB_Y && y < KFRAME_TAB_Y + KFRAME_TAB_H) {
-        page = 1;
-        quit_armed = 0;
+        kframe_show_menu();
         fprintf(stderr, "kframe: menu open\n");
         return 1;
     }
     return 0;
 }
 
-/* The quit handler has to live on the config. I referenced cfg.on_quit above
- * but have not added it to the struct yet -- fixing that in the header and
- * in tap_menu together. Placeholder so this file doesn't compile halfway:
- * the real call is written below once the field exists. */
 
 /* ---- power key -------------------------------------------------------- */
 
@@ -883,8 +998,7 @@ static void draw_sleep(void) {
 
 static void sleep_now(void) {
     char err[200] = "";
-    page = 0;
-    quit_armed = 0;
+    kframe_close();
     pwr_drain(200);
 
     draw_sleep();
