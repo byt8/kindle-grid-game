@@ -83,6 +83,16 @@ static int refresh_ms = PANEL_FLOOR_MS;
 #define RM_TICK_CONTROL 14          /* rm_tick_limits[0]: passes per step */
 static int move_ms = PANEL_FLOOR_MS;
 
+/* Turn-based mode. Off: the cave runs on its own clock (the original game) and
+ * a press joins in when the control tick comes round. On: the clock stops
+ * entirely and nothing moves until a press arrives -- one press is one turn,
+ * in which the player acts and then the rocks, the monsters and the cave's
+ * timer each advance once. The timer advances by one step's worth of passes
+ * per turn, so it still kills you, after about 480 turns instead of 6730
+ * passes. move_ms and refresh_ms mean nothing in this mode: the panel is
+ * repainted once per turn, as fast as it can. */
+static int turn_based;
+
 static void note_pace(void) {
     fprintf(stderr, "rockman: step %d ms\n", move_ms);
     if (move_ms < PANEL_FLOOR_MS)
@@ -90,6 +100,12 @@ static void note_pace(void) {
                 "rockman: %d ms is faster than the panel (%d ms); "
                 "two taps can share one picture\n",
                 move_ms, PANEL_FLOOR_MS);
+}
+
+static void note_mode(void) {
+    fprintf(stderr, "rockman: %s\n", turn_based
+            ? "turn based: one press moves the player, the rocks and the monsters"
+            : "clock based: the cave runs on its own");
 }
 
 /* Key buffer: one slot per press, drained one action per control tick. The
@@ -628,10 +644,48 @@ static int one_pass(int action, int apply) {
     return fired;
 }
 
+/* One turn, for turn-based mode: the player acts, then the cave answers
+ * exactly once -- one rock scan, one monster step, and one step's worth of the
+ * death timer. Nothing runs between presses, so the whole cave waits for the
+ * finger.
+ *
+ * On the clock the rocks scan every 9 passes, the monsters step every 16 and a
+ * player step is 14, so the ratios here are not the clock's. This is the turn
+ * version of the rule instead: every turn, the player moves once and the cave
+ * answers once. The timer gets RM_TICK_CONTROL (14) passes per turn, which is
+ * what one player step was worth, so a cave still runs out of time after about
+ * the same number of moves (6730 / 14 = 481 turns) rather than after the same
+ * number of seconds. */
+static void take_turn(int action) {
+    if (phase != PHASE_PLAY) return;
+    if (action == ACT_QUIT) {
+        do_action(action);
+        return;
+    }
+    if (action >= 0) do_action(action);
+    if (phase != PHASE_PLAY) return;
+    check_alive();
+    if (phase != PHASE_PLAY) return;
+    scan_rocks();
+    if (phase != PHASE_PLAY) return;
+    move_monsters();
+    if (phase != PHASE_PLAY) return;
+    check_alive();
+    if (phase != PHASE_PLAY) return;
+    for (int i = 0; i < RM_TICK_CONTROL; i++) {
+        timer_tick();
+        if (phase != PHASE_PLAY) return;
+    }
+}
+
 static void play_action(int action) {
     if (phase != PHASE_PLAY) return;
     if (action == ACT_QUIT) {
         do_action(action);
+        return;
+    }
+    if (turn_based) {
+        take_turn(action);
         return;
     }
     for (int n = 0; n < 64; n++) {
@@ -672,6 +726,12 @@ static int pump_passes(uint32_t now, uint32_t *next_pass) {
         return 0;
     }
     if (phase != PHASE_PLAY) return 0;
+    if (turn_based) {
+        /* The cave does not run on its own: the press already took its turn.
+         * Keep the anchor at now so switching back does not fire a burst. */
+        *next_pass = now;
+        return 0;
+    }
     uint32_t iv = pass_interval_ms();
     int lim = (int)rm_tick_limits[0];
     int burst = 0;
@@ -1190,6 +1250,57 @@ static int selftest(void) {
         expect((int32_t)(np - 60000) > 0, "a stall past the cap drops the leftover time");
     }
 
+    /* Turn based: the clock is stopped, so a frame moves nothing, and one
+     * press takes one whole turn -- the player, then the cave. */
+    fill_brick();
+    phase = PHASE_PLAY;
+    room = 1;
+    dying = 0;
+    speed = 0;
+    lives = (uint8_t)(RM_TILE_0 + 5);
+    ticks[0] = ticks[1] = ticks[2] = 0;
+    timer_reset();
+    ply_r = 7;
+    ply_c = 11;
+    scr[7][11] = RM_TILE_PLAYER_UD;
+    scr[7][10] = RM_TILE_EMPTY;
+    keyq_clear();
+    turn_based = 1;
+    np = 0;
+    expect(pump_passes(600000, &np) == 0, "turn based: the clock runs no passes");
+    expect(ply_c == 11, "turn based: time alone moves nobody");
+
+    take_turn(ACT_LEFT);
+    expect(ply_c == 10, "turn based: one press is one step");
+
+    /* The timer still kills, in turns rather than in seconds: one turn is
+     * worth RM_TICK_CONTROL passes, so 6730 passes is 481 turns. */
+    fill_brick();
+    phase = PHASE_PLAY;
+    room = 1;
+    entry_pos = 0;
+    room_flags[1] = 1;
+    dying = 0;
+    speed = 0;
+    lives = (uint8_t)(RM_TILE_0 + 5);
+    reseed();
+    timer_reset();
+    ply_r = 7;
+    ply_c = 11;
+    scr[7][11] = RM_TILE_PLAYER_UD;
+    int turns = 0;
+    while (lives == RM_TILE_0 + 5 && turns < 5000) {
+        take_turn(-1);
+        turns++;
+    }
+    expect(lives == RM_TILE_0 + 4, "turn based: the timer still costs a life");
+    {
+        char buf[64];
+        snprintf(buf, sizeof buf, "timer death on turn %d (want 481)", turns);
+        expect(turns == 481, buf);
+    }
+    turn_based = 0;
+
     if (failures == 0) fprintf(stderr, "rockman: selftest ok\n");
     else fprintf(stderr, "rockman: %d selftest failure%s\n", failures, failures == 1 ? "" : "s");
     return failures;
@@ -1197,7 +1308,7 @@ static int selftest(void) {
 
 /* ---- the shared menu ---------------------------------------------------- */
 
-enum { ROCK_NEW = 1, ROCK_SPEED };
+enum { ROCK_NEW = 1, ROCK_SPEED, ROCK_MODE };
 
 /* Same beats --move takes. Fast is one picture per step. Old is the previous
  * default. VIC is the 1984 step, which is quicker than this panel paints. */
@@ -1241,6 +1352,8 @@ static void draw_speed(const kshell_rect *r) {
     for (int i = 0; i < N_PACES; i++) labels[i] = PACES[i].label;
     ek_text_scale(r->x, r->y, "SPEED", EK_INK, 2);
     ek_text(r->x, r->y + 44, "how long one step waits. the cave stays.", EK_INK);
+    if (turn_based)
+        ek_text(r->x, r->y + 66, "unused while MODE is TURN: a press is the step.", EK_INK);
     kshell_options(PACE_Y0, labels, N_PACES, pace_choice());
 }
 
@@ -1254,6 +1367,40 @@ static int tap_speed(const kshell_rect *r, int x, int y) {
     return 1;
 }
 
+/* MODE: when the cave moves. CLOCK is the original -- the world runs on its
+ * own and a press joins in. TURN freezes the world: one press is one turn, and
+ * the rocks, the monsters and the timer all advance on that press. */
+static const struct { const char *label; int turn; } MODES[] = {
+    { "CLOCK  the cave runs on its own", 0 },
+    { "TURN   one press moves everything", 1 },
+};
+#define N_MODES ((int)(sizeof MODES / sizeof MODES[0]))
+#define MODE_Y0 140
+
+static int mode_choice(void) {
+    for (int i = 0; i < N_MODES; i++)
+        if (MODES[i].turn == turn_based) return i;
+    return -1;
+}
+
+static void draw_mode(const kshell_rect *r) {
+    static const char *labels[N_MODES];
+    for (int i = 0; i < N_MODES; i++) labels[i] = MODES[i].label;
+    ek_text_scale(r->x, r->y, "MODE", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "when the cave moves. the game carries on either way.", EK_INK);
+    kshell_options(MODE_Y0, labels, N_MODES, mode_choice());
+}
+
+static int tap_mode(const kshell_rect *r, int x, int y) {
+    (void)r;
+    int i = kshell_option_at(MODE_Y0, N_MODES, x, y);
+    if (i < 0) return 0;
+    turn_based = MODES[i].turn;
+    note_mode();
+    kframe_close();
+    return 1;
+}
+
 static int on_rock_item(int id) {
     fprintf(stderr, "rockman: menu item %d has no action of its own\n", id);
     return 1;
@@ -1262,6 +1409,7 @@ static int on_rock_item(int id) {
 static const kframe_item ROCK_ITEMS[] = {
     { "NEW",   ROCK_NEW,   draw_new,   tap_new },
     { "SPEED", ROCK_SPEED, draw_speed, tap_speed },
+    { "MODE",  ROCK_MODE,  draw_mode,  tap_mode },
 };
 
 static void kf_status(const char *msg) { fprintf(stderr, "rockman: %s\n", msg); }
@@ -1299,7 +1447,7 @@ static void usage(void) {
             "\n"
             "  Dig dirt, grab the diamonds, don't get crushed.\n"
             "  LEFT UP RIGHT DOWN move. PUSH shoves a rock. QUIT then SURE stops.\n"
-            "  The top-right square opens the menu: NEW and SPEED on the left,\n"
+            "  The top-right square opens the menu: NEW, SPEED and MODE on the left,\n"
             "  VOLUME, WIFI, APPS and QUIT on the right.\n"
             "  A tap anywhere on the title starts a game.\n"
             "  --selftest   check the rules on this computer and exit\n"
@@ -1313,6 +1461,9 @@ static void usage(void) {
             "  --wfm NAME   waveform for moving frames: DU / GL16F / GC16F / AUTO\n"
             "  --move N     ms per player step (default %d, one picture per step;\n"
             "               224 is the VIC-20 step and can share a picture)\n"
+            "  --turn       turn based: nothing moves until a press, then the player,\n"
+            "               the rocks, the monsters and the timer all advance once\n"
+            "  --clock      the opposite of --turn (the default)\n"
             "  --tuned      the calibrated set: refresh %d, move %d, WFM DU\n",
             PANEL_FLOOR_MS, PANEL_FLOOR_MS, PANEL_FLOOR_MS, PANEL_FLOOR_MS);
 }
@@ -1378,7 +1529,8 @@ int main(int argc, char **argv) {
             refresh_ms = PANEL_FLOOR_MS;
             move_ms = PANEL_FLOOR_MS;
             wfm_motion = -1;   /* DU, resolved by name below */
-        }
+        } else if (!strcmp(argv[i], "--turn")) { turn_based = 1; note_mode(); }
+        else if (!strcmp(argv[i], "--clock")) { turn_based = 0; note_mode(); }
         else if (!strcmp(argv[i], "--selftest")) do_test = 1;
         else if (!strcmp(argv[i], "--no-takeover")) flags &= ~EK_TAKEOVER;
         else if (!strcmp(argv[i], "--help")) { usage(); return 0; }
@@ -1518,7 +1670,16 @@ int main(int argc, char **argv) {
                          * UP): still the same press, so no second move. */
                     } else if (b >= 0) {
                         held = b;
-                        keyq_push(b);       /* one press -> one queued move */
+                        if (turn_based) {
+                            /* One press is one whole turn: the cave answers
+                             * now, not on the next clock tick. Paint at once
+                             * too -- there is nothing else to wait for, and a
+                             * held-back frame would just be lag. */
+                            play_action(b);
+                            next_flush = 0;
+                        } else {
+                            keyq_push(b);   /* one press -> one queued move */
+                        }
                         buttons_dirty = 1;
                         dirty = 1;
                     } else if (quit_armed) {

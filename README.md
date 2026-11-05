@@ -59,6 +59,7 @@ make sudoku-test          # same shell, including a switch to chess
 
 Rockman pictures: `docs/kframe/rockman-board.png` (the cave, button at the
 top right), `docs/kframe/rockman-menu.png`, `docs/kframe/rockman-speed.png`,
+`docs/kframe/rockman-mode.png`, `docs/kframe/rockman-turn.png`,
 `docs/kframe/rockman-apps.png`.
 
 **Play Rockman:**
@@ -68,9 +69,17 @@ make rockman-kindle
 ./run-rockman-on-kindle.sh 192.168.0.63
 ```
 
-One step takes one screen update (320 ms). The top-right square opens **NEW**
-and **SPEED**. SPEED can also pick 450 ms, or the old 224 ms step. LEFT UP
-RIGHT DOWN move. PUSH shoves a rock. QUIT then SURE stops.
+One step takes one screen update (320 ms). The top-right square opens **NEW**,
+**SPEED** and **MODE**. SPEED can also pick 450 ms, or the old 224 ms step.
+MODE picks **CLOCK** (the cave runs by itself, the default) or **TURN** (nothing
+moves until you press; one press moves the player, the rocks and the monsters,
+and the cave's timer ticks once). Turn mode also has a flag:
+`--turn` / `--clock`. LEFT UP RIGHT DOWN move. PUSH shoves a rock. QUIT then
+SURE stops.
+
+Why turn mode exists: the paint costs ~300 ms, so a clock-driven cave always
+feels late. In turn mode there is no clock to be late for -- the picture you get
+is the result of the press you just made.
 
 ```bash
 make kindle                      # XCOM  -> ./xcom      (ARM binary)
@@ -94,12 +103,13 @@ The top-right button is a 48x48 square at (548, 2). It opens the shell.
 This game's tabs are on the left. Volume, wi-fi, apps and quit are on the
 right. The keyboard shows up only while a text box is in use.
 
-Rockman tabs are **NEW** and **SPEED**. Minesweeper tabs are **NEW**, **FLAG**
-and **LEVEL**. Sudoku digits 1..9 stay on the board. ERASE and HINT act on the
+Rockman tabs are **NEW**, **SPEED** and **MODE**. Minesweeper tabs are **NEW**,
+**FLAG** and **LEVEL**. Sudoku digits 1..9 stay on the board. ERASE and HINT act on the
 cell you picked before opening the menu.
 
 ![rockman menu](docs/kframe/rockman-menu.png)
 ![rockman speed](docs/kframe/rockman-speed.png)
+![rockman mode](docs/kframe/rockman-mode.png)
 ![rockman board](docs/kframe/rockman-board.png)
 
 ![sudoku level](docs/sudoku-menu/level.png)

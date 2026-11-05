@@ -66,6 +66,20 @@ rockman-test: rockman-host
 	printf 'tap 300 400\ntap 572 26\ntap 36 24\ntap 300 236\n' | ./rockman-host --no-takeover --seed 1 \
 	    --dump /tmp/rockman-new.pgm >/tmp/rockman-new.out 2>/tmp/rockman-new.err
 	grep -q 'rockman: new game' /tmp/rockman-new.err
+	# MODE is the third left tab. Centre (164, 24). TURN is row 1 (y0 140,
+	# step 84), centre (300, 260).
+	printf 'tap 572 26\ntap 164 24\n' | ./rockman-host --no-takeover --seed 1 \
+	    --dump /tmp/rockman-mode.pgm >/tmp/rockman-mode.out 2>/tmp/rockman-mode.err
+	grep -q 'kframe: menu open' /tmp/rockman-mode.err
+	printf 'tap 572 26\ntap 164 24\ntap 300 260\n' | ./rockman-host --no-takeover --seed 1 \
+	    --dump /tmp/rockman-turn.pgm >/tmp/rockman-turn.out 2>/tmp/rockman-turn.err
+	grep -q 'kframe: app item 3' /tmp/rockman-turn.err
+	grep -q 'rockman: turn based' /tmp/rockman-turn.err
+	# In turn mode a press moves the cave with no clock: one press, one step.
+	printf 'tap 300 400\ntap 300 556\n' | ./rockman-host --no-takeover --seed 1 --turn \
+	    --dump /tmp/rockman-turn-step.pgm >/tmp/rockman-turn-step.out 2>/tmp/rockman-turn-step.err
+	grep -q 'rockman: turn based' /tmp/rockman-turn-step.err
+	$(PY) tools/check_pgm.py /tmp/rockman-mode.pgm /tmp/rockman-turn.pgm /tmp/rockman-turn-step.pgm
 	rm -f /tmp/switch-app /tmp/return-app
 	printf 'tap 572 26\ntap 500 24\ntap 300 212\n' | ./rockman-host --no-takeover --seed 1 \
 	    >/tmp/rockman-switch.out 2>/tmp/rockman-switch.err

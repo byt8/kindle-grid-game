@@ -25,7 +25,7 @@ updated: 2026-11-05
 
 ## Built
 - Playable port. Entry: `src/rockman.c`. Device runner: `./run-rockman-on-kindle.sh`.
-- Shared menu: `open_frame()`, tabs NEW and SPEED, `app_id` rockman. Still `APP_VISIT` in `src/kframe.c` (same as sudoku). Pictures: `docs/kframe/rockman-board.png`, `rockman-menu.png`, `rockman-speed.png`, `rockman-apps.png`.
+- Shared menu: `open_frame()`, tabs NEW, SPEED and MODE, `app_id` rockman. Still `APP_VISIT` in `src/kframe.c` (same as sudoku). Pictures: `docs/kframe/rockman-board.png`, `rockman-menu.png`, `rockman-speed.png`, `rockman-mode.png`, `rockman-turn.png`, `rockman-apps.png`.
 - Pictures from `make rockman-test`: `/tmp/rockman-title.pgm`, `/tmp/rockman-room.pgm`, `/tmp/rockman-play.pgm`.
 
 ## Decisions
@@ -53,6 +53,15 @@ updated: 2026-11-05
 - The menu holds the clock (`kframe_covering()` snaps `next_pass` to now).
 - [ran 2026-11-04] DU frame was 303–335 ms, full paint ~670 ms, GC16 clean ~700 ms. The slow-panel warning stays exempt on `st.full` and `clean` frames.
 - `--refresh N` still refuses `N < 320`. It does not clamp.
+
+## Turn mode
+
+- [verified 2026-11-05 src/rockman.c] `turn_based` (`--turn` / `--clock`, and the menu's MODE tab) makes `pump_passes()` run **no** passes: the cave does not move on its own. A press calls `play_action()` -> `take_turn()` straight from the event loop, so one press is one turn and the frame is painted at once (`next_flush = 0`) rather than waiting for `refresh_ms`.
+- A turn is: `do_action`, `check_alive`, `scan_rocks`, `move_monsters`, `check_alive`, then `RM_TICK_CONTROL` (14) `timer_tick()`s. The clock ratios (14 / 16 / 9) are deliberately not kept -- the turn rule is "player acts once, cave answers once".
+- The 14 timer passes per turn keep the clock death honest: 6730 passes / 14 = **481 turns**. The self-test asserts 481.
+- `move_ms` and `refresh_ms` mean nothing in turn mode. SPEED's screen says so.
+- Tap geometry, for tests: left tabs start at x=6, gap 4. NEW centre (36,24), SPEED (100,24), MODE **(164,24)**. Options: `KSHELL_OPT_X` 24, width 552, height 72, step 84, `MODE_Y0` 140 -> CLOCK centre (300,176), TURN centre (300,260).
+- [ran 2026-11-05] `make rockman-test` passes with the MODE/TURN greps; pushed to .63 and started with `--turn`; `rockman.log` shows `turn based`.
 
 ## Open
 - .66 did not answer SSH on 2026-11-05. .63 is the unit that is running this build.
