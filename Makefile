@@ -9,6 +9,7 @@ HOSTCFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -DEK_HOST -Isrc -I$(ENGINE)
 
 .PHONY: all test kindle sound manual grabtest preview preview-old bold chess chess-test chess-kindle \
         tetris tetris-host tetris-test tetris-kindle sudoku sudoku-host sudoku-test sudoku-kindle \
+        mines mines-host mines-test mines-kindle \
         menu-host menu-kindle menu-test rockman-data rockman-host rockman-test rockman-kindle rockman \
         pvz-host pvz pvz-test calib calib-host calib-kindle calib-test \
         brogue-host brogue brogue-test brogue-kindle engine-test clean
@@ -116,6 +117,62 @@ sudoku-test: sudoku-host
 	printf 'tap 572 26\ntap 500 24\ntap 300 212\n' | ./sudoku-host --no-takeover --seed 7 \
 	    >/tmp/sudoku-switch.out 2>/tmp/sudoku-switch.err
 	grep -q 'kframe: switch chess' /tmp/sudoku-switch.err
+	grep -qx 'chess' /tmp/switch-app
+
+# ---- minesweeper: 9x9 / 12x12 / 16x16, tap to open, FLAG to mark --------------
+# The first tap is always safe: mines go down after it, clear of its 3x3.
+
+mines-host: src/minesweeper.c src/kframe.c src/kframe.h src/kshell.c src/kshell.h $(ENGINE)/eink.c $(ENGINE)/eink.h $(ENGINE)/font8x16.h
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ src/minesweeper.c src/kframe.c src/kshell.c $(ENGINE)/eink.c -lm
+
+mines-kindle: src/minesweeper.c src/kframe.c src/kframe.h src/kshell.c src/kshell.h $(ENGINE)/eink.c $(ENGINE)/eink.h
+	docker run --rm -u "$$(id -u):$$(id -g)" \
+	  -v "$$(pwd):/src" \
+	  -v /home/brendan/jailbreak-kindle:/jb \
+	  -w /src kfb-build \
+	  sh -c 'arm-linux-musleabi-gcc -std=c11 -Os -Wall -Wextra -Werror \
+	    -ffunction-sections -fdata-sections \
+	    -Isrc -I/jb/kindle-tools/fbdaemon/engine \
+	    -o mines src/minesweeper.c src/kframe.c src/kshell.c /jb/kindle-tools/fbdaemon/engine/eink.c \
+	    -static -no-pie -Wl,--gc-sections -lm \
+	    && arm-linux-musleabi-strip mines'
+
+mines: mines-kindle
+
+# The opening, a tapped board, a flag, and the level screen: each must differ.
+mines-test: mines-host
+	./mines-host --selftest --no-takeover --seed 7
+	./mines-host --no-takeover --seed 7 --dump /tmp/mines-open.pgm
+	printf 'tap 300 400\n' | ./mines-host --no-takeover --seed 7 --dump /tmp/mines-tap.pgm
+	./mines-host --auto 12 --no-takeover --seed 7 --dump /tmp/mines-play.pgm
+	$(PY) tools/check_pgm.py /tmp/mines-open.pgm /tmp/mines-tap.pgm /tmp/mines-play.pgm
+	! cmp -s /tmp/mines-open.pgm /tmp/mines-tap.pgm
+	! cmp -s /tmp/mines-open.pgm /tmp/mines-play.pgm
+	# The hamburger is a 48x48 square at (548,2). Centre (572, 26).
+	# BOTH is the right-hand group at (500, 24).
+	printf 'tap 572 26\n' | ./mines-host --no-takeover --seed 7 --dump /tmp/mines-menu.pgm \
+	    >/tmp/mines-menu.out 2>/tmp/mines-menu.err
+	grep -q 'kframe: menu open' /tmp/mines-menu.err
+	printf 'tap 572 26\ntap 500 24\n' | ./mines-host --no-takeover --seed 7 \
+	    --dump /tmp/mines-apps.pgm >/tmp/mines-apps.out 2>/tmp/mines-apps.err
+	grep -q 'kframe: apps open' /tmp/mines-apps.err
+	$(PY) tools/check_pgm.py /tmp/mines-menu.pgm /tmp/mines-apps.pgm
+	# Left tabs are 60 wide at KSHELL_TAB_MIN_W: (36,24) NEW, (100,24) FLAG,
+	# (164,24) LEVEL. LEVEL row 3 (HARD) is centred at (300, 344).
+	printf 'tap 572 26\ntap 164 24\ntap 300 344\n' | ./mines-host --no-takeover --seed 7 \
+	    --dump /tmp/mines-level.pgm >/tmp/mines-level.out 2>/tmp/mines-level.err
+	grep -q 'kframe: app item 3' /tmp/mines-level.err
+	$(PY) tools/check_pgm.py /tmp/mines-open.pgm /tmp/mines-level.pgm
+	# FLAG marks the square, and the same tap in NEW mode opens squares.
+	printf 'tap 300 400\ntap 572 26\ntap 100 24\ntap 300 236\n' \
+	    | ./mines-host --no-takeover --seed 7 --dump /tmp/mines-flag.pgm
+	! cmp -s /tmp/mines-tap.pgm /tmp/mines-flag.pgm
+	$(PY) tools/check_pgm.py /tmp/mines-tap.pgm /tmp/mines-flag.pgm
+	# From mines, the chess row in BOTH switches the panel to chess.
+	rm -f /tmp/switch-app
+	printf 'tap 572 26\ntap 500 24\ntap 300 212\n' | ./mines-host --no-takeover --seed 7 \
+	    >/tmp/mines-switch.out 2>/tmp/mines-switch.err
+	grep -q 'kframe: switch chess' /tmp/mines-switch.err
 	grep -qx 'chess' /tmp/switch-app
 
 # ---- launcher menu: what the Kindle boots into ---------------------------------

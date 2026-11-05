@@ -48,6 +48,7 @@ make kindle                      # XCOM  -> ./xcom      (ARM binary)
 make chess-kindle                # Chess -> ./chess     (needs chess.conf first)
 make tetris-kindle               # Tetris -> ./tetris   (no key needed)
 make sudoku-kindle               # Sudoku -> ./sudoku  (no key needed)
+make mines-kindle                # Minesweeper -> ./mines (no key needed)
 make rockman-kindle              # Rockman -> ./rockman (no key needed)
 make pvz-kindle                   # PvZ -> ./pvz      (no key needed)
 make brogue-kindle                # Brogue -> ./brogue-kindle-app
@@ -57,13 +58,14 @@ make wifi-test                    # wi-fi joining + the on-screen keyboard (PC o
 make chess-test                   # PC check of chess, including APPS
 make tetris-test                  # PC check of tetris, including APPS
 make sudoku-test                  # PC check of sudoku, including APPS
+make mines-test                   # PC check of minesweeper, including APPS
 ```
 
 The top-right button is a 48x48 square at (548, 2) — a big target. It opens
 the shell. This game's tabs are on the left. Volume, wi-fi, apps and quit are
 on the right. The keyboard shows up only while a text box is in use.
 
-Sudoku's own tabs are **NEW**, **ERASE**, **HINT** and **LEVEL**. Digits 1..9
+are **NEW**, **FLAG** and **LEVEL**. Digits 1..9
 stay on the board, since they are what you tap most. ERASE and HINT act on the
 cell you picked before opening the menu.
 
@@ -165,7 +167,8 @@ On the glass the three bottom buttons are gone. The small button at the
 APPS opens another game and saves it, so the next boot opens that game.
 QUIT needs a second tap and gives the reader back until that boot. The
 keyboard covers the bottom only while a text field is focused. Tetris uses
-this same shell (NEW, PAUSE, SPEED). So does Sudoku (NEW, LEVEL).
+this same shell (NEW, PAUSE, SPEED). So does Sudoku (NEW, LEVEL), and so does
+Minesweeper (NEW, FLAG, LEVEL).
 
 **CLOCK** sets how long each side gets (tap CHANGE: off → 1 → 3 → 5 → 10 →
 15 → 30 min, the same choices chess.com offers). The choice is written back into
@@ -661,6 +664,21 @@ something else. No internet needed at runtime.
 Painting uses the e-ink engine in
 `jailbreak-kindle/kindle-tools/fbdaemon/engine`; that folder is shared and never
 modified from here.
+
+---
+
+## Minesweeper: how it fits together
+
+One file, `src/minesweeper.c`: board generation, flood-fill opening, chording, flags,
+drawing, touch and a PC self-test. Three levels — 9x9 with 10 mines, 12x12 with 30,
+16x16 with 60. **The first tap is always safe:** mines are placed only after it, and
+never inside the 3x3 around it, so the first tap always opens a pocket. Tap a covered
+square to open it, tap a number with the flags right to chord, **FLAG** marks a square
+and **NEW** starts a fresh board at the same level. `make mines-test` checks generation,
+the safe first tap, flood-fill, chording, flags, win/lose and the impossible-board guard
+on the PC, then draws the opening, a tap, an auto-played board, the menu and the LEVEL
+screen for the picture checker. The hamburger's APPS tab switches to it, and
+`tools/menu-boot.sh` starts it as `/mnt/us/mines-run.sh`.
 
 ---
 

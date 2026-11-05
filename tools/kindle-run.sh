@@ -147,7 +147,7 @@ kill_leftover() {
         exit 1
     fi
 }
-for g in xcom rockman tetris chess sudoku calib pvz brogue-kindle-app luajit koreader koreader.sh; do
+for g in xcom rockman tetris chess sudoku mines calib pvz brogue-kindle-app luajit koreader koreader.sh; do
     kill_leftover "$g"
 done
 

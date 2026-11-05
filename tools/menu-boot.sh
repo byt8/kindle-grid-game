@@ -69,7 +69,7 @@ grab_free() {
             return 0
         fi
         say "grabtest failed (attempt $((i + 1))); waiting out the dying game"
-        for g in xcom rockman tetris chess sudoku calib pvz brogue-kindle-app menu; do
+        for g in xcom rockman tetris chess sudoku mines calib pvz brogue-kindle-app menu; do
             p=$(pidof "$g" 2>/dev/null || true)
             [ -n "$p" ] && killall -q "$g" 2>/dev/null || true
         done
@@ -149,7 +149,7 @@ read_token() {
 # Same ids as src/kframe.c. home apps have the in-game menu.
 known_app() {
     case $1 in
-        xcom|chess|tetris|sudoku|rockman|pvz|brogue|calib|koreader) return 0 ;;
+        xcom|chess|tetris|sudoku|mines|rockman|pvz|brogue|calib|koreader) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -165,6 +165,7 @@ runner_for() {
         chess) echo /mnt/us/chess-run.sh ;;
         tetris) echo /mnt/us/tetris-run.sh ;;
         sudoku) echo /mnt/us/sudoku-run.sh ;;
+        mines) echo /mnt/us/mines-run.sh ;;
         rockman) echo /mnt/us/rockman-run.sh ;;
         pvz) echo /mnt/us/pvz-run.sh ;;
         brogue) echo /mnt/us/brogue-run.sh ;;
@@ -179,6 +180,7 @@ bin_for() {
         chess) echo /mnt/us/chess ;;
         tetris) echo /mnt/us/tetris ;;
         sudoku) echo /mnt/us/sudoku ;;
+        mines) echo /mnt/us/mines ;;
         rockman) echo /mnt/us/rockman ;;
         pvz) echo /mnt/us/pvz ;;
         brogue) echo /mnt/us/brogue-kindle-app ;;
@@ -219,6 +221,7 @@ launch_app() {
         chess) GAME=chess sh /mnt/us/chess-run.sh --conf /mnt/us/chess.conf ;;
         tetris) GAME=tetris sh /mnt/us/tetris-run.sh ;;
         sudoku) GAME=sudoku sh /mnt/us/sudoku-run.sh ;;
+        mines) GAME=mines sh /mnt/us/mines-run.sh ;;
         rockman) GAME=rockman sh /mnt/us/rockman-run.sh ;;
         pvz) GAME=pvz sh /mnt/us/pvz-run.sh ;;
         brogue) GAME=brogue-kindle-app sh /mnt/us/brogue-run.sh ;;
@@ -271,7 +274,7 @@ while :; do
     # .menu-stop and leave the reader up on every boot, so the saved game
     # would never come back. Clear it and carry on in that case only.
     if [ -f /mnt/us/.menu-handoff ]; then
-        if [ -n "$(pidof chess tetris xcom rockman sudoku pvz calib brogue-kindle-app 2>/dev/null || true)" ]; then
+        if [ -n "$(pidof chess tetris xcom rockman sudoku mines pvz calib brogue-kindle-app 2>/dev/null || true)" ]; then
             say "runner took the panel; not starting an app over it"
             : > /mnt/us/.menu-stop
             exit 143

@@ -9,7 +9,7 @@
 # already has ssh up (see README Quick Start). One run makes the device look
 # like the working one:
 #
-#   * every game binary: xcom chess tetris sudoku rockman pvz calib brogue
+#   * every game binary: xcom chess tetris sudoku mines rockman pvz calib brogue
 #   * their runners (tools/kindle-run.sh as /mnt/us/*-run.sh), grabtest
 #   * the launcher session + boot job  -> /etc/upstart/menu.conf
 #   * the screen-mirror boot job       -> /etc/upstart/kfbterm.conf
@@ -61,7 +61,7 @@ if [ "$no_build" = 0 ]; then
     echo "install-all: building the device binaries"
     # Same group as install-menu-on-kindle.sh, plus the standalone games and
     # pvz/calib/brogue which install-menu does not build.
-    make menu chess tetris sudoku rockman pvz calib grabtest
+    make menu chess tetris sudoku mines rockman pvz calib grabtest
     make kindle          # xcom: oldest and largest build
     make brogue-kindle
 fi
@@ -70,7 +70,7 @@ fi
 need() {
     [ -f "$1" ] || { echo "install-all: missing $1 -- build it first (make)" >&2; exit 1; }
 }
-need menu; need grabtest; need chess; need tetris; need sudoku; need rockman
+need menu; need grabtest; need chess; need tetris; need sudoku; need mines; need rockman
 need xcom; need pvz; need calib; need brogue-kindle-app
 need tools/kindle-run.sh; need tools/menu-boot.sh; need tools/menu-boot.conf
 need tools/chess-wifi.sh;  need tools/chess-boot.conf
@@ -80,13 +80,13 @@ need "$KJ/fbdaemon/kfbterm.conf"
 
 echo "install-all: pushing games to $ip"
 # Write beside then rename: a copy over a running binary is "Text file busy".
-for g in menu chess tetris sudoku rockman xcom pvz calib brogue-kindle-app grabtest; do
+for g in menu chess tetris sudoku mines rockman xcom pvz calib brogue-kindle-app grabtest; do
     cat "$g" | ssh_run "cat > /mnt/us/$g.new && chmod +x /mnt/us/$g.new && mv /mnt/us/$g.new /mnt/us/$g"
 done
 # Grabtest was already pushed above in the loop; this is the binary itself.
 
 # The runners: one kindle-run.sh per game name.
-for g in chess xcom tetris sudoku rockman pvz calib brogue koreader; do
+for g in chess xcom tetris sudoku mines rockman pvz calib brogue koreader; do
     cat tools/kindle-run.sh | ssh_run "cat > /mnt/us/$g-run.sh && chmod +x /mnt/us/$g-run.sh"
 done
 cat tools/menu-boot.sh   | ssh_run 'cat > /mnt/us/menu-boot.sh && chmod +x /mnt/us/menu-boot.sh'

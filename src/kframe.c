@@ -81,6 +81,7 @@ static const struct {
     { "chess",    "CHESS",    APP_HOME },
     { "tetris",   "TETRIS",   APP_HOME },
     { "sudoku",   "SUDOKU",   APP_VISIT },
+    { "mines",    "MINES",    APP_VISIT },
     { "rockman",  "ROCKMAN",  APP_VISIT },
     { "pvz",      "PVZ",      APP_VISIT },
     { "brogue",   "BROGUE",   APP_VISIT },

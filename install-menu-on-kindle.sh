@@ -31,7 +31,7 @@ ssh_run() {
 }
 
 echo "install-menu: building for the device"
-make menu chess tetris sudoku rockman grabtest
+make menu chess tetris sudoku mines rockman grabtest
 # xcom is the oldest and largest build; it is required for the XCOM button.
 make kindle
 
@@ -40,6 +40,7 @@ cat menu        | ssh_run 'cat > /mnt/us/menu && chmod +x /mnt/us/menu'
 cat chess       | ssh_run 'cat > /mnt/us/chess && chmod +x /mnt/us/chess'
 cat tetris      | ssh_run 'cat > /mnt/us/tetris && chmod +x /mnt/us/tetris'
 cat sudoku      | ssh_run 'cat > /mnt/us/sudoku && chmod +x /mnt/us/sudoku'
+cat mines       | ssh_run 'cat > /mnt/us/mines && chmod +x /mnt/us/mines'
 cat rockman     | ssh_run 'cat > /mnt/us/rockman && chmod +x /mnt/us/rockman'
 cat xcom        | ssh_run 'cat > /mnt/us/xcom && chmod +x /mnt/us/xcom'
 cat tools/menu-boot.sh   | ssh_run 'cat > /mnt/us/menu-boot.sh && chmod +x /mnt/us/menu-boot.sh'
@@ -50,6 +51,7 @@ cat tools/kindle-run.sh  | ssh_run 'cat > /mnt/us/chess-run.sh && chmod +x /mnt/
 cat tools/kindle-run.sh  | ssh_run 'cat > /mnt/us/xcom-run.sh && chmod +x /mnt/us/xcom-run.sh'
 cat tools/kindle-run.sh  | ssh_run 'cat > /mnt/us/tetris-run.sh && chmod +x /mnt/us/tetris-run.sh'
 cat tools/kindle-run.sh  | ssh_run 'cat > /mnt/us/sudoku-run.sh && chmod +x /mnt/us/sudoku-run.sh'
+cat tools/kindle-run.sh  | ssh_run 'cat > /mnt/us/mines-run.sh && chmod +x /mnt/us/mines-run.sh'
 cat tools/kindle-run.sh  | ssh_run 'cat > /mnt/us/rockman-run.sh && chmod +x /mnt/us/rockman-run.sh'
 if [ -f chess.conf ]; then
     cat chess.conf | ssh_run 'cat > /mnt/us/chess.conf'

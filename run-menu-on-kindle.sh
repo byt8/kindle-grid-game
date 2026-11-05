@@ -72,7 +72,7 @@ echo "run-menu-on-kindle: freeing the touch device on $ip"
 # xcom took ~4s to die after TERM; the menu's grabtest ran inside that window
 # and failed EBUSY.) TERM first, then KILL for anything that ignores it.
 ssh_run '
-    for g in xcom rockman tetris chess sudoku calib pvz brogue-kindle-app menu; do
+    for g in xcom rockman tetris chess sudoku mines calib pvz brogue-kindle-app menu; do
         p=$(pidof "$g" 2>/dev/null || true)
         [ -n "$p" ] || continue
         echo "  killing leftover $g pid $p"
@@ -112,14 +112,14 @@ echo "run-menu-on-kindle: pushing the full launcher set to $ip"
 cat ./menu               | ssh_run 'cat > /mnt/us/menu.new && chmod +x /mnt/us/menu.new && mv /mnt/us/menu.new /mnt/us/menu'
 cat ./grabtest           | ssh_run 'cat > /mnt/us/grabtest && chmod +x /mnt/us/grabtest'
 cat tools/menu-boot.sh   | ssh_run 'cat > /mnt/us/menu-boot.sh.new && chmod +x /mnt/us/menu-boot.sh.new && mv /mnt/us/menu-boot.sh.new /mnt/us/menu-boot.sh'
-for f in chess tetris sudoku rockman xcom; do
+for f in chess tetris sudoku mines rockman xcom; do
     if [ -f "./$f" ]; then
         cat "./$f" | ssh_run "cat > /mnt/us/$f && chmod +x /mnt/us/$f"
     else
         echo "run-menu-on-kindle: no ./$f; /mnt/us/$f keeps its old copy" >&2
     fi
 done
-for r in chess xcom tetris sudoku rockman; do
+for r in chess xcom tetris sudoku mines rockman; do
     cat tools/kindle-run.sh | ssh_run "cat > /mnt/us/$r-run.sh && chmod +x /mnt/us/$r-run.sh"
 done
 cat tools/chess-wifi.sh  | ssh_run 'cat > /mnt/us/chess-wifi.sh && chmod +x /mnt/us/chess-wifi.sh'
