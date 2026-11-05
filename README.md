@@ -38,7 +38,9 @@ to skip the question:
 ```
 
 It retries through the Kindle's wifi naps, so a dropped connection cannot
-leave half the games updated, and it exits `0` only once the panel is drawing.
+leave half the games updated. Exit `0` means the panel is drawing a game;
+`2` means everything is installed but the game did not start (it prints the
+session log, and trying again usually works); `1` means nothing was sent.
 `./install-all-on-kindle.sh <ip>` is the same script underneath; `./deploy.sh
 --help` lists what goes over.
 

@@ -45,7 +45,26 @@ straight away.
 ## Verify by hand
 ```bash
 ssh -i ~/.ssh/kindle_touch_ed25519 -o BatchMode=yes <ip> \
-  'cat /mnt/us/last-id; ls -l /mnt/us/*-run.sh'   # 10 runners expected
+  'cat /mnt/us/last-app; pidof $(cat /mnt/us/last-app); ls /mnt/us/*-run.sh | wc -l'
 ```
 Kindle busybox has no `ls --time-style`, no `grep -E`, no `pgrep`. Use `pidof`
-and plain `grep`.
+and plain `grep`. Wait ~20 s and ask again: a pid that answers once can be an
+app that quit a second later, which is why the check samples twice.
+
+**`pidof` needs the exact binary name.** `last-app=brogue` runs
+`brogue-kindle-app`; the check maps it. `pidof <all games at once>` prints
+nothing useful — query one name.
+
+**Do not `kill -USR1` a game to grab a frame.** Only `chess.c` installs that
+handler (`/tmp/chess-shot.pgm`); on the other games the signal kills the app.
+That is how a false "the panel is not up" appeared on 2026-11-05: a `-USR1` to
+`rockman` ended it, its log read `User defined signal 1`, and the panel fell
+back to the reader. Check the game log before blaming the deploy.
+
+**Startup is slow on cold hardware: allow two minutes, not 45 s.** A 45 s
+window produced a false exit `2` twice on 2026-11-05 (`xcom did not come up`),
+while the app was up seconds later. The check now waits 120 s and samples the
+pid twice, six seconds apart, so a game that takes the panel and quits is not
+counted as up. `menu-boot.log` also carries a full ALSA mixer dump, so the
+failure branch greps for `menu-boot:|app exited|kframe:|eink:` instead of
+tail-ing the file.
