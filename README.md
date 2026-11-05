@@ -18,24 +18,25 @@ Plants vs Pixels: five-lane plant defence — grow sunflowers, shoot peas, hold 
 Docker image `kfb-build` (ARM cross-compiler), and `python3`.
 
 **On the Kindle.** There is no launcher screen. Power on and the last game
-comes back. The first time, that game is chess. The **top-right** button opens
-the menu. **APPS** (on the right) lists the other games. Tap one. That game
-opens, and it is the one that comes back after a restart. **QUIT** twice gives
-the reader back until the next boot. Put this on the device with:
+comes back. The first time, that game is chess. The **top-right square button**
+opens the menu. **APPS** (on the right) lists the other games. Tap one. That
+game opens, and it is the one that comes back after a restart. **QUIT** twice
+gives the reader back until the next boot. Put this on the device with:
 
 ```bash
 ./install-menu-on-kindle.sh 192.168.0.63
 ```
 
-Chess and Tetris have that menu. The other games do not. Leave one of those
-and you come back to the game that opened it. A game that is not installed
-is refused, and the saved game stays.
+Chess, Tetris and Sudoku have that menu. The other games do not. Leave one of
+those and you come back to the game that opened it. A game that is not
+installed is refused, and the saved game stays.
 
 **See it on this PC** (no Kindle):
 
 ```bash
 make tetris-test          # rules, pictures, the menu, and a switch to chess
 make chess-test           # same shell, including a switch to tetris
+make sudoku-test          # same shell, including a switch to chess
 ```
 
 Pictures from that run: `docs/kframe/tetris-board.png` (the game, button at
@@ -55,11 +56,12 @@ make engine-test                  # PC check of the shared engine's full-refresh
 make wifi-test                    # wi-fi joining + the on-screen keyboard (PC only)
 make chess-test                   # PC check of chess, including APPS
 make tetris-test                  # PC check of tetris, including APPS
+make sudoku-test                  # PC check of sudoku, including APPS
 ```
 
-The top-right button opens the shell. This game's tabs are on the left.
-Volume, wi-fi, apps and quit are on the right. The keyboard shows up only
-while a text box is in use.
+The top-right button is a 48x48 square at (548, 2) — a big target. It opens
+the shell. This game's tabs are on the left. Volume, wi-fi, apps and quit are
+on the right. The keyboard shows up only while a text box is in use.
 
 ![chess menu](docs/kframe/menu.png)
 ![tetris apps](docs/kframe/tetris-apps.png)

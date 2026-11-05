@@ -1045,6 +1045,19 @@ static void set_status(const char *fmt, ...) {
     va_end(ap);
 }
 
+/* Header text, cut off before the hamburger. The button is a 48x48 square
+ * in the top-right corner, so a long status or move list would run under it
+ * and be half-covered. Truncating is honest: the text is still there, just
+ * not drawn where the button is. */
+static void head_text(int x, int y, const char *s) {
+    char buf[200];
+    int room = (KFRAME_TAB_X - 4 - x) / 8;
+    if (room < 0) room = 0;
+    if (room > (int)sizeof buf - 1) room = (int)sizeof buf - 1;
+    snprintf(buf, sizeof buf, "%.*s", room, s ? s : "");
+    ek_text(x, y, buf, EK_INK);
+}
+
 static void note_move(const pos *p, const move *m) {
     char u[8], s[24];
     uci_str(m, u);
@@ -1246,18 +1259,20 @@ static void present(void) {
 
     ek_text(12, 8, "CHESS", EK_INK);
     ek_text(64, 8, "- against", EK_INK);
-    ek_text(136, 8, CFG.model, EK_INK);
-    ek_text(12, 28, status, EK_INK);
+    head_text(136, 8, CFG.model);
+    head_text(12, 28, status);
     if (clock_alloc_ms) {
         clock_show();
-        ek_text(EK_W - (int)strlen(clk_buf) * 8 - 12, 28, clk_buf, EK_INK);
+        /* Right-aligned against the hamburger's left edge, not the panel's:
+         * the button is a 48x48 square and would cover the clock. */
+        ek_text(KFRAME_TAB_X - (int)strlen(clk_buf) * 8 - 8, 28, clk_buf, EK_INK);
     }
     if (over) {
-        ek_text(12, 46, "open the menu (top right) and tap NEW", EK_INK);
+        head_text(12, 46, "open the menu (top right) and tap NEW");
     } else if (api_busy) {
-        ek_text(12, 46, "waiting for the api (up to 3 minutes)", EK_INK);
+        head_text(12, 46, "waiting for the api (up to 3 minutes)");
     } else {
-        ek_text(12, 46, hist_san[0] ? hist_san : "you are white: tap a piece, then where it goes", EK_INK);
+        head_text(12, 46, hist_san[0] ? hist_san : "you are white: tap a piece, then where it goes");
     }
 
     draw_board();

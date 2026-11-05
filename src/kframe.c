@@ -302,10 +302,12 @@ static void paint_tab(void) {
     int x = KFRAME_TAB_X, y = KFRAME_TAB_Y, w = KFRAME_TAB_W, h = KFRAME_TAB_H;
     ek_fill_rect(x, y, w, h, EK_PAPER);
     ek_rect(x, y, w, h, EK_INK);
+    /* Three bars, centred in whatever height the tab is. */
+    const int bar = 3, gap = 4;
     int bx = x + 8, bw = w - 16;
-    ek_fill_rect(bx, y + 5, bw, 3, EK_INK);
-    ek_fill_rect(bx, y + 12, bw, 3, EK_INK);
-    ek_fill_rect(bx, y + 19, bw, 3, EK_INK);
+    int top = y + (h - (3 * bar + 2 * gap)) / 2;
+    for (int i = 0; i < 3; i++)
+        ek_fill_rect(bx, top + i * (bar + gap), bw, bar, EK_INK);
 }
 
 void kframe_paint(void) {

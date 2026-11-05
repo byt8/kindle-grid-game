@@ -24,6 +24,7 @@
  * tests never depend on the puzzle content (see --auto and the HINT tap).
  */
 #include "eink.h"
+#include "kframe.h"
 
 #include <signal.h>
 #include <stdint.h>
@@ -457,6 +458,11 @@ static void expire_buttons(void) {
 }
 
 static void present(void) {
+    if (kframe_covering()) {
+        kframe_paint();
+        ek_flush();
+        return;
+    }
     int clean = force_clean || clean_next || redraw_all;
 
     if (redraw_all) {
@@ -474,6 +480,7 @@ static void present(void) {
     clean_next = 0;
 
     ek_waveform(clean ? wfm_clean : 0);
+    kframe_paint();
     ek_stats st = ek_flush();
     ek_waveform(0);
 
@@ -486,6 +493,13 @@ static void present(void) {
 /* ---- input -------------------------------------------------------------- */
 
 static void tap_down(int x, int y) {
+    /* The hamburger, and the shell it opens, come first. Closing the shell
+     * leaves its page on the glass, so the next present() repaints it all. */
+    if (kframe_tap(x, y)) {
+        if (!kframe_covering()) redraw_all = 1;
+        return;
+    }
+
     /* The win card is dismissed by any tap at all. */
     if (win) {
         new_puzzle();
@@ -664,6 +678,51 @@ static int selftest(void) {
     return failures;
 }
 
+/* ---- the shared menu ---------------------------------------------------- */
+
+enum { SUDOKU_NEW = 1 };
+
+static void draw_new(const kshell_rect *r) {
+    ek_text_scale(r->x, r->y, "NEW PUZZLE", EK_INK, 2);
+    ek_text(r->x, r->y + 44, "throws this puzzle away and deals a fresh one", EK_INK);
+    kshell_button(KFRAME_ACT_X, KFRAME_ACT_Y, KFRAME_ACT_W, KFRAME_ACT_H, "START", 0);
+}
+
+static int on_sudoku_item(int id) {
+    if (id == SUDOKU_NEW) {
+        new_puzzle();
+        return 1;
+    }
+    fprintf(stderr, "sudoku: menu item %d is not one of ours\n", id);
+    return 1;
+}
+
+static const kframe_item SUDOKU_ITEMS[] = {
+    { "NEW", SUDOKU_NEW, draw_new, NULL },
+};
+
+static void kf_status(const char *msg) { fprintf(stderr, "sudoku: %s\n", msg); }
+static void kf_quit(void) { running = 0; stop_req = 1; }
+
+static int open_frame(void) {
+    kframe_cfg kf;
+    memset(&kf, 0, sizeof kf);
+    kf.title = "SUDOKU";
+    kf.app_id = "sudoku";
+    kf.items = SUDOKU_ITEMS;
+    kf.nitems = (int)(sizeof SUDOKU_ITEMS / sizeof SUDOKU_ITEMS[0]);
+    kf.on_item = on_sudoku_item;
+    kf.on_quit = kf_quit;
+    kf.repaint = present;
+    kf.status = kf_status;
+    kf.stop = &stop_req;
+    if (kframe_init(&kf) != 0) {
+        fprintf(stderr, "sudoku: the shared menu would not start\n");
+        return -1;
+    }
+    return 0;
+}
+
 /* ---- main --------------------------------------------------------------- */
 
 static void usage(void) {
@@ -676,6 +735,7 @@ static void usage(void) {
             "  --selftest   check the generator and rules on this computer and exit\n"
             "  --auto N     fill N cells by itself, then stop\n"
             "  --dump FILE  write the picture (PGM) and exit\n"
+            "  --menu-shot F  write the menu (PGM) and exit\n"
             "  --seed N     same seed, same puzzle\n"
             "  --stats      print what each screen update cost\n"
             "  --clean      refresh the whole picture on every update (slow)\n");
@@ -692,6 +752,7 @@ int main(int argc, char **argv) {
     int do_test = 0;
     int auto_n = -1;
     const char *dump_path = NULL;
+    const char *menu_shot = NULL;
     uint32_t seed = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -708,6 +769,9 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[i], "--dump") && i + 1 < argc) {
             dump_path = argv[++i];
             if (!dump_path[0]) { usage(); return 2; }
+        } else if (!strcmp(argv[i], "--menu-shot") && i + 1 < argc) {
+            menu_shot = argv[++i];
+            if (!menu_shot[0]) { usage(); return 2; }
         } else if (!strcmp(argv[i], "--selftest")) do_test = 1;
         else if (!strcmp(argv[i], "--stats")) stats_on = 1;
         else if (!strcmp(argv[i], "--clean")) force_clean = 1;
@@ -733,6 +797,8 @@ int main(int argc, char **argv) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGHUP, &sa, NULL);
+
+    if (open_frame() != 0) return 1;
 
     if (ek_open(flags) != 0) {
         fprintf(stderr, "sudoku: the screen would not open\n");
@@ -769,6 +835,19 @@ int main(int argc, char **argv) {
         new_puzzle();
         if (auto_n >= 0) auto_steps(auto_n);
         present();
+    }
+
+    if (menu_shot) {
+        kframe_show_menu();
+        kframe_paint();
+        ek_flush();
+        if (ek_dump_pgm(menu_shot, 1) != 0) {
+            fprintf(stderr, "sudoku: could not write %s\n", menu_shot);
+            ek_close();
+            return 1;
+        }
+        ek_close();
+        return 0;
     }
 
 #ifdef EK_HOST

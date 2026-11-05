@@ -2,7 +2,7 @@
 area: kframe
 title: Shared Kindle shell
 aliases: [hamburger, appmenu, volume, kshell, tabs]
-updated: 2026-11-05
+updated: 2026-11-06
 ---
 
 # Shared Kindle shell
@@ -17,13 +17,14 @@ updated: 2026-11-05
 - `tools/menu-boot.sh` — boot opens `/mnt/us/last-app`. `switch-app` changes it. `.menu-stop` leaves the reader up.
 
 ## Facts
-- [verified 2026-11-05 src/kframe.h] Hamburger is `(548, 2)` size `48×26`. A tap at `(560, 10)` opens the shell.
+- [verified 2026-11-06 src/kframe.h] Hamburger is a **square**: `(548, 2)` size `48×48`, bottom edge y=50. A tap at `(572, 26)` opens the shell. The three bars are centred from `h` in `paint_tab()`, so the height can change without touching them. Clears chess's board (top 64), tetris's NEXT box (top 76) and sudoku's chips (top 58).
+- [verified 2026-11-06 src/chess.c] The header rows (model, status, move list) go through `head_text()`, which truncates at `KFRAME_TAB_X - 4`. The clock is right-aligned to `KFRAME_TAB_X - 8`, not the panel edge. Without this the 48px square covers them.
 - [verified 2026-11-05 src/kshell.h] Tab minimum width is 60. At 72, chess's four left tabs plus VOLUME WIFI APPS QUIT overlap. Centres with these labels: NEW (36, 24), RETRY (100, 24), CLOCK (164, 24), TAKEN (228, 24), VOLUME (368, 24), WIFI (436, 24), APPS (500, 24), QUIT (564, 24).
 - [verified 2026-11-05 src/kframe.h] APPS row 1 (chess↔tetris, xcom is row 0) is centred at (300, 212). The running app is hidden. KINDLE writes `.menu-stop` and does not change last-app.
 - [verified 2026-11-05 src/kframe.c] Volume is `amixer sget/sset Speaker`. If amixer fails, the page shows the error and `+`/`-` do not invent a level. This PC prints `amixer: not found`.
 - [verified 2026-11-05 src/kframe.c] Wi-fi shells out to `/mnt/us/chess-wifi.sh`. Host override is `-DKFRAME_WIFI_SCRIPT`. The WIFI tab is stepped by `kframe_tap`. `kframe_wifi_setup()` is a separate blocking loop (boot, `--wifi`). Do not nest that loop inside the tab.
 - [verified 2026-11-05 src/kframe.h] JOIN / NEXT is `KFRAME_WIFI_GO_*`. Centre is (438, 228). It sits under the text field. The keyboard well starts at y=468.
-- [verified 2026-11-05 src/tetris.c] Tetris calls `kframe`. Its on-screen QUIT button is gone. XCOM, sudoku, rockman, pvz, brogue, calib and KOReader still do not.
+- [verified 2026-11-06 src/sudoku.c] Sudoku calls `kframe` too: `open_frame()`, item NEW, `app_id` sudoku, `--menu-shot`. Its own NEW / ERASE / HINT / QUIT row stays. XCOM, rockman, pvz, brogue, calib and KOReader still do not.
 - [verified 2026-11-05 tools/menu-boot.sh] Boot does not draw `src/menu.c`. It launches `last-app`. A missing file starts chess and says so. A name that is not in the catalog, or a binary that is not installed, goes to the reader and does not open a substitute game. A refused switch keeps the saved app.
 - [ran 2026-11-05 make tetris-test && make chess-test && make wifi-test] All passed. Switch chess→tetris writes `/tmp/switch-app`. Switch chess→xcom also writes `/tmp/return-app` (`chess`). KINDLE writes `/tmp/.menu-stop` and does not write switch-app.
 

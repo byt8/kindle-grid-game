@@ -58,11 +58,14 @@ int  kframe_pwr_poll(void);          /* 1 after a press was handled (slept or fa
 int  kframe_count_pwr_records(const char *text);
 int  kframe_pwr_log_grew(const char *prev, const char *cur, int len);
 
-/* The hamburger, drawn on the game. A tap at (560, 10) lands on it. */
+/* The hamburger, drawn on the game. A square, so it is a big target.
+ * A tap at (572, 26) lands on it. Its bottom edge is y=50, which clears
+ * chess's board (top 64), tetris's NEXT box (top 76) and sudoku's chips
+ * (top 58). */
 #define KFRAME_TAB_X 548
 #define KFRAME_TAB_Y 2
 #define KFRAME_TAB_W 48
-#define KFRAME_TAB_H 26
+#define KFRAME_TAB_H 48
 
 /* The big button on an app screen (NEW, RETRY, CLOCK). Centre (300, 236). */
 #define KFRAME_ACT_X 24
