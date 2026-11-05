@@ -291,6 +291,13 @@ echo "install-all: starting the boot session on $ip"
 ssh_run '
     /sbin/initctl list | grep -q "^menu start" && /sbin/initctl stop menu
     killall -q menu-boot.sh menu 2>/dev/null || true
+    # A deploy is a request for the game to be on the glass, so undo the two
+    # things that keep the reader there. QUIT writes /mnt/us/.menu-stop and
+    # menu-boot.sh exits on it; and KOReader holds /dev/input/event3 with its
+    # own X server, which fails grabtest until it is gone. Left in place, they
+    # made a --no-koreader deploy report "pipes did not come up".
+    rm -f /mnt/us/.menu-stop
+    killall -q luajit koreader.sh 2>/dev/null || true
     # Wait for the old session to be gone before starting the new one. Two
     # menu-boot.sh running at once both try to take the e-ink panel and both
     # launch the game, which showed up as "could not stop powerd for the menu"

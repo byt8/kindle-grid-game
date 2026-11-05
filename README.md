@@ -47,9 +47,9 @@ session log, and trying again usually works); `1` means nothing was sent.
 
 Nothing else is needed on the device.
 
-Chess, Tetris, Sudoku, Minesweeper and Rockman have the APPS menu. Leave a game
-that does not, and you come back to the game that opened it. A game that is
-not installed is refused, and the saved game stays.
+Chess and Tetris have the full APPS menu. Sudoku, Minesweeper, Rockman and
+Pipemania are visits: leave one and you come back to the game that opened it.
+A game that is not installed is refused, and the saved game stays.
 
 **See it on this PC** (no Kindle):
 
@@ -58,8 +58,13 @@ make rockman-test         # cave rules, the menu, speed, and a switch to chess
 make tetris-test          # rules, pictures, the menu, and a switch to chess
 make chess-test           # same shell, including a switch to tetris
 make sudoku-test          # same shell, including a switch to chess
+make mines-test           # mines rules, first-tap safety, pictures, the menu
 make pipes-test           # 48 levels generated and solved, pictures, the menu
 ```
+
+`./deploy.sh` also clears whatever is holding the panel — a live KOReader, or a
+QUIT flag left from the last session — so a deploy always ends with a game on
+the glass.
 
 Rockman pictures: `docs/kframe/rockman-board.png` (the cave, button at the
 top right), `docs/kframe/rockman-menu.png`, `docs/kframe/rockman-speed.png`,
