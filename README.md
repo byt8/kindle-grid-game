@@ -518,6 +518,14 @@ make brogue-host && make brogue-test    # Brogue: text-mode screens -> 600x800 p
 Both host programs take `tap X Y` lines on stdin and `--dump FILE` writes the
 screen, so a bug is replayable: same `--seed`, same dice.
 
+**About a real emulator (a window you can click):** most of one already exists.
+`-DEK_HOST` fakes the panel in RAM, every game already reads `tap X Y` from
+stdin, and `ek_dump_pgm()` writes a faithful frame. What is missing is a frame
+per repaint (only Brogue has that), a live clock on the PC, and real terminal
+taps (`!isatty(0)`). A click-to-play page for the turn-based games is about half
+a day; live falling Tetris about a day more; e-ink ghosting is not
+reproducible. See `.agent-kb/areas/host-emulator.md`.
+
 **SimCity screen mock (no Kindle or key needed):**
 
 ```bash
